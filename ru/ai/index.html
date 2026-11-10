@@ -1,0 +1,103 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="ru" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Прозрачность в использовании ИИ — Onion Routing Anatomy</title>
+<meta name="description" content="Как использовался искусственный интеллект при создании Onion Routing Anatomy: руководство человека и инструменты ИИ, внутренняя проверка, что проверено, а что нет.">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/ru/ai/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/ai/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/ai/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/ai/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/ai/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/ai/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/ai/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="Прозрачность в использовании ИИ — Onion Routing Anatomy">
+<meta property="og:description" content="Как использовался искусственный интеллект при создании Onion Routing Anatomy: руководство человека и инструменты ИИ, внутренняя проверка, что проверено, а что нет.">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/ru/ai/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy: срез луковицы рядом с названием.">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">Перейти к содержимому</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../ru/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="Язык"><ul><li><a href="../../en/ai/" lang="en" hreflang="en">English</a></li><li><a href="../../it/ai/" lang="it" hreflang="it">Italiano</a></li><li><a href="../../es/ai/" lang="es" hreflang="es">Español</a></li><li><a href="../../ru/ai/" lang="ru" hreflang="ru" aria-current="true">Русский</a></li><li><a href="../../zh-Hans/ai/" lang="zh-Hans" hreflang="zh-Hans">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="Разделы"><ul><li><a href="../../ru/">Главная</a></li><li><a href="../../ru/story/">История</a></li><li><a href="../../ru/book/">О книге</a></li><li><a href="../../ru/labs/">Лаборатории</a></li><li><a href="../../ru/languages/">Языки</a></li><li><a href="../../ru/contribute/">Участие</a></li><li><a href="../../ru/ai/" aria-current="page">Прозрачность ИИ</a></li><li><a href="../../ru/license/">Лицензия</a></li><li><a href="../../ru/independence/">Независимость</a></li></ul></nav>
+</header>
+<main id="content" class="page-ai">
+<h1>Прозрачность ИИ</h1>
+<p class="lead">На этой странице кратко описано, как искусственный интеллект использовался при
+создании книги, — только на основе того, что зафиксировано в документах проекта. Если что-то
+нельзя проверить, об этом сказано прямо.</p>
+<p>В основе книги лежат учебные записи и документы, которые я составлял годами.
+Под моим руководством инструменты ИИ существенно расширили, объяснили,
+структурировали и помогли написать нынешний текст. Несмотря на проверки и мою
+редактуру, в нём могут оставаться ошибки; читателей приглашаю
+<a href="../../ru/contribute/">сообщать о них и предлагать исправления</a>.
+Наш принцип — <strong>«diffusione dei saperi senza fondare poteri»</strong>:
+распространять знания, не создавая центров власти. Книга бесплатна на официальных
+каналах проекта и распространяется по GPL-3.0-or-later, допускающей в том числе
+коммерческое распространение на своих условиях.</p>
+
+<h2 id="avtor">Моя роль</h2>
+<ul>
+<li>Происхождение проекта: изучение Tor, начатое мной для дипломной работы бакалавра и
+продолженное после неё. Диплома нет в репозитории, поэтому нельзя сказать, какие фрагменты
+книги из него взяты.</li>
+<li>Руководство работой и решения: цели и рамки, образцовая глава для тона и уровня, название,
+лицензия, бесплатное распространение, разрешение на каждый живой запуск лабораторных
+работ.</li>
+<li>Проверка и сопровождение работы, а также редакционная ответственность за публикуемое.</li>
+</ul>
+
+<h2 id="instrumenty">Что сделали инструменты ИИ</h2>
+<ul>
+<li>Нынешний текст, иллюстрации, упражнения и решения создавались начиная с сентября 2026 года
+в сессиях с ИИ-ассистентом для программирования Claude Code под моим руководством. Их
+следует считать <strong>созданными ИИ под руководством человека</strong>, а не моим текстом,
+лишь отшлифованным с помощью ИИ.</li>
+<li>Так же были написаны код лабораторных работ, скрипты и система сборки.</li>
+<li>Переводы созданы инструментами ИИ; их проверка тоже проводилась в сессиях с инструментами
+ИИ.</li>
+<li>Документация проекта, включая этот сайт, подготовлена с помощью ИИ на основе
+предоставленных мной сведений.</li>
+</ul>
+
+<h2 id="provereno">Как проверяется работа и каковы ограничения</h2>
+<p><strong>Внутренняя проверка.</strong> Работу проверяю и сопровождаю лично я; она продолжает
+исправляться и улучшаться.</p>
+<p><strong>Автоматические проверки:</strong> живой запуск итальянских лабораторных работ в
+частной сети Tor (53/53 и 14/14 проверок), офлайн-тесты, сборка PDF и EPUB с программными
+проверками и валидацией EPUBCheck.</p>
+<p><strong>Независимая проверка:</strong> пока не проводилась — ни рецензирования или
+проверки внешними экспертами, ни проверки юридической главы юристом, ни проверки переводов
+носителями языка.</p>
+<p>Поэтому ошибки могут оставаться. Если вы нашли ошибку, <a href="../../ru/contribute/">сообщите
+о ней</a>.</p>
+
+<p><a class="button" href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/AI_DISCLOSURE.md">Полный текст заявления</a>
+(на английском и итальянском)</p>
+</main>
+<footer class="site">
+<p>Первое издание, версия 1.0.0 (итальянский) · tor 0.4.9.13, Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">исходные файлы проекта</a> · <a href="../../ru/license/">GPL-3.0-or-later</a></p>
+<p>Независимая работа: она не одобрена, не спонсируется Tor Project и не связана с ним. <a href="../../ru/independence/">Подробнее</a>.</p>
+<p>Этот сайт не использует cookie, скрипты, веб-шрифты и трекеры.</p>
+</footer>
+</body>
+</html>

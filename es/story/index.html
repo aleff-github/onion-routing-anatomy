@@ -1,0 +1,80 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="es" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La historia del proyecto — Onion Routing Anatomy</title>
+<meta name="description" content="Cómo nació Onion Routing Anatomy: el estudio de Tor para un trabajo de fin de grado, años de trabajo, laboratorios para verificar cada mecanismo y una publicación libre.">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/es/story/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/story/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/story/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/story/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/story/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/story/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/story/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="La historia del proyecto — Onion Routing Anatomy">
+<meta property="og:description" content="Cómo nació Onion Routing Anatomy: el estudio de Tor para un trabajo de fin de grado, años de trabajo, laboratorios para verificar cada mecanismo y una publicación libre.">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/es/story/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy: sección de una cebolla junto al título.">
+<meta property="og:locale" content="es_ES">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">Ir al contenido</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../es/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="Idioma"><ul><li><a href="../../en/story/" lang="en" hreflang="en">English</a></li><li><a href="../../it/story/" lang="it" hreflang="it">Italiano</a></li><li><a href="../../es/story/" lang="es" hreflang="es" aria-current="true">Español</a></li><li><a href="../../ru/story/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../../zh-Hans/story/" lang="zh-Hans" hreflang="zh-Hans">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="Secciones"><ul><li><a href="../../es/">Inicio</a></li><li><a href="../../es/story/" aria-current="page">La historia</a></li><li><a href="../../es/book/">El libro</a></li><li><a href="../../es/labs/">Laboratorios</a></li><li><a href="../../es/languages/">Idiomas</a></li><li><a href="../../es/contribute/">Colaborar</a></li><li><a href="../../es/ai/">Transparencia IA</a></li><li><a href="../../es/license/">Licencia</a></li><li><a href="../../es/independence/">Independencia</a></li></ul></nav>
+</header>
+<main id="content" class="page-story">
+<h1>La historia</h1>
+<p class="lead">El proyecto nació como estudio y se convirtió, con el tiempo, en un libro
+técnico con sus propios laboratorios. Esta página cuenta cómo.</p>
+
+<h2 id="origen">De dónde viene</h2>
+<p>Mientras preparaba mi trabajo de fin de grado, empecé a mirar Tor por debajo del nivel en
+que suele describirse: no cómo se usa, sino qué viaja realmente entre los repetidores —
+celdas, circuitos, claves y los algoritmos que los mantienen unidos.</p>
+<p>Mi interés no terminó con la carrera. En los años siguientes seguí estudiando el material
+más a fondo, reorganizándolo y ampliándolo.</p>
+
+<h2 id="libro">Del trabajo de fin de grado al libro</h2>
+<p>Con el tiempo el objetivo cambió. Ya no me bastaba con entender Tor: la meta pasó a ser una obra
+técnica capaz de explicarlo de forma concreta, hasta el protocolo, las celdas, los circuitos y
+los algoritmos, con cada afirmación ligada a las especificaciones y al código fuente.</p>
+
+<h2 id="laboratorios">Por qué los laboratorios</h2>
+<p>Describir un mecanismo no demuestra que funcione como se describe. De esa necesidad nacen
+los laboratorios: una red Tor privada que funciona en un solo ordenador, donde cada paso del
+texto se puede reproducir, medir y comprobar. Hoy forman parte del libro: son veinte, y cada
+uno añade una pieza a un pequeño cliente Tor didáctico.</p>
+
+<h2 id="libre">Por qué es gratuito</h2>
+<p>Decidí dar prioridad a la libre difusión del conocimiento. Todo el proyecto — el libro, sus
+fuentes LaTeX, el código y los laboratorios — está a libre disposición para que cualquiera
+pueda estudiarlo, reproducirlo y mejorarlo. El libro es gratuito; lo que se puede hacer con él
+lo establece su licencia, la GNU GPL.</p>
+<p>Cómo se produjo el texto actual, y qué papel tuvieron en ello las herramientas de IA, se
+explica en la página <a href="../../es/ai/">Transparencia IA</a>.</p>
+</main>
+<footer class="site">
+<p>Primera edición, versión 1.0.0 (italiano) · tor 0.4.9.13, Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">fuentes del proyecto</a> · <a href="../../es/license/">GPL-3.0-or-later</a></p>
+<p>Obra independiente, no respaldada ni patrocinada por el Tor Project ni afiliada a él. <a href="../../es/independence/">Más información</a>.</p>
+<p>Este sitio no usa cookies, scripts, fuentes web ni rastreadores.</p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="it" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratori su una rete Tor privata — Anatomia di Tor</title>
+<meta name="description" content="Venti laboratori riproducibili: un client Tor didattico in Python provato su una rete Tor privata con Docker e Chutney, verificata dal vivo con 53 controlli su 53.">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/it/labs/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/labs/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/labs/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/labs/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/labs/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/labs/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/labs/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Anatomia di Tor">
+<meta property="og:title" content="Laboratori su una rete Tor privata — Anatomia di Tor">
+<meta property="og:description" content="Venti laboratori riproducibili: un client Tor didattico in Python provato su una rete Tor privata con Docker e Chutney, verificata dal vivo con 53 controlli su 53.">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/it/labs/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy: sezione di una cipolla accanto al titolo.">
+<meta property="og:locale" content="it_IT">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">Vai al contenuto</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../it/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Anatomia di Tor</span></a>
+<nav class="lang" aria-label="Lingua"><ul><li><a href="../../en/labs/" lang="en" hreflang="en">English</a></li><li><a href="../../it/labs/" lang="it" hreflang="it" aria-current="true">Italiano</a></li><li><a href="../../es/labs/" lang="es" hreflang="es">Español</a></li><li><a href="../../ru/labs/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../../zh-Hans/labs/" lang="zh-Hans" hreflang="zh-Hans">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="Sezioni"><ul><li><a href="../../it/">Inizio</a></li><li><a href="../../it/story/">La storia</a></li><li><a href="../../it/book/">Il libro</a></li><li><a href="../../it/labs/" aria-current="page">Laboratori</a></li><li><a href="../../it/languages/">Lingue</a></li><li><a href="../../it/contribute/">Contribuisci</a></li><li><a href="../../it/ai/">Trasparenza AI</a></li><li><a href="../../it/license/">Licenza</a></li><li><a href="../../it/independence/">Indipendenza</a></li></ul></nav>
+</header>
+<main id="content" class="page-labs">
+<h1>Laboratori</h1>
+<p class="lead">Venti laboratori costruiscono pezzo per pezzo <code>torlab</code>, un piccolo
+client Tor didattico in Python: canale, celle, handshake, cifratura, stream, directory,
+selezione del percorso, onion service e altro.</p>
+
+<h2 id="rete">Una rete Tor privata</h2>
+<p>Il codice si prova su una rete Tor privata che vive su un solo computer: tor 0.4.9.13 e
+Chutney compilati dai sorgenti in un'immagine Docker, con tutti i servizi in ascolto su
+127.0.0.1. Niente esce dalla macchina.</p>
+<p>Gli esperimenti sono pensati solo per questa rete privata. Non si eseguono mai contro relay
+pubblici o utenti reali, secondo i principi del Tor Research Safety Board.</p>
+
+<h2 id="verificati">Verificati, non solo descritti</h2>
+<p>Il 28 ottobre 2026 tutti i laboratori italiani sono stati rieseguiti dal vivo sulla rete
+privata: <strong>53/53</strong> controlli superati, più <strong>14/14</strong> per il
+laboratorio sul bridge obfs4. I test offline coprono il codice e gli script senza Docker né
+rete. I <a href="https://github.com/aleff-github/onion-routing-anatomy/tree/main/docs/it/validazione">riepiloghi della validazione</a> sono nella
+repository.</p>
+
+<h2 id="prova">Provali</h2>
+<pre><code>git clone https://github.com/aleff-github/onion-routing-anatomy
+cd onion-routing-anatomy
+make -C labs/it test       # test offline (Python 3.11 o successivo)
+make -C labs/it immagine   # immagine Docker con tor e Chutney
+make -C labs/it avvia      # avvia la rete privata
+make verifica-lab          # riesegue tutti i laboratori e ne controlla i risultati</code></pre>
+<p>Le guide passo per passo sono in <a href="https://github.com/aleff-github/onion-routing-anatomy/tree/main/labs/it/wiki"><code>labs/it/wiki</code></a>.
+Le guide tradotte, in <code>labs/&lt;lingua&gt;/wiki</code>, fanno parte delle traduzioni in
+revisione.</p>
+<p>Qualcosa non funziona come descritto? <a href="https://github.com/aleff-github/onion-routing-anatomy/issues/new?template=04-laboratory.yml">Segnala un
+problema in un laboratorio</a>.</p>
+</main>
+<footer class="site">
+<p>Prima edizione, versione 1.0.0 (italiano) · tor 0.4.9.13, Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">sorgenti del progetto</a> · <a href="../../it/license/">GPL-3.0-or-later</a></p>
+<p>Opera indipendente, non approvata né sostenuta dal Tor Project e non affiliata a esso. <a href="../../it/independence/">Dettagli</a>.</p>
+<p>Questo sito non usa cookie, script, web font né strumenti di tracciamento.</p>
+</footer>
+</body>
+</html>

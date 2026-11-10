@@ -1,0 +1,75 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="zh-Hans" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图书内容 — Onion Routing Anatomy</title>
+<meta name="description" content="Anatomia di Tor 的内容：历史、Tor 协议底层细节、Tor 实践、攻击与防御、研究与 Arti。共 31 章、176 道习题。">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/book/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/book/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/book/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/book/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/book/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/book/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/book/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="图书内容 — Onion Routing Anatomy">
+<meta property="og:description" content="Anatomia di Tor 的内容：历史、Tor 协议底层细节、Tor 实践、攻击与防御、研究与 Arti。共 31 章、176 道习题。">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/book/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy：标题旁的洋葱剖面图。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">跳到正文</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../zh-Hans/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="语言"><ul><li><a href="../../en/book/" lang="en" hreflang="en">English</a></li><li><a href="../../it/book/" lang="it" hreflang="it">Italiano</a></li><li><a href="../../es/book/" lang="es" hreflang="es">Español</a></li><li><a href="../../ru/book/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../../zh-Hans/book/" lang="zh-Hans" hreflang="zh-Hans" aria-current="true">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="栏目"><ul><li><a href="../../zh-Hans/">首页</a></li><li><a href="../../zh-Hans/story/">项目由来</a></li><li><a href="../../zh-Hans/book/" aria-current="page">图书内容</a></li><li><a href="../../zh-Hans/labs/">实验</a></li><li><a href="../../zh-Hans/languages/">语言</a></li><li><a href="../../zh-Hans/contribute/">参与贡献</a></li><li><a href="../../zh-Hans/ai/">AI 透明度</a></li><li><a href="../../zh-Hans/license/">许可证</a></li><li><a href="../../zh-Hans/independence/">独立性</a></li></ul></nav>
+</header>
+<main id="content" class="page-book">
+<h1>图书内容</h1>
+<p class="lead">31 章、4 个附录、176 道分级习题（附答案）、39 幅原创插图。参考版本：tor
+0.4.9.13 和 Arti 2.6.0。</p>
+<p>本书面向具备网络（TCP/IP、TLS）和编程基础的大学生、安全从业者和研究人员。书中的技术论断都对应到一手资料——Tor 规范、tor 和 Arti 的源代码、Tor Project 的提案以及研究论文——并在正文中注明出处。</p>
+
+<h2 id="di1bufen">第一部分 — 历史与基础</h2>
+<p>匿名性与元数据；混合网络（mix network）与匿名转发邮件服务（remailer）；从美国海军研究实验室（NRL）的洋葱路由到 Tor Project；Tor 的威胁模型，以及它无法防范的情形。</p>
+
+<h2 id="di2bufen">第二部分 — 协议底层</h2>
+<p>Tor 中的密码学；网络架构；通道与链路协议（link protocol）；信元；电路建立（CREATE_FAST、
+ntor、ntor-v3）；RELAY 信元的分层加密与新的 CGO 方案；流（stream）；SENDME 与拥塞控制；目录系统；路径选择与入口守卫（guard）；v3 洋葱服务；DoS 防御；审查、网桥与可插拔传输。每章都以一个实验结束。</p>
+
+<h2 id="di3bufen">第三部分 — Tor 实践</h2>
+<p>用 torrc 配置 tor；控制端口与 Stem；搭建私有 Tor 网络；用 Wireshark 分析流量；运行洋葱服务、中继和网桥；Tor 浏览器、Tails 与 Whonix；Tor Metrics 与 OONI；意大利和欧盟的法律与伦理问题。</p>
+
+<h2 id="di4bufen">第四部分 — 攻击与防御</h2>
+<p>流量关联、网站指纹识别（website fingerprinting）、女巫攻击（Sybil）、真实案例和操作失误。本书采取分析与防御的视角：解释攻击为何有效、Tor 如何应对，不提供针对他人的操作指南。</p>
+
+<h2 id="di5bufen">第五部分 — 研究与未来</h2>
+<p>关于 Tor 的学术研究、Arti（用 Rust 实现的 Tor）、尚未解决的问题以及 Tor Project 当前的提案。</p>
+
+<h2 id="geshi">格式</h2>
+<p>A4 PDF（298 页）、EPUB 3，以及用于打印个人副本的 7×10 英寸 PDF（342
+页）。PDF 和 EPUB 均由同一套 LaTeX 源文件通过 <code>make book</code> 生成。</p>
+</main>
+<footer class="site">
+<p>第一版，版本 1.0.0（意大利语）· tor 0.4.9.13、Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">项目源文件</a> · <a href="../../zh-Hans/license/">GPL-3.0-or-later</a></p>
+<p>本书为独立作品，未获 Tor Project 认可或赞助，与其亦无隶属关系。<a href="../../zh-Hans/independence/">详情</a>。</p>
+<p>本站不使用 Cookie、脚本、网络字体或任何跟踪工具。</p>
+</footer>
+</body>
+</html>

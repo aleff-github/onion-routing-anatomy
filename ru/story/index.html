@@ -1,0 +1,81 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="ru" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>История проекта — Onion Routing Anatomy</title>
+<meta name="description" content="Как появился Onion Routing Anatomy: изучение Tor для дипломной работы бакалавра, годы дальнейшей работы, лаборатории для проверки каждого механизма и свободная публикация.">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/ru/story/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/story/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/story/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/story/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/story/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/story/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/story/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="История проекта — Onion Routing Anatomy">
+<meta property="og:description" content="Как появился Onion Routing Anatomy: изучение Tor для дипломной работы бакалавра, годы дальнейшей работы, лаборатории для проверки каждого механизма и свободная публикация.">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/ru/story/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy: срез луковицы рядом с названием.">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">Перейти к содержимому</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../ru/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="Язык"><ul><li><a href="../../en/story/" lang="en" hreflang="en">English</a></li><li><a href="../../it/story/" lang="it" hreflang="it">Italiano</a></li><li><a href="../../es/story/" lang="es" hreflang="es">Español</a></li><li><a href="../../ru/story/" lang="ru" hreflang="ru" aria-current="true">Русский</a></li><li><a href="../../zh-Hans/story/" lang="zh-Hans" hreflang="zh-Hans">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="Разделы"><ul><li><a href="../../ru/">Главная</a></li><li><a href="../../ru/story/" aria-current="page">История</a></li><li><a href="../../ru/book/">О книге</a></li><li><a href="../../ru/labs/">Лаборатории</a></li><li><a href="../../ru/languages/">Языки</a></li><li><a href="../../ru/contribute/">Участие</a></li><li><a href="../../ru/ai/">Прозрачность ИИ</a></li><li><a href="../../ru/license/">Лицензия</a></li><li><a href="../../ru/independence/">Независимость</a></li></ul></nav>
+</header>
+<main id="content" class="page-story">
+<h1>История</h1>
+<p class="lead">Проект начался как учёба и со временем превратился в техническую книгу с
+собственными лабораторными работами. Здесь рассказано, как это произошло.</p>
+
+<h2 id="istoki">С чего всё началось</h2>
+<p>Работа над моей дипломной работой бакалавра стала для меня поводом изучить Tor глубже того
+уровня, на котором его обычно описывают: не как им пользоваться, а что на самом деле
+передаётся между ретрансляторами — ячейки, цепи, ключи и алгоритмы, которые всё это
+связывают.</p>
+<p>Мой интерес не закончился вместе с учёбой. С тех пор я продолжаю углублять этот материал,
+перерабатывать и расширять его.</p>
+
+<h2 id="kniga">От диплома к книге</h2>
+<p>Со временем цель изменилась. Мне было уже недостаточно просто понимать Tor: задачей стала
+техническая работа, способная объяснить его конкретно — вплоть до протокола, ячеек, цепей и
+алгоритмов, — где каждое утверждение опирается на спецификации и исходный код.</p>
+
+<h2 id="laboratorii">Зачем лаборатории</h2>
+<p>Описание механизма не доказывает, что он работает так, как описан. Из этой потребности и
+выросли лабораторные работы: частная сеть Tor на одном компьютере, где каждый шаг из текста
+можно воспроизвести, измерить и проверить. Сейчас они — часть книги: их двадцать, и каждая
+добавляет новый фрагмент к небольшому учебному клиенту Tor.</p>
+
+<h2 id="svobodno">Почему бесплатно</h2>
+<p>Моё решение — отдать приоритет свободному распространению знаний. Весь проект — книга, её
+исходники в LaTeX, код и лабораторные работы — свободно доступен, чтобы любой мог изучать,
+воспроизводить и улучшать его. Книга бесплатна; что с ней можно делать, определяет её
+лицензия, GNU GPL.</p>
+<p>Как был создан нынешний текст и какую роль в этом сыграли инструменты ИИ, рассказано на
+странице <a href="../../ru/ai/">«Прозрачность ИИ»</a>.</p>
+</main>
+<footer class="site">
+<p>Первое издание, версия 1.0.0 (итальянский) · tor 0.4.9.13, Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">исходные файлы проекта</a> · <a href="../../ru/license/">GPL-3.0-or-later</a></p>
+<p>Независимая работа: она не одобрена, не спонсируется Tor Project и не связана с ним. <a href="../../ru/independence/">Подробнее</a>.</p>
+<p>Этот сайт не использует cookie, скрипты, веб-шрифты и трекеры.</p>
+</footer>
+</body>
+</html>

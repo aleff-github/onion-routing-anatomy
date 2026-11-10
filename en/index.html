@@ -1,0 +1,81 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Onion Routing Anatomy — a free book on the Tor protocol, byte by byte</title>
+<meta name="description" content="Anatomia di Tor: a free, GPL-licensed technical book on the Tor protocol, from cells and circuits to attacks, with 20 laboratories on a private Tor network.">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/en/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="Onion Routing Anatomy — a free book on the Tor protocol, byte by byte">
+<meta property="og:description" content="Anatomia di Tor: a free, GPL-licensed technical book on the Tor protocol, from cells and circuits to attacks, with 20 laboratories on a private Tor network.">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/en/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy: an onion cross-section next to the title.">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../en/"><img src="../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="Language"><ul><li><a href="../en/" lang="en" hreflang="en" aria-current="true">English</a></li><li><a href="../it/" lang="it" hreflang="it">Italiano</a></li><li><a href="../es/" lang="es" hreflang="es">Español</a></li><li><a href="../ru/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../zh-Hans/" lang="zh-Hans" hreflang="zh-Hans">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="Sections"><ul><li><a href="../en/" aria-current="page">Home</a></li><li><a href="../en/story/">The story</a></li><li><a href="../en/book/">Inside the book</a></li><li><a href="../en/labs/">Laboratories</a></li><li><a href="../en/languages/">Languages</a></li><li><a href="../en/contribute/">Contribute</a></li><li><a href="../en/ai/">AI transparency</a></li><li><a href="../en/license/">License</a></li><li><a href="../en/independence/">Independence</a></li></ul></nav>
+</header>
+<main id="content" class="page-home">
+<div class="hero">
+<img src="../assets/copertina.png" width="1600" height="2560" alt="Cover of «Anatomia di Tor»: a cross-section of an onion with concentric rings, a radial cut and a purple core.">
+<div>
+<h1>Onion Routing Anatomy</h1>
+<p class="subtitle"><span lang="it">Anatomia di Tor</span> — the Tor protocol, byte by byte</p>
+<p>A technical book on how Tor works, from the bytes two relays exchange up to design
+choices, real attacks and open problems. Every mechanism is rebuilt and tested in a
+laboratory, on a private Tor network that runs on an ordinary computer.</p>
+<p>The book is written in Italian. It is <strong>free</strong>, and its sources — text,
+figures, code and laboratories — are open to everyone under the GNU GPL.</p>
+</div>
+</div>
+<section class="download" aria-labelledby="download"><h2 id="download">Download</h2><ul class="downloads"><li><a class="button" href="https://github.com/aleff-github/onion-routing-anatomy/releases/download/v1.0.0-it/anatomia-di-tor_it_A4.pdf">PDF A4 (Italian)</a></li><li><a class="button" href="https://github.com/aleff-github/onion-routing-anatomy/releases/download/v1.0.0-it/anatomia-di-tor_it.epub">EPUB (Italian)</a></li></ul><p>First edition in Italian, version 1.0.0, 298 pages. <a href="https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it">All files and SHA-256 checksums</a>, including the 7×10 in PDF for printing a personal copy.</p></section>
+<section aria-labelledby="explore">
+<h2 id="explore">Explore</h2>
+<ul class="cards">
+<li><a href="../en/story/"><strong>The story</strong><span>From a bachelor's thesis to a book.</span></a></li>
+<li><a href="../en/book/"><strong>Inside the book</strong><span>31 chapters, from cells to open research problems.</span></a></li>
+<li><a href="../en/labs/"><strong>Laboratories</strong><span>Twenty experiments on a private Tor network.</span></a></li>
+<li><a href="../en/languages/"><strong>Languages</strong><span>The Italian original and four translations under review.</span></a></li>
+<li><a href="../en/ai/"><strong>AI transparency</strong><span>Who did what: human direction and AI tools.</span></a></li>
+<li><a href="../en/license/"><strong>License</strong><span>What the GNU GPL lets you do.</span></a></li>
+</ul>
+</section>
+<section class="callout" aria-labelledby="help">
+<h2 id="help">Help improve this book</h2>
+<p>This free and open book welcomes contributions. A typo, an unclear explanation, a technical error or a laboratory that behaves differently than described: every report helps improve the work.</p>
+<p><a class="button" href="../en/contribute/">How to contribute</a>
+<a class="button secondary" href="https://github.com/aleff-github/onion-routing-anatomy/issues/new/choose">Report an error</a></p>
+</section>
+</main>
+<footer class="site">
+<p>First edition, version 1.0.0 (Italian) · tor 0.4.9.13, Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">project sources</a> · <a href="../en/license/">GPL-3.0-or-later</a></p>
+<p>An independent work, not endorsed or sponsored by, or affiliated with, the Tor Project. <a href="../en/independence/">More</a>.</p>
+<p>This site uses no cookies, scripts, web fonts or trackers.</p>
+</footer>
+</body>
+</html>

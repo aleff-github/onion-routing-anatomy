@@ -1,0 +1,90 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="es" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>El libro: contenidos — Onion Routing Anatomy</title>
+<meta name="description" content="Contenido de Anatomia di Tor: historia, el protocolo Tor a bajo nivel, Tor en la práctica, ataques y defensas, investigación y Arti. 31 capítulos, 176 ejercicios.">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/es/book/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/book/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/book/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/book/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/book/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/book/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/book/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="El libro: contenidos — Onion Routing Anatomy">
+<meta property="og:description" content="Contenido de Anatomia di Tor: historia, el protocolo Tor a bajo nivel, Tor en la práctica, ataques y defensas, investigación y Arti. 31 capítulos, 176 ejercicios.">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/es/book/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy: sección de una cebolla junto al título.">
+<meta property="og:locale" content="es_ES">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">Ir al contenido</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../es/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="Idioma"><ul><li><a href="../../en/book/" lang="en" hreflang="en">English</a></li><li><a href="../../it/book/" lang="it" hreflang="it">Italiano</a></li><li><a href="../../es/book/" lang="es" hreflang="es" aria-current="true">Español</a></li><li><a href="../../ru/book/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../../zh-Hans/book/" lang="zh-Hans" hreflang="zh-Hans">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="Secciones"><ul><li><a href="../../es/">Inicio</a></li><li><a href="../../es/story/">La historia</a></li><li><a href="../../es/book/" aria-current="page">El libro</a></li><li><a href="../../es/labs/">Laboratorios</a></li><li><a href="../../es/languages/">Idiomas</a></li><li><a href="../../es/contribute/">Colaborar</a></li><li><a href="../../es/ai/">Transparencia IA</a></li><li><a href="../../es/license/">Licencia</a></li><li><a href="../../es/independence/">Independencia</a></li></ul></nav>
+</header>
+<main id="content" class="page-book">
+<h1>El libro</h1>
+<p class="lead">31 capítulos y 4 apéndices, 176 ejercicios graduados con soluciones, 39 figuras
+originales. Versiones de referencia: tor 0.4.9.13 y Arti 2.6.0.</p>
+<p>El libro está pensado para estudiantes universitarios, profesionales de la seguridad e
+investigadores con conocimientos de redes (TCP/IP, TLS) y de programación. Las afirmaciones
+técnicas están ligadas a las fuentes primarias — las especificaciones de Tor, el código fuente
+de tor y de Arti, las propuestas del Tor Project y los artículos de investigación — y se citan
+en el texto.</p>
+
+<h2 id="parte1">Parte I — Historia y fundamentos</h2>
+<p>Anonimato y metadatos; redes de mezcla (mix networks) y remailers; del onion routing del US
+Naval Research Laboratory al Tor Project; el modelo de amenazas de Tor y aquello de lo que no
+protege.</p>
+
+<h2 id="parte2">Parte II — El protocolo a bajo nivel</h2>
+<p>Criptografía para Tor; arquitectura de la red; canales y protocolo de enlace; celdas; creación de circuitos (CREATE_FAST, ntor, ntor-v3); cifrado por capas de
+las celdas RELAY y el nuevo esquema CGO; flujos (streams); SENDME y control de
+congestión; el sistema de directorios; selección de ruta y repetidores de entrada (<em>guard</em>); servicios onion
+v3; defensas contra DoS; censura, puentes y transportes conectables. Cada capítulo termina con
+un laboratorio.</p>
+
+<h2 id="parte3">Parte III — Tor en la práctica</h2>
+<p>Configurar tor con el torrc; el puerto de control y Stem; construir una red Tor privada;
+análisis de tráfico con Wireshark; servicios onion, repetidores y puentes; Tor Browser, Tails y
+Whonix; Tor Metrics y OONI; aspectos legales y éticos en Italia y en la UE.</p>
+
+<h2 id="parte4">Parte IV — Ataques y defensas</h2>
+<p>Correlación de tráfico, website fingerprinting, ataques Sybil, casos reales y errores
+operativos. El enfoque es analítico y defensivo: el libro explica por qué funcionan los ataques
+y cómo los contrarresta Tor, sin dar instrucciones contra terceros.</p>
+
+<h2 id="parte5">Parte V — Investigación y futuro</h2>
+<p>La investigación académica sobre Tor, Arti (la implementación de Tor en Rust), los problemas
+abiertos y las propuestas en curso del Tor Project.</p>
+
+<h2 id="formatos">Formatos</h2>
+<p>PDF A4 (298 páginas), EPUB 3 y un PDF de 7×10 pulgadas (342 páginas)
+para imprimir una copia personal. El PDF y el EPUB se generan a partir de las mismas fuentes
+LaTeX con <code>make book</code>.</p>
+</main>
+<footer class="site">
+<p>Primera edición, versión 1.0.0 (italiano) · tor 0.4.9.13, Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">fuentes del proyecto</a> · <a href="../../es/license/">GPL-3.0-or-later</a></p>
+<p>Obra independiente, no respaldada ni patrocinada por el Tor Project ni afiliada a él. <a href="../../es/independence/">Más información</a>.</p>
+<p>Este sitio no usa cookies, scripts, fuentes web ni rastreadores.</p>
+</footer>
+</body>
+</html>

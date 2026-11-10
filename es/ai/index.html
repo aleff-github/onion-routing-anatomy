@@ -1,0 +1,102 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="es" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transparencia sobre el uso de IA — Onion Routing Anatomy</title>
+<meta name="description" content="Cómo se usó la inteligencia artificial para hacer Onion Routing Anatomy: dirección humana y herramientas de IA, revisión interna, qué se verificó y qué no.">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/es/ai/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/ai/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/ai/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/ai/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/ai/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/ai/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/ai/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="Transparencia sobre el uso de IA — Onion Routing Anatomy">
+<meta property="og:description" content="Cómo se usó la inteligencia artificial para hacer Onion Routing Anatomy: dirección humana y herramientas de IA, revisión interna, qué se verificó y qué no.">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/es/ai/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy: sección de una cebolla junto al título.">
+<meta property="og:locale" content="es_ES">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">Ir al contenido</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../es/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="Idioma"><ul><li><a href="../../en/ai/" lang="en" hreflang="en">English</a></li><li><a href="../../it/ai/" lang="it" hreflang="it">Italiano</a></li><li><a href="../../es/ai/" lang="es" hreflang="es" aria-current="true">Español</a></li><li><a href="../../ru/ai/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../../zh-Hans/ai/" lang="zh-Hans" hreflang="zh-Hans">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="Secciones"><ul><li><a href="../../es/">Inicio</a></li><li><a href="../../es/story/">La historia</a></li><li><a href="../../es/book/">El libro</a></li><li><a href="../../es/labs/">Laboratorios</a></li><li><a href="../../es/languages/">Idiomas</a></li><li><a href="../../es/contribute/">Colaborar</a></li><li><a href="../../es/ai/" aria-current="page">Transparencia IA</a></li><li><a href="../../es/license/">Licencia</a></li><li><a href="../../es/independence/">Independencia</a></li></ul></nav>
+</header>
+<main id="content" class="page-ai">
+<h1>Transparencia IA</h1>
+<p class="lead">Esta página resume cómo se usó la inteligencia artificial para hacer el libro,
+basándose solo en lo que documentan los registros del proyecto. Cuando algo no se puede
+verificar, lo dice.</p>
+<p>La obra parte de apuntes y documentos de estudio que he elaborado durante años.
+Bajo mi dirección, las herramientas de IA contribuyeron sustancialmente a ampliar,
+argumentar, organizar y redactar el texto. A pesar de las comprobaciones y la revisión
+interna, puede haber errores: invito a <a href="../../es/contribute/">señalarlos y
+corregirlos</a>. El principio es <strong>«diffusione dei saperi senza fondare poteri»</strong>:
+difundir conocimientos sin instaurar poderes. La obra se ofrece gratis por los canales
+oficiales, bajo GPL-3.0-or-later, que también permite la redistribución comercial.</p>
+
+<h2 id="autor">Mi parte</h2>
+<ul>
+<li>El origen del proyecto: el estudio de Tor que empecé para mi trabajo de fin de grado y
+continué después. El trabajo no está en el repositorio, así que no es posible decir qué
+pasajes derivan de él.</li>
+<li>La dirección del trabajo y sus decisiones: objetivos y alcance, el capítulo modelo para el
+tono y el nivel, título, licencia, distribución gratuita, autorización de cada ejecución en vivo
+de los laboratorios.</li>
+<li>La revisión y el mantenimiento de la obra, y la responsabilidad editorial sobre lo que se
+publica.</li>
+</ul>
+
+<h2 id="herramientas">Qué hicieron las herramientas de IA</h2>
+<ul>
+<li>El texto actual, las figuras, los ejercicios y las soluciones se redactaron desde
+septiembre de 2026 en sesiones con un asistente de programación con IA, Claude Code, bajo mi
+dirección. Deben considerarse <strong>generados con IA bajo dirección humana</strong>, no
+texto escrito por mí y solo pulido con IA.</li>
+<li>El código de los laboratorios, los scripts y el sistema de compilación se escribieron de la
+misma manera.</li>
+<li>Las traducciones se generaron con herramientas de IA; su revisión también se hizo en
+sesiones con herramientas de IA.</li>
+<li>La documentación del proyecto, incluido este sitio web, se redactó con IA a partir de la
+información que proporcioné.</li>
+</ul>
+
+<h2 id="verificado">Cómo se revisa el trabajo, y sus límites</h2>
+<p><strong>Revisión interna.</strong> Reviso y mantengo personalmente la obra, que se sigue
+corrigiendo y mejorando.</p>
+<p><strong>Comprobaciones automáticas:</strong> ejecución en vivo de los laboratorios italianos
+en una red Tor privada (53/53 y 14/14 comprobaciones), pruebas sin conexión, compilación del
+PDF y del EPUB con comprobaciones programáticas y validación con EPUBCheck.</p>
+<p><strong>Revisión independiente:</strong> ninguna hasta ahora — ni revisión por pares ni
+validación de expertos externos, ni revisión del capítulo jurídico por un abogado, ni revisión
+de las traducciones por hablantes nativos.</p>
+<p>Por tanto, pueden quedar errores. Si encuentras uno, <a href="../../es/contribute/">infórmanos</a>.</p>
+
+<p><a class="button" href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/AI_DISCLOSURE.md">Leer la declaración completa</a>
+(en inglés y en italiano)</p>
+</main>
+<footer class="site">
+<p>Primera edición, versión 1.0.0 (italiano) · tor 0.4.9.13, Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">fuentes del proyecto</a> · <a href="../../es/license/">GPL-3.0-or-later</a></p>
+<p>Obra independiente, no respaldada ni patrocinada por el Tor Project ni afiliada a él. <a href="../../es/independence/">Más información</a>.</p>
+<p>Este sitio no usa cookies, scripts, fuentes web ni rastreadores.</p>
+</footer>
+</body>
+</html>

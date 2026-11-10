@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="zh-Hans" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Onion Routing Anatomy — 一本逐字节解析 Tor 协议的自由图书</title>
+<meta name="description" content="Anatomia di Tor：一本免费、自由的 Tor 协议技术书，从信元（cell）、电路讲到攻击，并配有在私有 Tor 网络上进行的 20 个实验。">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="Onion Routing Anatomy — 一本逐字节解析 Tor 协议的自由图书">
+<meta property="og:description" content="Anatomia di Tor：一本免费、自由的 Tor 协议技术书，从信元（cell）、电路讲到攻击，并配有在私有 Tor 网络上进行的 20 个实验。">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy：标题旁的洋葱剖面图。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">跳到正文</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../zh-Hans/"><img src="../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="语言"><ul><li><a href="../en/" lang="en" hreflang="en">English</a></li><li><a href="../it/" lang="it" hreflang="it">Italiano</a></li><li><a href="../es/" lang="es" hreflang="es">Español</a></li><li><a href="../ru/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../zh-Hans/" lang="zh-Hans" hreflang="zh-Hans" aria-current="true">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="栏目"><ul><li><a href="../zh-Hans/" aria-current="page">首页</a></li><li><a href="../zh-Hans/story/">项目由来</a></li><li><a href="../zh-Hans/book/">图书内容</a></li><li><a href="../zh-Hans/labs/">实验</a></li><li><a href="../zh-Hans/languages/">语言</a></li><li><a href="../zh-Hans/contribute/">参与贡献</a></li><li><a href="../zh-Hans/ai/">AI 透明度</a></li><li><a href="../zh-Hans/license/">许可证</a></li><li><a href="../zh-Hans/independence/">独立性</a></li></ul></nav>
+</header>
+<main id="content" class="page-home">
+<div class="hero">
+<img src="../assets/copertina.png" width="1600" height="2560" alt="《Anatomia di Tor》封面：一个洋葱的剖面，有同心圆环、一道径向切口和紫色的内核。">
+<div>
+<h1>Onion Routing Anatomy</h1>
+<p class="subtitle"><span lang="it">Anatomia di Tor</span>——逐字节解析 Tor 协议</p>
+<p>这是一本讲解 Tor 工作原理的技术书：从两个中继之间交换的字节出发，一直讲到设计决策、真实攻击和尚未解决的问题。每一种机制都会在实验中重建和验证，实验运行在一台普通电脑上的私有 Tor 网络中。</p>
+<p>本书以意大利语写成。它是<strong>免费</strong>的，其源文件——文字、插图、代码和实验——
+都以 GNU GPL 许可证向所有人开放。</p>
+</div>
+</div>
+<section class="download" aria-labelledby="download"><h2 id="download">下载</h2><ul class="downloads"><li><a class="button" href="https://github.com/aleff-github/onion-routing-anatomy/releases/download/v1.0.0-it/anatomia-di-tor_it_A4.pdf">A4 PDF（意大利语）</a></li><li><a class="button" href="https://github.com/aleff-github/onion-routing-anatomy/releases/download/v1.0.0-it/anatomia-di-tor_it.epub">EPUB（意大利语）</a></li></ul><p>意大利语第一版，版本 1.0.0，共 298 页。<a href="https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it">全部文件及 SHA-256 校验和</a>，包括用于打印个人副本的 7×10 英寸 PDF。</p></section>
+<section aria-labelledby="liulan">
+<h2 id="liulan">浏览</h2>
+<ul class="cards">
+<li><a href="../zh-Hans/story/"><strong>项目由来</strong><span>从一篇本科毕业论文到一本书。</span></a></li>
+<li><a href="../zh-Hans/book/"><strong>图书内容</strong><span>31 章，从信元讲到前沿研究问题。</span></a></li>
+<li><a href="../zh-Hans/labs/"><strong>实验</strong><span>在私有 Tor 网络上的二十个实验。</span></a></li>
+<li><a href="../zh-Hans/languages/"><strong>语言</strong><span>意大利语原版与四种正在审校的译本。</span></a></li>
+<li><a href="../zh-Hans/ai/"><strong>AI 透明度</strong><span>分工说明：人的指导与 AI 工具。</span></a></li>
+<li><a href="../zh-Hans/license/"><strong>许可证</strong><span>GNU GPL 允许你做什么。</span></a></li>
+</ul>
+</section>
+<section class="callout" aria-labelledby="bangzhu">
+<h2 id="bangzhu">帮助改进本书</h2>
+<p>本书是一部自由作品，欢迎读者提出修改建议。无论是错别字、说明不清、技术错误，还是实验结果与描述不符，每一条反馈都能帮助改进本书。</p>
+<p><a class="button" href="../zh-Hans/contribute/">如何参与</a>
+<a class="button secondary" href="https://github.com/aleff-github/onion-routing-anatomy/issues/new/choose">报告错误</a></p>
+</section>
+</main>
+<footer class="site">
+<p>第一版，版本 1.0.0（意大利语）· tor 0.4.9.13、Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">项目源文件</a> · <a href="../zh-Hans/license/">GPL-3.0-or-later</a></p>
+<p>本书为独立作品，未获 Tor Project 认可或赞助，与其亦无隶属关系。<a href="../zh-Hans/independence/">详情</a>。</p>
+<p>本站不使用 Cookie、脚本、网络字体或任何跟踪工具。</p>
+</footer>
+</body>
+</html>

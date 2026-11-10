@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="zh-Hans" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>独立性 — Onion Routing Anatomy</title>
+<meta name="description" content="Onion Routing Anatomy 是一部独立作品，未获 Tor Project 认可，与其亦无隶属关系。没有广告、赞助或跟踪。">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/independence/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/independence/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/independence/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/independence/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/independence/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/independence/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/independence/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="独立性 — Onion Routing Anatomy">
+<meta property="og:description" content="Onion Routing Anatomy 是一部独立作品，未获 Tor Project 认可，与其亦无隶属关系。没有广告、赞助或跟踪。">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/independence/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy：标题旁的洋葱剖面图。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">跳到正文</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../zh-Hans/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="语言"><ul><li><a href="../../en/independence/" lang="en" hreflang="en">English</a></li><li><a href="../../it/independence/" lang="it" hreflang="it">Italiano</a></li><li><a href="../../es/independence/" lang="es" hreflang="es">Español</a></li><li><a href="../../ru/independence/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../../zh-Hans/independence/" lang="zh-Hans" hreflang="zh-Hans" aria-current="true">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="栏目"><ul><li><a href="../../zh-Hans/">首页</a></li><li><a href="../../zh-Hans/story/">项目由来</a></li><li><a href="../../zh-Hans/book/">图书内容</a></li><li><a href="../../zh-Hans/labs/">实验</a></li><li><a href="../../zh-Hans/languages/">语言</a></li><li><a href="../../zh-Hans/contribute/">参与贡献</a></li><li><a href="../../zh-Hans/ai/">AI 透明度</a></li><li><a href="../../zh-Hans/license/">许可证</a></li><li><a href="../../zh-Hans/independence/" aria-current="page">独立性</a></li></ul></nav>
+</header>
+<main id="content" class="page-independence">
+<h1>独立性</h1>
+<p class="lead">本书是一部独立作品，未获 Tor Project 认可或赞助，与其亦无隶属关系。</p>
+
+<h2 id="tor-project">关于 Tor Project</h2>
+<p>本书研究 Tor 软件、其规范及相关研究。它不代表 Tor Project 发言，书中的观点也不代表 Tor
+Project 的观点。如需使用 Tor，请从 Tor Project 的官方渠道获取。</p>
+<p>“Tor”和 Tor 洋葱标志是 The Tor Project, Inc. 的商标。本书未使用该标志；封面上的洋葱剖面图是原创作品。</p>
+
+<h2 id="wu-guanggao">没有广告，没有跟踪</h2>
+<p>本书没有赞助商，也不含广告。本站不使用 Cookie、脚本、网络字体、统计分析或第三方服务。本站托管于 GitHub Pages；与任何网络服务器一样，GitHub 可能会记录访问者的 IP 地址，详见其隐私声明。</p>
+
+<h2 id="kanwu">勘误</h2>
+<p>独立也意味着没有任何机构代表读者审阅过本书：勘误来自阅读它的人。如果你发现了错误，请
+<a href="../../zh-Hans/contribute/">告诉我们</a>。</p>
+</main>
+<footer class="site">
+<p>第一版，版本 1.0.0（意大利语）· tor 0.4.9.13、Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">项目源文件</a> · <a href="../../zh-Hans/license/">GPL-3.0-or-later</a></p>
+<p>本书为独立作品，未获 Tor Project 认可或赞助，与其亦无隶属关系。<a href="../../zh-Hans/independence/">详情</a>。</p>
+<p>本站不使用 Cookie、脚本、网络字体或任何跟踪工具。</p>
+</footer>
+</body>
+</html>

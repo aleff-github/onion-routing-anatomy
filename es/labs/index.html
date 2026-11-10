@@ -1,0 +1,83 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="es" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorios en una red Tor privada — Onion Routing Anatomy</title>
+<meta name="description" content="Veinte laboratorios reproducibles: un cliente Tor didáctico en Python probado en una red Tor privada con Docker y Chutney, verificada en vivo con 53/53 comprobaciones.">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/es/labs/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/labs/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/labs/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/labs/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/labs/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/labs/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/labs/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="Laboratorios en una red Tor privada — Onion Routing Anatomy">
+<meta property="og:description" content="Veinte laboratorios reproducibles: un cliente Tor didáctico en Python probado en una red Tor privada con Docker y Chutney, verificada en vivo con 53/53 comprobaciones.">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/es/labs/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy: sección de una cebolla junto al título.">
+<meta property="og:locale" content="es_ES">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">Ir al contenido</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../es/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="Idioma"><ul><li><a href="../../en/labs/" lang="en" hreflang="en">English</a></li><li><a href="../../it/labs/" lang="it" hreflang="it">Italiano</a></li><li><a href="../../es/labs/" lang="es" hreflang="es" aria-current="true">Español</a></li><li><a href="../../ru/labs/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../../zh-Hans/labs/" lang="zh-Hans" hreflang="zh-Hans">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="Secciones"><ul><li><a href="../../es/">Inicio</a></li><li><a href="../../es/story/">La historia</a></li><li><a href="../../es/book/">El libro</a></li><li><a href="../../es/labs/" aria-current="page">Laboratorios</a></li><li><a href="../../es/languages/">Idiomas</a></li><li><a href="../../es/contribute/">Colaborar</a></li><li><a href="../../es/ai/">Transparencia IA</a></li><li><a href="../../es/license/">Licencia</a></li><li><a href="../../es/independence/">Independencia</a></li></ul></nav>
+</header>
+<main id="content" class="page-labs">
+<h1>Laboratorios</h1>
+<p class="lead">Veinte laboratorios construyen, pieza a pieza, <code>torlab</code>, un pequeño
+cliente Tor didáctico escrito en Python: canal, celdas, handshakes, cifrado, flujos,
+directorios, selección de ruta, servicios onion y más.</p>
+
+<h2 id="red">Una red Tor privada</h2>
+<p>El código se prueba en una red Tor privada que vive en un solo ordenador: tor 0.4.9.13 y
+Chutney compilados desde las fuentes en una imagen Docker, con todos los servicios escuchando
+en 127.0.0.1. Nada sale de la máquina.</p>
+<p>Los experimentos están pensados solo para esta red privada. Nunca se ejecutan contra
+repetidores públicos ni usuarios reales, de acuerdo con los principios del Tor Research Safety
+Board.</p>
+
+<h2 id="verificados">Verificados, no solo descritos</h2>
+<p>El 28 de octubre de 2026 todos los laboratorios italianos se volvieron a ejecutar en vivo en
+la red privada: <strong>53/53</strong> comprobaciones superadas, más <strong>14/14</strong> en
+el laboratorio del puente obfs4. Las pruebas sin conexión cubren el código y los scripts sin
+Docker ni red. Los <a href="https://github.com/aleff-github/onion-routing-anatomy/tree/main/docs/it/validazione">resúmenes de la validación</a> están en
+el repositorio.</p>
+
+<h2 id="probar">Pruébalos</h2>
+<pre><code>git clone https://github.com/aleff-github/onion-routing-anatomy
+cd onion-routing-anatomy
+make -C labs/it test       # pruebas sin conexión (Python 3.11 o posterior)
+make -C labs/it immagine   # imagen Docker con tor y Chutney
+make -C labs/it avvia      # arranca la red privada
+make verifica-lab          # vuelve a ejecutar todos los laboratorios y comprueba los resultados</code></pre>
+<p>Las guías paso a paso están en <a href="https://github.com/aleff-github/onion-routing-anatomy/tree/main/labs/it/wiki"><code>labs/it/wiki</code></a>
+(en italiano). Las guías traducidas, en <code>labs/&lt;idioma&gt;/wiki</code>, forman parte de
+las traducciones en revisión.</p>
+<p>¿Algo no funciona como se describe? <a href="https://github.com/aleff-github/onion-routing-anatomy/issues/new?template=04-laboratory.yml">Informa de un
+problema en un laboratorio</a>.</p>
+</main>
+<footer class="site">
+<p>Primera edición, versión 1.0.0 (italiano) · tor 0.4.9.13, Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">fuentes del proyecto</a> · <a href="../../es/license/">GPL-3.0-or-later</a></p>
+<p>Obra independiente, no respaldada ni patrocinada por el Tor Project ni afiliada a él. <a href="../../es/independence/">Más información</a>.</p>
+<p>Este sitio no usa cookies, scripts, fuentes web ni rastreadores.</p>
+</footer>
+</body>
+</html>

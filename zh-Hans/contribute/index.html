@@ -1,0 +1,97 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="zh-Hans" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>参与贡献 — 帮助改进 Onion Routing Anatomy</title>
+<meta name="description" content="如何为 Onion Routing Anatomy 报告错误、修正译文、提出改进建议或贡献代码——无论你是否会用 Git 和 LaTeX。">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/contribute/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/contribute/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/contribute/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/contribute/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/contribute/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/contribute/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/contribute/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="参与贡献 — 帮助改进 Onion Routing Anatomy">
+<meta property="og:description" content="如何为 Onion Routing Anatomy 报告错误、修正译文、提出改进建议或贡献代码——无论你是否会用 Git 和 LaTeX。">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/contribute/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy：标题旁的洋葱剖面图。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">跳到正文</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../zh-Hans/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="语言"><ul><li><a href="../../en/contribute/" lang="en" hreflang="en">English</a></li><li><a href="../../it/contribute/" lang="it" hreflang="it">Italiano</a></li><li><a href="../../es/contribute/" lang="es" hreflang="es">Español</a></li><li><a href="../../ru/contribute/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../../zh-Hans/contribute/" lang="zh-Hans" hreflang="zh-Hans" aria-current="true">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="栏目"><ul><li><a href="../../zh-Hans/">首页</a></li><li><a href="../../zh-Hans/story/">项目由来</a></li><li><a href="../../zh-Hans/book/">图书内容</a></li><li><a href="../../zh-Hans/labs/">实验</a></li><li><a href="../../zh-Hans/languages/">语言</a></li><li><a href="../../zh-Hans/contribute/" aria-current="page">参与贡献</a></li><li><a href="../../zh-Hans/ai/">AI 透明度</a></li><li><a href="../../zh-Hans/license/">许可证</a></li><li><a href="../../zh-Hans/independence/">独立性</a></li></ul></nav>
+</header>
+<main id="content" class="page-contribute">
+<h1>帮助改进本书</h1>
+<p class="lead">本书是一部自由作品，欢迎读者通过修改说明、代码或实验内容参与改进。</p>
+
+<h2 id="fangshi">参与方式</h2>
+<ul class="cards">
+<li><a href="https://github.com/aleff-github/onion-routing-anatomy/issues/new?template=01-typo.yml"><strong>报告错别字</strong><span>拼写错误、漏字、表述不清的句子。</span></a></li>
+<li><a href="https://github.com/aleff-github/onion-routing-anatomy/issues/new?template=02-translation.yml"><strong>修正译文</strong><span>译本中错误或不自然的段落。</span></a></li>
+<li><a href="https://github.com/aleff-github/onion-routing-anatomy/issues/new?template=03-technical-correction.yml"><strong>技术勘误</strong><span>关于 Tor 的错误或过时的说法。</span></a></li>
+<li><a href="https://github.com/aleff-github/onion-routing-anatomy/issues/new?template=04-laboratory.yml"><strong>实验问题</strong><span>与描述不符的实验。</span></a></li>
+<li><a href="https://github.com/aleff-github/onion-routing-anatomy/issues/new?template=06-proposal.yml"><strong>提出改进</strong><span>新内容、更好的解释、一幅插图。</span></a></li>
+<li><a href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/docs/translation-review.md"><strong>译本审校</strong><span>审校你所用语言的某一章。</span></a></li>
+<li><a href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/CONTRIBUTING.md"><strong>贡献文字或代码</strong><span>提交一个 pull request。</span></a></li>
+<li><a href="https://github.com/aleff-github/onion-routing-anatomy/issues/new?template=05-documentation.yml"><strong>改进文档</strong><span>README、指南、说明。</span></a></li>
+</ul>
+
+<h2 id="wu-git">不用 Git 和 LaTeX</h2>
+<p>你只需要一个 GitHub 账号。选择反馈类型，填写表单——语言、章节或页码、现有文字以及你建议的写法——然后提交即可。修改源文件的工作会由其他人完成。</p>
+<p>对于小的错别字，你也可以自己提出修改：在 GitHub 上打开文件，点击铅笔图标，修改文字，然后选择“Propose changes”。GitHub 会自动为你创建仓库副本和 pull request，无需编译本书。</p>
+
+<h2 id="yong-git">使用 Git</h2>
+<ol>
+<li>除非只是小修改，请先创建一个 issue。</li>
+<li>找到文件：意大利语正文在 <code>source/it/</code>，译本在
+<code>source/&lt;语言&gt;/</code>，实验代码在 <code>labs/</code>。</li>
+<li>fork 本仓库，创建分支并进行修改。</li>
+<li>运行与修改相应的检查：<code>make check</code> 和 <code>make test</code> 只需要
+Python；编译本书需要 Docker。</li>
+<li>提交 pull request，并回复审阅意见。</li>
+</ol>
+<p>详细说明见 <a href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>（英语和意大利语）。</p>
+
+<h2 id="houxu">之后会怎样</h2>
+<p>每一条反馈都会被阅读，并标记一个状态：<em>待核实</em>、<em>已确认</em>、<em>处理中</em>、
+<em>已提出修正</em>、<em>已解决</em>、<em>无法复现</em>或<em>重复</em>。涉及协议描述、密码学或实验的修改，需要一手资料或可复现的证明；错别字只需快速核对。被采纳的修正会进入本书的下一个版本，并列入<a href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/CHANGELOG.md">更新日志</a>。具体流程见
+<a href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/docs/editorial-process.md">docs/editorial-process.md</a>。</p>
+
+<h2 id="zhixie">致谢</h2>
+<p>修改被采纳的贡献者会列在 <a href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/CONTRIBUTORS.md">CONTRIBUTORS.md</a> 中，使用其 GitHub 用户名或其自选的名字。任何人都可以要求不被列出。这里没有排名。</p>
+
+<h2 id="xuzhi">须知</h2>
+<ul>
+<li>贡献内容按本项目的许可证 GPL-3.0-or-later 接受。</li>
+<li>请勿在公开的 issue 中发布个人数据、私钥、抓包文件或其他敏感材料。</li>
+<li>代码或实验中的安全问题请私下报告：见 <a href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/SECURITY.md">SECURITY.md</a>。</li>
+<li>所有人都应遵守简短的<a href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/CODE_OF_CONDUCT.md">行为准则</a>。</li>
+</ul>
+</main>
+<footer class="site">
+<p>第一版，版本 1.0.0（意大利语）· tor 0.4.9.13、Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">项目源文件</a> · <a href="../../zh-Hans/license/">GPL-3.0-or-later</a></p>
+<p>本书为独立作品，未获 Tor Project 认可或赞助，与其亦无隶属关系。<a href="../../zh-Hans/independence/">详情</a>。</p>
+<p>本站不使用 Cookie、脚本、网络字体或任何跟踪工具。</p>
+</footer>
+</body>
+</html>

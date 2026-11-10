@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+<html lang="zh-Hans" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 使用透明度 — Onion Routing Anatomy</title>
+<meta name="description" content="Onion Routing Anatomy 的创作中如何使用了人工智能：人的指导与 AI 工具的分工、内部审阅，以及哪些经过验证、哪些尚未验证。">
+<meta name="author" content="Alessandro Greco">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/ai/">
+<link rel="alternate" hreflang="en" href="https://aleff-github.github.io/onion-routing-anatomy/en/ai/">
+<link rel="alternate" hreflang="it" href="https://aleff-github.github.io/onion-routing-anatomy/it/ai/">
+<link rel="alternate" hreflang="es" href="https://aleff-github.github.io/onion-routing-anatomy/es/ai/">
+<link rel="alternate" hreflang="ru" href="https://aleff-github.github.io/onion-routing-anatomy/ru/ai/">
+<link rel="alternate" hreflang="zh-Hans" href="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/ai/">
+<link rel="alternate" hreflang="x-default" href="https://aleff-github.github.io/onion-routing-anatomy/en/ai/">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onion Routing Anatomy">
+<meta property="og:title" content="AI 使用透明度 — Onion Routing Anatomy">
+<meta property="og:description" content="Onion Routing Anatomy 的创作中如何使用了人工智能：人的指导与 AI 工具的分工、内部审阅，以及哪些经过验证、哪些尚未验证。">
+<meta property="og:url" content="https://aleff-github.github.io/onion-routing-anatomy/zh-Hans/ai/">
+<meta property="og:image" content="https://aleff-github.github.io/onion-routing-anatomy/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Onion Routing Anatomy：标题旁的洋葱剖面图。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="ru_RU">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#content">跳到正文</a>
+<header class="site">
+<div class="bar"><a class="brand" href="../../zh-Hans/"><img src="../../assets/favicon.svg" alt="" width="28" height="28"><span>Onion Routing Anatomy</span></a>
+<nav class="lang" aria-label="语言"><ul><li><a href="../../en/ai/" lang="en" hreflang="en">English</a></li><li><a href="../../it/ai/" lang="it" hreflang="it">Italiano</a></li><li><a href="../../es/ai/" lang="es" hreflang="es">Español</a></li><li><a href="../../ru/ai/" lang="ru" hreflang="ru">Русский</a></li><li><a href="../../zh-Hans/ai/" lang="zh-Hans" hreflang="zh-Hans" aria-current="true">简体中文</a></li></ul></nav></div>
+<nav class="sections" aria-label="栏目"><ul><li><a href="../../zh-Hans/">首页</a></li><li><a href="../../zh-Hans/story/">项目由来</a></li><li><a href="../../zh-Hans/book/">图书内容</a></li><li><a href="../../zh-Hans/labs/">实验</a></li><li><a href="../../zh-Hans/languages/">语言</a></li><li><a href="../../zh-Hans/contribute/">参与贡献</a></li><li><a href="../../zh-Hans/ai/" aria-current="page">AI 透明度</a></li><li><a href="../../zh-Hans/license/">许可证</a></li><li><a href="../../zh-Hans/independence/">独立性</a></li></ul></nav>
+</header>
+<main id="content" class="page-ai">
+<h1>AI 透明度</h1>
+<p class="lead">本页概述了本书创作中如何使用人工智能，内容仅以项目记录中有据可查的信息为依据。无法核实的地方，会明确说明。</p>
+<p>本书建立在我多年来撰写的学习笔记和研究资料之上。在我的指导下，人工智能工具实质性地参与了内容扩展、论证、结构整理和正文撰写。尽管已经进行内部审阅和技术检查，书中仍可能存在错误，欢迎<a href="../../zh-Hans/contribute/">报告问题并提出修正</a>。本项目遵循
+<strong>「diffusione dei saperi senza fondare poteri」</strong>——传播知识，而不建立权力中心。本书通过项目官方渠道免费提供，采用 GPL-3.0-or-later 许可证；按该许可证条款也可进行商业再分发。</p>
+
+<h2 id="zuozhe">我的部分</h2>
+<ul>
+<li>项目的起源：我为本科毕业论文开始研究 Tor，毕业后继续研究。论文本身不在代码仓库中，因此无法指出书中哪些段落源自论文。</li>
+<li>工作方向与决策：目标和范围、作为语气与深度样板的章节、书名、许可证、免费发布，以及对每次实验实机运行的授权。</li>
+<li>对作品的审阅与维护，以及对所发布内容的编辑责任。</li>
+</ul>
+
+<h2 id="gongju">AI 工具所做的工作</h2>
+<ul>
+<li>现有的正文、插图、习题和答案，自 2026 年 9 月起在与 AI 编程助手 Claude Code 的会话中，在我的指导下撰写。它们应被视为<strong>在人类指导下由 AI 生成</strong>的内容，而不是由我撰写、仅经 AI 润色的文字。</li>
+<li>实验代码、脚本和构建系统也是以同样方式编写的。</li>
+<li>译本由 AI 工具生成；其审校同样是在使用 AI 工具的会话中完成的。</li>
+<li>项目文档（包括本网站）是根据我提供的信息，借助 AI 起草的。</li>
+</ul>
+
+<h2 id="yanzheng">作品如何审阅，以及局限</h2>
+<p><strong>内部审阅。</strong>我亲自审阅并维护本作品，它会持续得到修正和改进。</p>
+<p><strong>自动化检查：</strong>在私有 Tor 网络上实机运行意大利语版实验（53/53 与 14/14 项检查），离线测试，以及带有程序化检查和 EPUBCheck 校验的 PDF、EPUB 构建。</p>
+<p><strong>独立审阅：</strong>目前尚无——没有同行评审或外部专家的验证，没有律师对法律章节的审阅，也没有母语人士对译本的审校。</p>
+<p>因此书中仍可能存在错误。如果你发现了错误，请<a href="../../zh-Hans/contribute/">告诉我们</a>。</p>
+
+<p><a class="button" href="https://github.com/aleff-github/onion-routing-anatomy/blob/main/AI_DISCLOSURE.md">阅读完整声明</a>（英语和意大利语）</p>
+</main>
+<footer class="site">
+<p>第一版，版本 1.0.0（意大利语）· tor 0.4.9.13、Arti 2.6.0 · <a href="https://github.com/aleff-github/onion-routing-anatomy">项目源文件</a> · <a href="../../zh-Hans/license/">GPL-3.0-or-later</a></p>
+<p>本书为独立作品，未获 Tor Project 认可或赞助，与其亦无隶属关系。<a href="../../zh-Hans/independence/">详情</a>。</p>
+<p>本站不使用 Cookie、脚本、网络字体或任何跟踪工具。</p>
+</footer>
+</body>
+</html>

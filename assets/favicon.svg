@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Onion cross-section">
+  <!-- SPDX-License-Identifier: GPL-3.0-or-later  Copyright (C) 2026 Alessandro Greco -->
+  <circle cx="32" cy="32" r="30" fill="#f1e7d4" stroke="#7a6a52" stroke-width="2"/>
+  <circle cx="32" cy="32" r="23" fill="none" stroke="#a8916f" stroke-width="2.5"/>
+  <circle cx="32" cy="32" r="16" fill="none" stroke="#a8916f" stroke-width="2.5"/>
+  <circle cx="32" cy="32" r="8.5" fill="#7d4698"/>
+  <path d="M32 2 L32 24" stroke="#7a6a52" stroke-width="2.5"/>
+</svg>
