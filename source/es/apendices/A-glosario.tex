@@ -1,0 +1,62 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Glosario de términos de Tor}\label[appendice]{cap:A-glossario}
+
+Este glosario define los términos técnicos utilizados a lo largo de la edición española. Cada entrada remite también al capítulo donde se introduce el concepto.
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.1cm}>{\raggedright\arraybackslash}p{8.0cm}r@{}}
+\toprule
+Término & Significado & Cap. \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+análisis de tráfico & Inferencia de información a partir de tiempos, volumen y direcciones de las comunicaciones sin leer su contenido. & \ref{cap:01-anonimato} \\
+anonimato & Condición de no ser identificable dentro de un conjunto de sujetos, denominado conjunto de anonimato. & \ref{cap:01-anonimato} \\
+ataque Sybil & Presentación de numerosas identidades, por ejemplo varios repetidores, para aumentar las probabilidades de selección. & \ref{cap:26-attacchi} \\
+autoridad de directorio & Uno de los pocos servidores que votan y firman el consenso. & \ref{cap:12-directory} \\
+puente (\emph{bridge}) & Repetidor ausente del consenso público que permite acceder a la red a usuarios afectados por la censura. & \ref{cap:16-censura} \\
+canal & Conexión TLS entre dos nodos Tor adyacentes que transporta celdas de varios circuitos. & \ref{cap:07-canali} \\
+celda & Unidad de transmisión de un canal: normalmente 514 bytes, con longitudes variables para ciertos comandos. & \ref{cap:08-celle} \\
+clave cegada & Clave derivada de la identidad de un servicio onion para un período determinado que oculta su dirección a los HSDir. & \ref{cap:14-onion-services} \\
+clave de familia & Clave compartida por repetidores de un mismo operador que certifica su pertenencia a la familia. & \ref{cap:22-relay} \\
+identificador de circuito & Identificador local a un canal que cambia en cada salto. & \ref{cap:08-celle} \\
+circuito & Ruta cifrada por capas a través de varios repetidores, construida un salto cada vez. & \ref{cap:09-circuiti} \\
+consenso & Documento firmado por las autoridades que enumera repetidores, indicadores y pesos. & \ref{cap:12-directory} \\
+control de congestión & Ajuste de la cantidad de datos en tránsito en un circuito según el tiempo de ida y vuelta observado. & \ref{cap:11-stream} \\
+control de flujo & Mecanismo que evita que un emisor desborde al receptor mediante ventanas y mensajes SENDME. & \ref{cap:11-stream} \\
+correlación de tráfico & Determinación de que dos flujos observados en lugares diferentes pertenecen a la misma comunicación. & \ref{cap:26-attacchi} \\
+descriptor & Documento mediante el que un repetidor o servicio onion publica sus claves, direcciones y propiedades. & \ref{cap:12-directory} \\
+repetidor de salida & Último repetidor del circuito, encargado de abrir la conexión hacia el destino. & \ref{cap:06-architettura} \\
+familia & Grupo de repetidores administrados conjuntamente que no deben aparecer en un mismo circuito. & \ref{cap:13-percorso} \\
+indicador (\emph{flag}) & Propiedad asignada por las autoridades, como \texttt{Guard}, \texttt{Exit} o \texttt{Stable}. & \ref{cap:12-directory} \\
+secreto hacia adelante & Propiedad por la que comprometer una clave de larga duración no permite descifrar el tráfico pasado. & \ref{cap:05-crittografia} \\
+guardia (\emph{entry guard}) & Primer repetidor de los circuitos de un cliente, elegido de forma persistente y reutilizado durante un período prolongado. & \ref{cap:13-percorso} \\
+intercambio de claves (\emph{handshake}) & Intercambio de mensajes con el que dos partes acuerdan claves, por ejemplo ntor o ntor-v3. & \ref{cap:09-circuiti} \\
+directorio de servicios onion (HSDir) & Repetidor que almacena y sirve descriptores de servicios onion. & \ref{cap:14-onion-services} \\
+repetidor intermedio & Repetidor situado en el centro de un circuito que no conoce ni el cliente original ni el destino. & \ref{cap:06-architettura} \\
+aislamiento de flujos & Asignación de flujos diferentes a circuitos distintos, por ejemplo según las credenciales SOCKS. & \ref{cap:18-stem} \\
+protocolo de enlace & Protocolo versionado utilizado en un canal, negociado mediante una celda \cella{VERSIONS}. & \ref{cap:07-canali} \\
+mensaje relay & Contenido de una celda \cella{RELAY} destinada a cierto salto, por ejemplo \texttt{BEGIN} o \texttt{DATA}. & \ref{cap:08-celle} \\
+microdescriptor & Descriptor compacto que contiene solo la información del repetidor que necesita el cliente. & \ref{cap:12-directory} \\
+modelo de amenazas & Descripción explícita de los adversarios y amenazas frente a los cuales está diseñado un sistema. & \ref{cap:04-modello-minaccia} \\
+desvinculación & Imposibilidad de que un observador determine si dos acciones corresponden al mismo sujeto. & \ref{cap:01-anonimato} \\
+servicio onion (antes, servicio oculto) & Servicio accesible por Tor cuya dirección codifica su clave pública; anteriormente llamado servicio oculto. & \ref{cap:14-onion-services} \\
+relleno (\emph{padding}) & Datos de relleno de celdas o canales destinados a ocultar longitudes y tiempos. & \ref{cap:07-canali} \\
+pesos de ancho de banda & Coeficientes del consenso que equilibran la selección de repetidores entre las posiciones del circuito. & \ref{cap:13-percorso} \\
+transporte conectable (PT) & Programa separado que transforma el tráfico Tor para dificultar su reconocimiento o bloqueo, como obfs4, Snowflake o WebTunnel. & \ref{cap:16-censura} \\
+política de salida & Conjunto ordenado de reglas sobre los destinos que acepta un repetidor de salida. & \ref{cap:22-relay} \\
+prueba de trabajo (PoW) & Desafío computacional que un cliente resuelve para obtener prioridad al acceder a un servicio onion atacado. & \ref{cap:15-dos} \\
+propuesta & Documento numerado utilizado para debatir y diseñar cambios en el protocolo Tor. & \ref{cap:31-futuro} \\
+seudónimo & Identificador diferente del nombre real de una persona que permite vincular acciones sin revelar la identidad. & \ref{cap:01-anonimato} \\
+punto de introducción & Repetidor elegido por un servicio onion para recibir solicitudes iniciales de contacto. & \ref{cap:14-onion-services} \\
+punto de encuentro & Repetidor elegido por el cliente donde se unen los circuitos del cliente y del servicio onion. & \ref{cap:14-onion-services} \\
+repetidor, enrutador onion & Nodo de la red Tor que reenvía celdas. & \ref{cap:06-architettura} \\
+SENDME & Mensaje que confirma datos recibidos en un circuito y vuelve a abrir una ventana de control de flujo. & \ref{cap:11-stream} \\
+subprotocolo & Familia versionada de funciones del protocolo anunciadas por repetidores y clientes, como \texttt{Link} o \texttt{Relay}. & \ref{cap:30-arti} \\
+flujo (\emph{stream}) & Flujo de datos de una aplicación, como una conexión TCP, transportado por un circuito. & \ref{cap:11-stream} \\
+vanguard & Repetidor de una capa intermedia mantenido fijo durante un período para ayudar a proteger el guardia de un servicio onion. & \ref{cap:13-percorso} \\
+identificación de sitios web & Reconocimiento de la página visitada únicamente a partir de tamaños y tiempos del tráfico cifrado. & \ref{cap:26-attacchi} \\
+\end{longtable}
+}

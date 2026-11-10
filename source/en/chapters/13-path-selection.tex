@@ -1,0 +1,224 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Path Selection, Guards, and Vanguards}\label{cap:13-percorso}
+\aggiornatoal{23 September 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; public consensus of 23/09/2026 at 15:00 UTC}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item describe the order and constraints tor uses to select relays for a circuit;
+  \item explain how consensus bandwidth and \emph{bandwidth-weights} balance the load among circuit positions;
+  \item explain why guards are used and trace their history from three guards to one and then two;
+  \item describe the guard algorithm: sampled, filtered, confirmed, and primary guards;
+  \item explain what vanguards are and why onion services need them;
+  \item simulate path selection using a real public-network consensus (Laboratory~7).
+\end{itemize}
+\end{obiettivi}
+
+The directory system (\cref{cap:12-directory}) gives the client a list of relays. What remains is the question that, more than any other, determines how well a user is protected: \emph{which} relays should it use? If an adversary controls both the first and the last relay on a circuit, it can correlate incoming and outgoing traffic and discover who is communicating with whom (\cref{cap:26-attacchi}). Path selection is therefore largely the art of making that event as rare as possible without sacrificing performance.
+
+% ---------------------------------------------------------------------------
+\section{Order and Constraints}\label{sec:percorso-vincoli}
+
+For a three-hop circuit, tor selects the \textbf{exit first}, then the guard, and finally the middle~\spec{path-spec}{Path selection and constraints}. The exit comes first because it is the most constrained relay: its exit policy must allow the requested destination. If the client knows only the destination's name rather than its address, it selects an exit that \emph{might} accept it: one whose policy does not reject the requested port before accepting it.
+
+With a few exceptions, all paths satisfy these constraints:
+\begin{itemize}
+  \item no relay without the \texttt{Fast} flag;
+  \item a relay cannot appear twice;
+  \item at most one relay from each IPv4 /16 network (or IPv6 /32 network): two relays in the same data center may be under the same operator's control;
+  \item at most one relay per \textbf{family}: operators with multiple relays should declare them as a family, and tor avoids placing two in the same circuit;
+  \item the first relay is a guard (\cref{sec:guard});
+  \item no exit with the \texttt{BadExit} flag.
+\end{itemize}
+Connections expected to remain open for a long time (tor classifies some ports this way, such as SSH's 22 and IRC's 6667) also require \texttt{Stable} relays. Onion services add a constraint independent of the port: service-side introduction circuits and rendezvous paths are built as \texttt{Stable} circuits, and their endpoints must not be \texttt{MiddleOnly}~\spec{path-spec}{Path selection and constraints}. The \enquote{few exceptions} chiefly concern onion-service circuits built with vanguards (\cref{sec:vanguards}), which deliberately relax some constraints (for example, allowing a guard at a middle position). Disallowing those combinations would tell an adversary which relays had \emph{not} been selected, revealing information about guard selection.
+
+\begin{approfondimento}[Two ways to declare a family]
+Traditionally, an operator declares a family by listing all its other relays in each relay's descriptor. Two relays belong to the same family only if they list each other. With many relays, these lists become enormous, and a single configuration mistake can break them. A more recent mechanism, \emph{happy families}, gives each family a key. Each relay proves membership with a certificate signed by that key (\texttt{family-cert} in the descriptor, \texttt{family-ids} in the microdescriptor). The \texttt{use-family-lists} and \texttt{use-family-ids} consensus parameters determine which mechanism clients apply.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Weighting by Bandwidth}\label{sec:percorso-pesi}
+
+\subsection{Why weighting matters}
+
+If clients selected relays uniformly at random, a 1\,MB/s relay would receive as much traffic as a 1\,GB/s relay. The first would be overwhelmed and the second underused. Instead, Tor selects each relay with probability \textbf{proportional to its bandwidth} in the consensus (the \texttt{w} line, \cref{sec:dir-anatomia}), distributing load according to capacity.
+
+\subsection{Circuit positions are not equivalent}
+
+There is a complication. Relays with the \texttt{Exit} flag are relatively scarce, and their outbound bandwidth is the network's scarcest resource. Using an exit as a guard or middle would consume capacity needed for exiting. The same principle applies, to a lesser degree, to guards. That is why authorities calculate \textbf{bandwidth-weights} for each consensus: coefficients multiplying relay bandwidth according to its \emph{type} (guard only, exit only, guard and exit, or neither) and the \emph{position} for which it is selected~\spec{path-spec}{Weighting node selection}.
+
+Each weight is named \texttt{W}\emph{pt}: \emph{p} is the position (\texttt{g} for guard, \texttt{m} for middle, \texttt{e} for exit, \texttt{b} for directory requests), and \emph{t} is the type (\texttt{g}, \texttt{e}, \texttt{d} for guard and exit, \texttt{m} for neither). Values are expressed in ten-thousandths: \texttt{Wmg=3805} means that, when a guard is selected as a middle, only 38.05\,\% of its bandwidth counts.
+
+\subsection{Weights on the real network}
+
+The following weights come from the public consensus of 23 September 2026 at 15:00 UTC, downloaded from CollecTor in Laboratory~7:
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Position $\backslash$ type & guard (\texttt{g}) & middle (\texttt{m}) & exit (\texttt{e}) & guard+exit (\texttt{d}) \\
+\midrule
+guard (\texttt{Wg\,}) & 6195 & 6195 & --- & 0 \\
+middle (\texttt{Wm\,}) & 3805 & 10000 & 0 & 0 \\
+exit (\texttt{We\,}) & 10000 & 10000 & 10000 & 10000 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The implications are immediate. Exits, and relays that are both guards and exits, have \textbf{zero} weight in guard and middle positions. On this network, exit bandwidth (33\,\% of total bandwidth) is so valuable that it is reserved for the exit position. Guards, which account for 70\,\% of bandwidth, are plentiful: they are weighted at 62\,\% as guards and 38\,\% as middles. As the laboratory will show, the middle in 60\,\% of circuits is itself a relay carrying the \texttt{Guard} flag.
+
+The formulas by which authorities calculate these weights are in the directory specification. They distinguish several cases depending on which type of bandwidth is scarce and seek, wherever possible, to equalize available capacity across the three positions.
+
+% ---------------------------------------------------------------------------
+\section{Guards}\label{sec:guard}
+
+\subsection{The problem they solve}
+
+Suppose an adversary controls a fraction $c$ of the bandwidth of possible first relays and possible exits. If the client chose a fresh guard and exit at random for every circuit, the probability that both belonged to the adversary would be approximately $c^2$ per circuit. After $C$ circuits, the probability that at least one had been compromised would be $1 - (1 - c^2)^C$, approaching 1~\spec{guard-spec}{Introduction and motivation}. A user who runs Tor every day builds thousands of circuits; sooner or later, almost certainly, the adversary would see some of that user's traffic.
+
+The idea behind \textbf{guards} (called \emph{helper nodes} in the research literature) is to select the first relay \emph{once} and keep using it for a long time. If that guard is honest, no circuit is compromised in this particular way; if it belongs to the adversary, many are. The probability of compromise \emph{at least once} drops from nearly 1 to approximately $c$.
+
+\begin{center}
+\begin{tabular}{rcc}
+\toprule
+Circuits & Without guards & With a fixed guard \\
+\midrule
+1 & 0.0025 & 0.0025 \\
+100 & 0.221 & 0.050 \\
+\num{1000} & 0.918 & 0.050 \\
+\num{10000} & 1.000 & 0.050 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\noindent Calculated in Laboratory~7 for $c = 5\,\%$, the table illustrates the trade-off. Guards do not make compromise impossible; instead, they turn an event that would become nearly certain over time into a rare event affecting a small proportion of users, rather than eventually affecting almost everyone. This model is deliberately simplified: for example, it ignores the possibility that the selected guard changes over time.
+
+\subsection{Three, one, two}
+
+Guards were introduced in 2006, after Øverlier and Syverson demonstrated how to locate an onion service by repeatedly inducing it to connect to adversary-controlled relays~\cite{overlier2006locating}. For years, clients used three guards, replacing them after two or three months. Subsequent studies showed that three guards and frequent rotation increase exposure. \proposta{236} (2014) proposed using just one guard, retained for nine or ten months. A single guard, however, makes connectivity more fragile and makes it easier to force the client to replace the guard. \proposta{291} (2018) moved to \textbf{two} guards. tor's built-in default is still one (\file{DFLT\_N\_PRIMARY\_GUARDS\_TO\_USE} in \file{src/feature/client/entrynodes.h}), but the public consensus carries \texttt{guard-n-primary-guards-to-use=2}, which overrides it for all clients. This is a concrete example of how authorities regulate the network through the consensus.
+
+\subsection{The algorithm}
+
+The current algorithm, specified in \proposta{271} and the guard specification, manages several sets~\spec{guard-spec}{The algorithm}:
+\begin{description}
+  \item[Sampled guards] A set of bandwidth-weighted, randomly selected guards persisted on disk. It grows only when necessary, to a maximum of 60 relays or 20\,\% of the number of guards in the consensus. Limiting the sample prevents an adversary from making a client try every guard on the network, one after another, until it reaches an adversarial one.
+  \item[Filtered guards] Sampled guards still present in the consensus and usable with the current configuration (for example, behind a firewall allowing only certain ports).
+  \item[Confirmed guards] Guards actually used for user traffic, in preference order.
+  \item[Primary guards] Normally three guards drawn from the filtered list: confirmed and filtered guards first, in preference order, then other filtered guards if needed. The client uses the first reachable primary guard (or the first two under the consensus parameter discussed above). If none is reachable, it tries other guards, but returns to primary guards as soon as possible.
+\end{description}
+\begin{figure}[htbp]
+\centering
+\input{figures/fig13-guards}
+\caption{Relations among Tor guard lists: the persistent sample is drawn from consensus guards, while FILTERED and CONFIRMED are distinct and potentially overlapping subsets of that sample. PRIMARY guards are selected only from FILTERED, giving priority to confirmed guards and adding other filtered guards as needed. Sampling limits reduce exposure to new guards.}
+\label{fig:guard}
+\end{figure}
+
+How long a guard stays in the sample depends on its state. A guard \textbf{never confirmed} (\texttt{CONFIRMED\_ON\_DATE} unset) leaves after \texttt{GUARD\_LIFETIME}, or 120 days from sampling. A \textbf{confirmed} guard, which the client actually uses, instead leaves \texttt{GUARD\_CONFIRMED\_MIN\_LIFETIME} = 60 days after confirmation. It also leaves if it is absent from the consensus for 20 days. Saved timestamps (\texttt{ADDED\_ON\_DATE} and \texttt{CONFIRMED\_ON\_DATE}) are randomly backdated by as much as \texttt{GUARD\_LIFETIME}/10 = 12 days. The state file therefore does not reveal precisely when the client began using Tor, and the effective lifetime of a confirmed guard becomes 48--60 days. Thus it is the \emph{confirmed} guard that rotates roughly every two months, not every four. This detail matters for the simulation in \cref{cap:29-ricerca}.
+
+\begin{attenzione}[A new guard is a clue]
+Tor carefully distinguishes an \emph{unreachable} guard from a \emph{failed} circuit. If the client changed guards whenever a circuit failed, an adversary could intentionally make circuits through honest guards fail until the client selected an adversarial guard. This is precisely what tor's security release 0.4.9.13, published on 23 September 2026, addressed: the client now attributes failure to a guard only when it cannot establish the connection, not when circuits, streams, or directory requests fail.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Vanguards}\label{sec:vanguards}
+
+Guards protect the \emph{first} hop. Onion services (\cref{cap:14-onion-services}) face an additional problem: a malicious client can induce a service to build as many circuits as it wants to rendezvous points of the attacker's choosing. If the middle on each circuit were selected afresh at random, sooner or later it would belong to the adversary, which would then observe the service's guard. The next step could be to attack that guard or obtain its data. \textbf{Vanguards} extend the guard idea to later hops, keeping relays at the second level (and, in some configurations, the third level) fixed as well.
+
+\begin{description}
+  \item[Vanguards-lite] (\proposta{333}, tor 0.4.7.1-alpha) Enabled by default in clients and onion services. It uses four second-layer relays, not saved to disk, each with a randomized lifetime. Here the code and the specification differ. tor 0.4.9.13 uses a range of 1 to 12 days (about one week on average), defined by \file{MIN\_SECOND\_GUARD\_LIFETIME} and \file{MAX\_SECOND\_GUARD\_LIFETIME} in \file{src/feature/client/entrynodes.c}. The \texttt{guard-hs-l2-lifetime-min} and \texttt{-max} consensus parameters can override these values, but neither appeared in the consensus of 23 September 2026. The vanguards specification, by contrast, still gives 1--22 days (two weeks on average). This mode is designed for services and users active for no more than a few weeks.
+  \item[Full vanguards] Relays fixed at two levels (the second and third hops), with longer lifetimes, intended for long-running, high-risk onion services. In tor, they are implemented through the \emph{vanguards} add-on, which sets \opt{HSLayer2Nodes} and \opt{HSLayer3Nodes}. Arti implements them directly, with a \texttt{Full} mode alongside \texttt{Lite}.
+\end{description}
+On the laboratory network (\cref{sec:rp-stem}), we saw circuits with purpose \file{HS\_VANGUARDS}: circuits pre-built with vanguards, ready to be extended toward an introduction or rendezvous point.
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: Examining the Public Network}\label{sec:lab-percorso}
+
+\begin{laboratorio}[7]{Bandwidth-weighted path selection}
+\textbf{Objective.} Write \file{labs/en/code/torlab/path\_selection.py} and use it to analyze a real public-network consensus.\\
+\textbf{Prerequisites.} Laboratory~6 (\file{directory.py}). A public consensus downloaded from CollecTor, the Tor Project's public archive (\url{https://collector.torproject.org/}). These data are published specifically for research, and downloading them involves no network users.\\
+\textbf{Estimated time.} 2 hours.
+\end{laboratorio}
+
+\paragraph{Step 1: a relay's weight.}
+\begin{lstlisting}[language=Python]
+def _relay_type(r):  # g = Guard only, e = Exit only, d = both, m = neither
+    g, e = "Guard" in r.flag, "Exit" in r.flag and "BadExit" not in r.flag
+    return {(1, 1): "d", (1, 0): "g", (0, 1): "e", (0, 0): "m"}[(g, e)]
+
+def weight(r, position, weights):
+    key = f"W{position[0]}{_relay_type(r)}"          # e.g. "Wmg"
+    return (r.bandwidth or 0) * weights.get(key, 10000) / 10000
+\end{lstlisting}
+
+\paragraph{Step 2: selecting a path.} The \texttt{Selector} class computes weights once per position. Constraints are applied \emph{by rejection}: draw a relay and, if it violates a constraint (same relay or same /16), draw another.
+\begin{lstlisting}[language=Python]
+def path(self, rng, guard=None):
+    e = self.choose("exit", [], rng)
+    g = guard or self.choose("guard", [e], rng)
+    m = self.choose("middle", [e, g], rng)
+    return g, m, e
+\end{lstlisting}
+A first version that filtered over nine thousand relays and recalculated weights and networks on every selection took 310 seconds to construct \num{2000} paths. This version builds \num{20000} in 7 seconds. In a statistical simulation, performance is not a minor detail.
+
+\paragraph{Step 3: the public network in numbers.} For the consensus of 23 September 2026 at 15:00 UTC:
+\begin{lstlisting}[numbers=none]
+relays: 9358
+bandwidth with Guard: 70.1%    bandwidth with Exit: 33.1%
+guard : eligible  5306; top 10 = 1.7%; top 100 = 12.6%
+middle: eligible  8961; top 10 = 2.8%; top 100 = 13.7%
+exit  : eligible  3126; top 10 = 2.3%; top 100 = 13.7%
+20000 paths: gge 30.9%  ggd 29.4%  gme 20.4%  gmd 19.3%
+\end{lstlisting}
+The number of \emph{eligible} relays is smaller than the number carrying the relevant flag (\cref{cap:06-architettura} reports 3177 \texttt{Exit} relays, versus 3126 here). The \texttt{eligible} function also requires \texttt{Running}, \texttt{Valid}, and \texttt{Fast}, while excluding \texttt{BadExit} and \texttt{MiddleOnly}. The difference comprises 48 exits without \texttt{Fast} and 3 marked \texttt{BadExit}.
+The last line is a sample obtained with random seed 7. Without a fixed seed, the values change by a few tenths of a percentage point on every run and two experiments cannot be compared. The letter codes identify the guard, middle, and exit types on each path. For instance, \texttt{gme} means a path with a guard, a middle with neither flag, and a pure exit. As the weights predict, no path uses an exit in the first or second position; in 60\,\% of cases, the middle carries the \texttt{Guard} flag. Concentration is low: the ten most frequently selected exits account for 2.3\,\% of selections together, and the top hundred for 13.7\,\%.
+
+\paragraph{Step 4: guards and adversaries.} The \texttt{Adversary} class calculates the table in \cref{sec:guard}. Try changing the adversary's share: is the effect of guards still evident when $c = 1\,\%$ or $c = 20\,\%$?
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item tor selects the exit first, followed by the guard and middle, avoiding duplicate relays and relays from the same /16 or family.
+  \item Each relay is selected with probability proportional to its bandwidth multiplied by a weight depending on relay type and circuit position; on the network considered here, exits are used only as exits.
+  \item Guards turn compromise, which becomes nearly certain over time with randomly selected first relays, into a rare event; clients currently use two.
+  \item The guard algorithm maintains a limited sample, confirmed guards, and primary guards, and cautiously attributes failures to guards.
+  \item Vanguards also keep the second layer fixed for onion services; vanguards-lite is enabled by default.
+  \item Consensus parameters can override software defaults.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:13-ordine}
+Why does tor select the exit first? What might go wrong if it selected the guard first?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:13-peso}
+A relay has the \texttt{Guard} and \texttt{Exit} flags and a consensus bandwidth of 20000. Under the real-network weights reported in this chapter, what is its weight in each of the three circuit positions?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:13-guard}
+Repeat the guard-table calculation for $c = 1\,\%$ and $c = 20\,\%$. After how many circuits does compromise probability without guards exceed 50\,\% in each case?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:13-sybil}
+An adversary wants to increase the probability that clients select its relays as exits. What resources must it invest, and which mechanisms (bandwidth measurements, families, per-address limits, and weights) make that harder?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:13-campione}
+Why is the guard sample limited to 60 relays or 20\,\% of all guards? Describe the attack this limit prevents.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:13-famiglie}
+Extend \texttt{Selector} to enforce the family constraint using \texttt{family} and \texttt{family-ids} lines in microdescriptors. Download the microdescriptors corresponding to the consensus from CollecTor and measure how many draws are rejected because of families.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:13-operatori}
+Group public-consensus relays by declared family and calculate the exit-selection probability share of the ten largest families. Compare this with the share of the ten individually most-selected exits. What can you conclude about risks associated with operators running many relays?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item \titolo{Tor Path Specification} and \titolo{Tor Guard Specification}~\cite{torspec}.
+  \item L.~Øverlier and P.~Syverson, \titolo{Locating Hidden Servers}~\cite{overlier2006locating}: the attack that motivated guards.
+  \item Proposals 236, 271, 291, and 333: from one guard to two, the current algorithm, and vanguards-lite.
+  \item The vanguards specification (vanguards-spec), including tables of Sybil-attack timelines.
+\end{itemize}

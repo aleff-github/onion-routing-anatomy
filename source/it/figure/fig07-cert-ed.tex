@@ -1,0 +1,21 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Formato del certificato Ed25519 di Tor: VERSION (1 byte), CERT\_TYPE (1), EXPIRATION\_DATE (4: ore dall'epoca Unix), CERT\_KEY\_TYPE (1), CERTIFIED\_KEY (32: chiave o digest secondo il tipo), N\_EXTENSIONS (1), zero o più estensioni di lunghezza variabile e SIGNATURE (64). Ogni estensione contiene ExtLen (2 byte, lunghezza dei soli dati), ExtType (1), ExtFlags (1), ExtData (ExtLen byte). La firma Ed25519 copre tutti i campi precedenti, non la firma stessa. Le etichette abbreviate della figura iniziano agli offset 0, 1, 2, 6, 7, 39 e 40.}
+% Certificato Ed25519 di Tor
+\begin{tikzpicture}[campo/.style={draw,minimum height=1.05cm,font=\sffamily\scriptsize,inner sep=1pt,align=center}]
+  \node[campo,fill=torviola!35,minimum width=1.1cm] (a) {VER\\(1)};
+  \node[campo,fill=torviola!25,minimum width=1.3cm,right=0pt of a] (b) {TYPE\\(1)};
+  \node[campo,fill=torviola!15,minimum width=1.8cm,right=0pt of b] (c) {EXPIRATION\\(4)};
+  \node[campo,fill=torviola!25,minimum width=1.4cm,right=0pt of c] (d) {KEY\_TYPE\\(1)};
+  \node[campo,fill=torverde!15,minimum width=2.4cm,right=0pt of d] (e) {CERTIFIED\_KEY\\(32)};
+  \node[campo,fill=torviola!15,minimum width=1.1cm,right=0pt of e] (f) {N\_EXT\\(1)};
+  \node[campo,fill=torgrigio!10,minimum width=1.9cm,right=0pt of f] (g) {estensioni\\(variabile)};
+  \node[campo,fill=avviso!15,minimum width=1.9cm,right=0pt of g] (h) {SIGNATURE\\(64)};
+  \foreach \n/\o in {a/0,b/1,c/2,d/6,e/7,f/39,g/40} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]a.south west) -- ([yshift=-2pt]g.south east)
+    node[midway,below=6pt,font=\sffamily\small] {byte coperti dalla firma Ed25519};
+  \node[below=1.3cm of g,draw,fill=torgrigio!10,font=\sffamily\scriptsize,align=left] (est)
+    {ogni estensione:\\ ExtLen (2) · ExtType (1) · ExtFlags (1) · ExtData (ExtLen)};
+  \draw[dotted] (g.south) -- (est.north);
+\end{tikzpicture}

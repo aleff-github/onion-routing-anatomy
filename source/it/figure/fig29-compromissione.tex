@@ -1,0 +1,17 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Confronto di due curve cumulative del Laboratorio 19, simulazione didattica di 2000 client per 180 giorni, 20 circuiti al giorno. L'avversario controlla il 5\% della banda pesata dei guard e il 5\% degli exit. Un client è segnato come compromesso nel modello se usa almeno una volta un circuito con entrambi gli estremi ostili: a 180 giorni, 100\% senza guard persistente e 18,2\% con guard persistente. Le rotazioni sono indipendenti per client, con intervalli simulati di 48--60 giorni; non sono osservazioni di deanonimizzazione reale.}
+% Le rotazioni sono individuali (48--60 giorni simulati): niente marcatori globali.
+\begin{tikzpicture}[font=\sffamily\scriptsize,x=0.04cm,y=0.04cm]
+  \draw[->] (0,0) -- (190,0) node[below left] {giorni};
+  \draw[->] (0,0) -- (0,108) node[above] {\% compromessi nel modello};
+  \foreach \x in {0,30,60,90,120,150,180} \draw (\x,0) -- (\x,-2) node[below] {\x};
+  \foreach \y in {0,25,50,75,100} \draw (0,\y) -- (-2,\y) node[left] {\y};
+  \draw[thick,avviso] plot coordinates {(0,0.0) (5,22.4) (10,39.6) (15,53.0) (20,63.1) (25,70.6) (30,77.1) (35,82.2) (40,85.6) (45,88.9) (50,91.3) (55,93.2) (60,94.7) (65,96.4) (70,97.4) (75,97.7) (80,98.4) (85,98.9) (90,99.1) (95,99.3) (100,99.4) (110,99.8) (120,99.9) (165,100.0) (180,100.0)};
+  \draw[thick,torviola] plot coordinates {(0,0.0) (1,2.7) (3,4.3) (5,4.5) (48,4.5) (52,5.8) (56,7.1) (60,8.6) (64,9.3) (100,9.5) (108,11.2) (114,12.8) (120,13.2) (130,13.3) (160,14.8) (165,16.1) (170,17.5) (175,18.1) (180,18.2)};
+  \node[avviso,anchor=west] at (40,80) {guard nuovo per ogni circuito};
+  \node[torviola,anchor=west] at (66,26) {guard persistente};
+% Le rotazioni sono individuali (48--60 giorni simulati): niente marcatori globali.
+  \node[torgrigio,anchor=west,align=left] at (66,43) {rotazioni non\\sincronizzate};
+\end{tikzpicture}

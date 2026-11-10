@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 无障碍替代文本。
+\altfig{2014 年历史攻击：恶意 HSDir 使用发往客户端的 RELAY 和 RELAY\_EARLY cell 类型编码 onion 服务名称；同伙控制的恶意入口守卫读取中继可见的类型，将客户端与描述符请求关联，而不能证明实际访问。图中的四个 cell 只是示意；链路上的 cell 头部仍受 TLS 保护。}
+% 2014 年：外层 cell 类型泄露的信号
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  ostile/.style={relay,fill=avviso!20,draw=avviso,align=center,font=\sffamily\scriptsize}]
+  \node[client] (c) at (0,0) {客户端};
+  \node[ostile] (g) at (3,0) {恶意\\守卫};
+  \node[relay] (m) at (6,0) {中间中继};
+  \node[ostile] (h) at (9,0) {恶意\\HSDir};
+  \draw[<-,thick] (c) -- (g);
+  \draw[<-,thick] (g) -- (m);
+  \draw[<-,thick] (m) -- (h);
+  \foreach \x/\t/\c in {7.1/E/avviso!40,7.5/R/white,7.9/R/white,8.3/E/avviso!40} {
+    \node[draw,minimum size=3.5mm,inner sep=0pt,fill=\c] at (\x,0.55) {\t};
+  }
+  \node[align=center,text=torgrigio] at (7.6,1.12) {示意图：仅展示四个示例 cell};
+  \node[align=center,text=avviso] at (9,-1) {用 RELAY（R）和\\RELAY\_EARLY（E）类型\\编码服务名称};
+  \node[align=center,text=avviso] at (3,-1) {读取 cell 类型：\\关联客户端与\\描述符请求};
+  \node[align=center,text=torgrigio] at (6,-1) {按 2014 年情形\\转发 cell 类型};
+\end{tikzpicture}

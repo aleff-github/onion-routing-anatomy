@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{Relaciones de selección de guardias Tor, no una cadena de conjuntos concéntricos. Los repetidores con indicador Guard del consenso actual pueden incorporarse a la muestra persistente, que temporalmente puede conservar nodos no listados. FILTERED y CONFIRMED son subconjuntos diferentes de la muestra, con posible intersección, pero ninguno contiene necesariamente al otro. Los primarios (tres por defecto) se eligen solo de FILTERED: se priorizan los confirmados y después se completan con otros filtrados. Límites predeterminados: 60 guardias y umbral del 20\%; caducidad a los 120 días sin confirmar, 60 desde la confirmación o 20 días fuera del consenso. Un primario puede estar temporalmente inaccesible.}
+% Relaciones entre conjuntos y listas de guardias
+\begin{tikzpicture}[font=\sffamily\scriptsize,>=Stealth,
+  guardbox/.style={draw=torviola,fill=torviola!6,rounded corners=4pt,align=center,minimum height=1.1cm},
+  guardarrow/.style={-Stealth,thick,torgrigio}]
+  \node[guardbox,draw=torgrigio,fill=torgrigio!6,text width=10.5cm] (cons) at (5.8,5.1) {\textbf{Repetidores Guard del consenso}: candidatos};
+  \node[guardbox,text width=10.5cm] (sample) at (5.8,3.7) {\textbf{SAMPLED}: persistente; máx. 60, umbral 20\,\%};
+  \node[guardbox,text width=4.4cm] (filtered) at (2.7,2.0) {\textbf{FILTERED}: listados y permitidos};
+  \node[guardbox,text width=4.4cm] (confirmed) at (8.9,2.0) {\textbf{CONFIRMED}: usados para tráfico};
+  \node[guardbox,draw=torverde!60!black,fill=torverde!15,text width=10.5cm] (primary) at (5.8,0.2) {\textbf{PRIMARY}: normalmente 3, de FILTERED};
+  \draw[guardarrow] (cons) -- (sample);
+  \draw[guardarrow] (sample.south west) to[out=235,in=90] (filtered.north);
+  \draw[guardarrow] (sample.south east) to[out=305,in=90] (confirmed.north);
+  \draw[guardarrow] (filtered.south) to[out=270,in=160] (primary.west);
+  \draw[guardarrow] (confirmed.south) to[out=270,in=20] (primary.east);
+  \node[align=center,text=torgrigio,font=\sffamily\tiny] at (5.8,-1.05) {primero confirmados filtrados; caducidad 120/60/20 días};
+\end{tikzpicture}

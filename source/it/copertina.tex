@@ -1,0 +1,66 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% ===========================================================================
+% Copertina digitale di «Anatomia di Tor» (edizione italiana): solo fronte,
+% ritratto 1:1,6. Il PDF misura 5.3333 x 8.5333 in; a 300 dpi diventa 1600 x 2560 px.
+% Grafica: sezione della cipolla, anelli come strati di cifratura, incisione
+% radiale e nucleo viola. Nessun logo del Tor Project.
+%
+% Build:  make cover  ->  source/it/copertina.{pdf,png,jpg,svg}, copiati in
+%         book/it/ (PNG e SVG), source/it/copertina.jpg (copertina interna
+%         dell'EPUB) e website/static/assets/.
+% ===========================================================================
+\documentclass{article}
+\usepackage{fontspec}
+\usepackage[paperwidth=5.3333in,paperheight=8.5333in,margin=0in]{geometry}
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\setsansfont{TeX Gyre Heros}
+\setmainfont{TeX Gyre Pagella}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+
+\newcommand{\Sottotitolo}{Il protocollo dell'anonimato, byte per byte}
+
+\definecolor{carta}{HTML}{F1ECE1}
+\definecolor{inchiostro}{HTML}{1B1A20}
+\definecolor{accento}{HTML}{7D4698}
+\definecolor{tenue}{HTML}{6E6A63}
+\definecolor{bordogrigio}{HTML}{808080}
+
+\def\W{5.3333}
+\def\H{8.5333}
+\def\cx{2.66665}
+
+\begin{document}
+\begin{tikzpicture}[remember picture,overlay]
+\begin{scope}[x=1in,y=1in,shift={(current page.south west)}]
+
+  % Fondo, con un bordo grigio medio di 4 pixel (4/300 in): su una pagina web
+  % bianca il fondo avorio altrimenti si confonde con lo sfondo.
+  \fill[bordogrigio] (0,0) rectangle (\W,\H);
+  \fill[carta] (0.013333,0.013333) rectangle (\W-0.013333,\H-0.013333);
+
+  % Sezione della cipolla: anelli + incisione contenuta.
+  \begin{scope}
+    \clip (0,0) rectangle (\W,\H);
+    \coordinate (O) at (\cx,5.85);
+    \foreach \r/\w in {0.26/0.7, 0.56/0.8, 0.90/0.95, 1.24/1.1, 1.57/1.3, 1.90/1.55}
+      \draw[inchiostro, line width=\w pt] (O) circle (\r);
+    \fill[carta] (O) -- ($ (O) + (66:2.05) $) -- ($ (O) + (80:2.05) $) -- cycle;
+    \draw[accento, line width=0.9pt] ($ (O) + (80:0.10) $) -- ($ (O) + (80:1.88) $);
+    \fill[accento] (O) circle (0.085);
+  \end{scope}
+
+  % Titolo
+  \node[text=inchiostro, align=center, text width=4.7in] at (\cx,3.15)
+    {\sffamily\bfseries\fontsize{37}{41}\selectfont Anatomia\hspace{0.28em}di\hspace{0.28em}Tor};
+  % Filetto d'accento
+  \draw[accento,line width=1.2pt] (\cx-0.85,2.62) -- (\cx+0.85,2.62);
+  % Sottotitolo
+  \node[text=tenue, align=center, text width=4.4in] at (\cx,2.28)
+    {\sffamily\fontsize{13.5}{17}\selectfont \Sottotitolo};
+
+\end{scope}
+\end{tikzpicture}
+\end{document}

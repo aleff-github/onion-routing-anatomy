@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 使用的无障碍替代文本。
+\altfig{洋葱服务汇合流程：服务先建立通往引介点的多跳电路并发送 ESTABLISH\_INTRO（1），再向 HSDir 发布描述符（2）。客户端获取描述符，建立到汇合点的另一条电路，发送携带 cookie 的 ESTABLISH\_RENDEZVOUS（3）；随后通过独立电路向引介点发送 INTRODUCE1（4），引介点沿服务已建立的电路转发 INTRODUCE2，无法读取面向服务的加密内容。服务向汇合点发送 RENDEZVOUS1（5），汇合点连接两条电路并向客户端转发 RENDEZVOUS2（6）。各条连线均表示经过多个中继的逻辑路径，客户端和服务不直接连接。}
+% 汇合协议
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  circ/.style={-{Stealth[length=2.5mm]},thick,decorate,decoration={snake,amplitude=.5mm,segment length=4mm,post length=3mm}},
+  msg/.style={font=\ttfamily\scriptsize,fill=white,inner sep=1.5pt,align=center}]
+  \node[client] (c) at (0,0) {客户端};
+  \node[client,fill=torverde!15,draw=torverde!60!black] (s) at (11,0) {洋葱服务};
+  \node[relay,fill=torgrigio!10,draw=torgrigio,font=\sffamily\scriptsize] (h) at (1.2,3.8) {HSDir};
+  \node[relay,fill=torviola!15,draw=torviola,align=center,font=\sffamily\scriptsize] (ip) at (8.2,3.6) {引介点};
+  \node[relay,fill=torverde!25,align=center,font=\sffamily\scriptsize] (rp) at (5.5,-3) {汇合点};
+  % 服务端
+  \draw[circ,torverde!60!black] (s) -- node[msg,pos=0.35,right=12pt]{(1) ESTABLISH\_INTRO} (ip);
+  \draw[circ,torverde!60!black] (s.north) to[out=80,in=20,looseness=1.1] node[msg,pos=0.45,above=2pt]{(2) 发布描述符} (h.north east);
+  % 客户端
+  \draw[circ,torviola] (c) -- node[msg,pos=0.5,left=4pt]{下载\\描述符} (h);
+  \draw[circ,torviola] (c) -- node[msg,pos=0.45,left=6pt]{(3) ESTABLISH\_RENDEZVOUS\\(cookie)} (rp);
+  \draw[circ,torviola] (c.north east) to[out=15,in=210] node[msg,pos=0.5,below=3pt]{(4) INTRODUCE1} (ip.south west);
+  \draw[->,thick,torviola,dashed] (ip.south east) to[out=-30,in=100] node[msg,pos=0.45,left=3pt]{INTRODUCE2} (s.north);
+  \draw[circ,torverde!60!black] (s) -- node[msg,pos=0.45,right=6pt]{(5) RENDEZVOUS1\\(cookie)} (rp);
+  \node[font=\sffamily\scriptsize,align=center,below=3pt of rp] {(6) 连接两条电路\\并向客户端发送 RENDEZVOUS2};
+\end{tikzpicture}

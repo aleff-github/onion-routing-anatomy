@@ -1,0 +1,422 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Alessandro Greco
+# Site texts — English (reference language: every other file must have the same keys).
+
+[meta]
+name = "English"
+html_lang = "en"
+hreflang = "en"
+og_locale = "en_US"
+site_name = "Onion Routing Anatomy"
+chooser = "A free book on the Tor protocol, byte by byte"
+og_image_alt = "Onion Routing Anatomy: an onion cross-section next to the title."
+
+[ui]
+skip = "Skip to content"
+lang_label = "Language"
+nav_label = "Sections"
+not_found = "This page does not exist. Go to the home page."
+
+[nav]
+home = "Home"
+story = "The story"
+book = "Inside the book"
+labs = "Laboratories"
+languages = "Languages"
+contribute = "Contribute"
+ai = "AI transparency"
+license = "License"
+independence = "Independence"
+
+[download]
+title = "Download"
+pending = """The Italian edition is free to read as an A4 PDF ({{pages_a4}} pages), EPUB 3 or 7×10 in print PDF. <a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">A4 PDF</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it_7x10.pdf">Print PDF</a>."""
+pdf = "PDF A4 (Italian)"
+epub = "EPUB (Italian)"
+published = """First edition in Italian, version {{version}}, {{pages_a4}} pages. <a href="{{releases}}/tag/{{tag}}">All \
+files and SHA-256 checksums</a>, including the 7×10 in PDF for printing a personal copy."""
+
+[footer]
+edition = """First edition, version {{version}} (Italian) · tor {{tor}}, Arti {{arti}} · <a href="{{gh}}">project sources</a> · <a href="{{p:license}}">GPL-3.0-or-later</a>"""
+independent = """An independent work, not endorsed or sponsored by, or affiliated with, the Tor \
+Project. <a href="{{p:independence}}">More</a>."""
+privacy = "This site uses no cookies, scripts, web fonts or trackers."
+
+# --------------------------------------------------------------------------------------
+
+[pages.home]
+title = "Onion Routing Anatomy — a free book on the Tor protocol, byte by byte"
+description = "Anatomia di Tor: a free, GPL-licensed technical book on the Tor protocol, from cells and circuits to attacks, with 20 laboratories on a private Tor network."
+body = """
+<div class="hero">
+<img src="{{asset:copertina.png}}" width="1600" height="2560" alt="Cover of «Anatomia di Tor»: a cross-section of an onion with concentric rings, a radial cut and a purple core.">
+<div>
+<h1>Onion Routing Anatomy</h1>
+<p class="subtitle"><span lang="it">Anatomia di Tor</span> — the Tor protocol, byte by byte</p>
+<p>A technical book on how Tor works, from the bytes two relays exchange up to design
+choices, real attacks and open problems. Every mechanism is rebuilt and tested in a
+laboratory, on a private Tor network that runs on an ordinary computer.</p>
+<p>The book is written in Italian. It is <strong>free</strong>, and its sources — text,
+figures, code and laboratories — are open to everyone under the GNU GPL.</p>
+</div>
+</div>
+{{download}}
+<section aria-labelledby="explore">
+<h2 id="explore">Explore</h2>
+<ul class="cards">
+<li><a href="{{p:story}}"><strong>The story</strong><span>From a bachelor's thesis to a book.</span></a></li>
+<li><a href="{{p:book}}"><strong>Inside the book</strong><span>31 chapters, from cells to open research problems.</span></a></li>
+<li><a href="{{p:labs}}"><strong>Laboratories</strong><span>Twenty experiments on a private Tor network.</span></a></li>
+<li><a href="{{p:languages}}"><strong>Languages</strong><span>The Italian original and four translations under review.</span></a></li>
+<li><a href="{{p:ai}}"><strong>AI transparency</strong><span>Who did what: human direction and AI tools.</span></a></li>
+<li><a href="{{p:license}}"><strong>License</strong><span>What the GNU GPL lets you do.</span></a></li>
+</ul>
+</section>
+<section class="callout" aria-labelledby="help">
+<h2 id="help">Help improve this book</h2>
+<p>This free and open book welcomes contributions. A typo, an unclear explanation, a technical error or a laboratory that behaves differently than described: every report helps improve the work.</p>
+<p><a class="button" href="{{p:contribute}}">How to contribute</a>
+<a class="button secondary" href="{{choose}}">Report an error</a></p>
+</section>
+"""
+
+[pages.story]
+title = "The story of the project — Onion Routing Anatomy"
+description = "How Onion Routing Anatomy began: study of Tor for a bachelor's thesis, years of further work, laboratories to verify each mechanism, and a free release."
+body = """
+<h1>The story</h1>
+<p class="lead">The project began as study and became, over time, a technical book with its
+own laboratories. This page tells how.</p>
+
+<h2 id="origin">Where it comes from</h2>
+<p>While working on my bachelor's thesis, I started to look at Tor below the level at which
+it is usually described: not how to use it, but what actually travels between relays —
+cells, circuits, keys, and the algorithms that hold them together.</p>
+<p>My interest did not end with the degree. In the following years I kept studying the
+material in more depth, reorganising and extending it.</p>
+
+<h2 id="book">From a thesis to a book</h2>
+<p>Over time the goal changed. Understanding Tor was no longer enough for me: the aim became a
+technical work able to explain it concretely, down to the protocol, the cells, the circuits
+and the algorithms, with every statement tied to the specifications and to the source code.</p>
+
+<h2 id="labs">Why laboratories</h2>
+<p>Describing a mechanism does not show that it works as described. The laboratories come from
+that need: a private Tor network running on a single computer, where each step in the text
+can be reproduced, measured and checked. They are now part of the book: twenty of them, each
+adding a piece to a small educational Tor client.</p>
+
+<h2 id="free">Why it is free</h2>
+<p>I decided to give priority to the free circulation of knowledge. The whole project — the
+book, its LaTeX sources, the code and the laboratories — is freely available, so that anyone
+can study it, reproduce it and improve it. The book is free of charge; what can be done with
+it is set by its license, the GNU GPL.</p>
+<p>How the current text was produced, and which part AI tools played in it, is described on
+the <a href="{{p:ai}}">AI transparency</a> page.</p>
+"""
+
+[pages.book]
+title = "Inside the book — Onion Routing Anatomy"
+description = "Contents of Anatomia di Tor: history, the Tor protocol at a low level, Tor in practice, attacks and defences, research and Arti. 31 chapters, 176 exercises."
+body = """
+<h1>Inside the book</h1>
+<p class="lead">31 chapters and 4 appendices, 176 graded exercises with solutions, 39 original
+figures. Reference versions: tor {{tor}} and Arti {{arti}}.</p>
+<p>The book is written for university students, security professionals and researchers with a
+background in networking (TCP/IP, TLS) and programming. Technical statements are tied to
+primary sources — the Tor specifications, the source code of tor and Arti, Tor proposals and
+research papers — and cited in the text.</p>
+
+<h2 id="part1">Part I — History and foundations</h2>
+<p>Anonymity and metadata; mix networks and remailers; from onion routing at the US Naval
+Research Laboratory to the Tor Project; Tor's threat model and what it does not protect
+against.</p>
+
+<h2 id="part2">Part II — The protocol at a low level</h2>
+<p>Cryptography for Tor; network architecture; channels and the link protocol; cells; circuit
+creation (CREATE_FAST, ntor, ntor-v3); layered relay encryption and the new CGO scheme;
+streams; SENDME and congestion control; the directory system; path selection and guards;
+onion services v3; DoS defences; censorship, bridges and pluggable transports. Each chapter
+ends with a laboratory.</p>
+
+<h2 id="part3">Part III — Tor in practice</h2>
+<p>Configuring tor with torrc; the control port and Stem; building a private Tor network;
+traffic analysis with Wireshark; running onion services, relays and bridges; Tor Browser,
+Tails and Whonix; Tor Metrics and OONI; legal and ethical aspects in Italy and the EU.</p>
+
+<h2 id="part4">Part IV — Attacks and defences</h2>
+<p>Traffic correlation, website fingerprinting, Sybil attacks, real cases and operational
+mistakes. The approach is analytical and defensive: the book explains why attacks work and
+how Tor counters them; it gives no instructions against third parties.</p>
+
+<h2 id="part5">Part V — Research and future</h2>
+<p>Academic research on Tor, Arti (the implementation of Tor in Rust), open problems and
+current proposals of the Tor Project.</p>
+
+<h2 id="formats">Formats</h2>
+<p>PDF A4 ({{pages_a4}} pages), EPUB 3, and a 7×10 in PDF ({{pages_7x10}} pages) for printing a
+personal copy. The PDF and EPUB are generated from the same LaTeX sources with
+<code>make book</code>.</p>
+"""
+
+[pages.labs]
+title = "Laboratories on a private Tor network — Onion Routing Anatomy"
+description = "Twenty reproducible laboratories: an educational Tor client in Python tested on a private Tor network built with Docker and Chutney, verified live 53/53."
+body = """
+<h1>Laboratories</h1>
+<p class="lead">Twenty laboratories build <code>torlab</code>, a small educational Tor client
+written in Python, piece by piece: channel, cells, handshakes, encryption, streams,
+directories, path selection, onion services and more.</p>
+
+<h2 id="network">A private Tor network</h2>
+<p>The code runs against a private Tor network that lives on one computer: tor
+{{tor}} and Chutney built from source in a Docker image, with every listener bound to
+127.0.0.1. Nothing leaves the machine.</p>
+<p>The experiments are designed for this private network only. They are never run against
+public relays or real users, in line with the principles of the Tor Research Safety
+Board.</p>
+
+<h2 id="verified">Verified, not only described</h2>
+<p>On 28 October 2026 all the Italian laboratories were rerun live on the private network:
+<strong>53/53</strong> checks passed, plus <strong>14/14</strong> for the obfs4 bridge
+laboratory. Offline tests cover the code and the scripts without Docker or network access.
+The <a href="{{tree}}/docs/it/validazione">validation summaries</a> are in the repository.</p>
+
+<h2 id="try">Try it</h2>
+<pre><code>git clone {{gh}}
+cd onion-routing-anatomy
+make -C labs/it test       # offline tests (Python 3.11 or later)
+make -C labs/it immagine   # Docker image with tor and Chutney
+make -C labs/it avvia      # start the private network
+make verifica-lab          # rerun every laboratory and check the results</code></pre>
+<p>Step-by-step guides are in <a href="{{tree}}/labs/it/wiki"><code>labs/it/wiki</code></a>
+(in Italian). Translated guides exist in <code>labs/&lt;language&gt;/wiki</code> as part of
+the translations under review.</p>
+<p>Something does not work as described? <a href="{{new}}04-laboratory.yml">Report a
+laboratory problem</a>.</p>
+"""
+
+[pages.languages]
+title = "Languages and translations — Onion Routing Anatomy"
+description = "Italian original in PDF and EPUB, with AI-generated English, Spanish, Russian and Simplified Chinese source translations."
+body = """
+<h1>Languages</h1>
+<p class="lead">The original book is available in Italian as PDF and EPUB. English, Spanish, Russian and Simplified Chinese translations are available as project source files.</p>
+
+<table>
+<caption>Status of each edition</caption>
+<thead><tr><th scope="col">Language</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><td lang="it">Italiano</td><td>Original. First edition, version {{version}}; available as PDF and EPUB.</td></tr>
+<tr><td>English</td><td>First edition, version {{version}}. Translation generated with AI, available as source files, without independent review.</td></tr>
+<tr><td lang="es">Español</td><td>First edition, version {{version}}. Translation generated with AI, available as source files, without independent review.</td></tr>
+<tr><td lang="ru">Русский</td><td>First edition, version {{version}}. Translation generated with AI, available as source files, without independent review.</td></tr>
+<tr><td lang="zh-Hans">简体中文</td><td>First edition, version {{version}}. Translation generated with AI, available as source files, without independent review.</td></tr>
+</tbody>
+</table>
+
+<h2 id="translations">About the translations</h2>
+<p>English, Spanish, Russian and Simplified Chinese translations were generated with AI tools from the Italian original. The source files are available in the repository; no translated PDF or EPUB edition has undergone independent review.</p>
+<p>Automated checks do not replace native-speaker review or live testing of the translated laboratories. The Italian original remains the reference.</p>
+<p>For more information, see <code>docs/translations/</code>. This website is available in five languages.</p>
+
+<h2 id="review">Help review a translation</h2>
+<p>If you are a native or fluent speaker, a review of even one chapter makes a difference.
+You do not need to know LaTeX or Git.</p>
+<p><a class="button" href="{{blob}}/docs/translation-review.md">Join the translation review</a>
+<a class="button secondary" href="{{new}}02-translation.yml">Report a translation problem</a></p>
+<p>The Italian text is the reference: a correction to a translation never changes the
+Italian original silently. If a problem comes from the original, it is reported and fixed
+there first.</p>
+"""
+
+[pages.contribute]
+title = "Contribute — help improve Onion Routing Anatomy"
+description = "How to report an error, fix a translation, propose an improvement or contribute code to Onion Routing Anatomy, with or without Git and LaTeX."
+body = """
+<h1>Help improve this book</h1>
+<p class="lead">This is a free and open book: contributions help improve its explanations, code and laboratories.</p>
+
+<h2 id="ways">Ways to help</h2>
+<ul class="cards">
+<li><a href="{{new}}01-typo.yml"><strong>Report a typo</strong><span>A spelling mistake, a missing word, an unclear sentence.</span></a></li>
+<li><a href="{{new}}02-translation.yml"><strong>Fix a translation</strong><span>A wrong or awkward passage in a translation.</span></a></li>
+<li><a href="{{new}}03-technical-correction.yml"><strong>Technical correction</strong><span>A statement about Tor that is wrong or out of date.</span></a></li>
+<li><a href="{{new}}04-laboratory.yml"><strong>Laboratory problem</strong><span>A laboratory that does not behave as described.</span></a></li>
+<li><a href="{{new}}06-proposal.yml"><strong>Propose an improvement</strong><span>New content, a better explanation, a figure.</span></a></li>
+<li><a href="{{blob}}/docs/translation-review.md"><strong>Join the translation review</strong><span>Review a chapter in your language.</span></a></li>
+<li><a href="{{blob}}/CONTRIBUTING.md"><strong>Contribute code or text</strong><span>Open a pull request.</span></a></li>
+<li><a href="{{new}}05-documentation.yml"><strong>Improve the documentation</strong><span>README, guides, instructions.</span></a></li>
+</ul>
+
+<h2 id="no-git">Without Git or LaTeX</h2>
+<p>You only need a GitHub account. Choose the kind of report, fill in the form — the
+language, the chapter or page, the current text and what you would write instead — and
+submit it. That is enough: the change to the sources will be made by someone else.</p>
+<p>For a small typo you can also propose the fix yourself: open the file on GitHub, click the
+pencil icon, change the text and choose “Propose changes”. GitHub creates a copy of the
+repository and a pull request for you; the book does not need to be built.</p>
+
+<h2 id="pr">With Git</h2>
+<ol>
+<li>Open an issue first, unless the change is a small fix.</li>
+<li>Find the file: the Italian text is in <code>source/it/</code>, translations in
+<code>source/&lt;language&gt;/</code>, laboratory code in <code>labs/</code>.</li>
+<li>Fork the repository, create a branch and make the change.</li>
+<li>Run the checks that fit the change: <code>make check</code> and <code>make test</code>
+need only Python; building the book needs Docker.</li>
+<li>Open a pull request and answer the review.</li>
+</ol>
+<p>The details are in <a href="{{blob}}/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
+
+<h2 id="after">What happens next</h2>
+<p>Every report is read and given a state: <em>to verify</em>, <em>confirmed</em>, <em>in
+progress</em>, <em>fix proposed</em>, <em>resolved</em>, <em>not reproducible</em> or
+<em>duplicate</em>. Changes to the protocol description, the cryptography or the laboratories
+need a primary source or a reproducible proof; a typo needs only a quick check. Accepted
+corrections go into the next version of the book and are listed in the
+<a href="{{blob}}/CHANGELOG.md">changelog</a>. The process is described in
+<a href="{{blob}}/docs/editorial-process.md">docs/editorial-process.md</a>.</p>
+
+<h2 id="credit">Credit</h2>
+<p>People whose contributions are accepted are listed in
+<a href="{{blob}}/CONTRIBUTORS.md">CONTRIBUTORS.md</a>, under the GitHub name or the name
+they choose. Anyone can ask not to be listed. There are no rankings.</p>
+
+<h2 id="rules">Good to know</h2>
+<ul>
+<li>Contributions are accepted under the project's license, GPL-3.0-or-later.</li>
+<li>Do not put personal data, private keys, packet captures or other sensitive material in
+public issues.</li>
+<li>Security problems in the code or the laboratories are reported privately: see
+<a href="{{blob}}/SECURITY.md">SECURITY.md</a>.</li>
+<li>Everyone is expected to follow the short <a href="{{blob}}/CODE_OF_CONDUCT.md">code of
+conduct</a>.</li>
+</ul>
+"""
+
+[pages.ai]
+title = "AI transparency — Onion Routing Anatomy"
+description = "How artificial intelligence was used to make Onion Routing Anatomy: human direction and AI tools, internal review, what was verified and what was not."
+body = """
+<h1>AI transparency</h1>
+<p class="lead">This page summarises how artificial intelligence was used to make the book,
+based only on what the project's records document. Where something cannot be verified, it
+says so.</p>
+<p>The book draws on study notes and documents I produced over the years.
+Under my direction, AI tools substantially expanded, explained, structured and drafted
+the present work. Despite internal reviews and checks, errors may remain; readers can
+<a href="{{p:contribute}}">report and correct them</a>. The guiding principle is
+<strong>"diffusione dei saperi senza fondare poteri"</strong> — sharing knowledge
+without establishing power. It is free through the project's official channels, under
+GPL-3.0-or-later, which also permits commercial redistribution on its terms.</p>
+
+<h2 id="author">My part</h2>
+<ul>
+<li>The origin of the project: my study of Tor, begun for my bachelor's thesis and continued
+afterwards. The thesis is not in the repository, so it is not possible to say which passages
+derive from it.</li>
+<li>The direction of the work and its decisions: goals and scope, the model chapter for tone
+and level, title, license, free distribution, authorisation of each live laboratory run.</li>
+<li>The review and maintenance of the work, and editorial responsibility for what is
+published.</li>
+</ul>
+
+<h2 id="tools">What AI tools did</h2>
+<ul>
+<li>The current text, figures, exercises and solutions were drafted from September 2026 in
+sessions with an AI coding assistant, Claude Code, under my direction. They should be
+regarded as <strong>AI-generated under human direction</strong>, not as text I wrote and only
+polished with AI.</li>
+<li>The laboratory code, the scripts and the build system were written in the same way.</li>
+<li>The translations were generated with AI tools; their review was also carried out in
+sessions with AI tools.</li>
+<li>The project documentation, including this website, was drafted with AI from information
+I provided.</li>
+</ul>
+
+<h2 id="verified">How the work is checked, and the limits</h2>
+<p><strong>Internal review.</strong> I review and maintain the work myself, and it keeps being
+corrected and improved.</p>
+<p><strong>Automated checks:</strong> live runs of the Italian laboratories on a private Tor
+network (53/53 and 14/14 checks), offline tests, builds of the PDF and EPUB with
+programmatic checks and EPUBCheck validation.</p>
+<p><strong>Independent review:</strong> none so far — no peer review or validation by external
+experts, no review of the legal chapter by a lawyer, no review of the translations by native
+speakers.</p>
+<p>Errors may therefore remain. If you find one, please <a href="{{p:contribute}}">report
+it</a>.</p>
+
+<p><a class="button" href="{{blob}}/AI_DISCLOSURE.md">Read the full disclosure</a>
+(English and Italian)</p>
+"""
+
+[pages.license]
+title = "License: GNU GPL v3 or later — Onion Routing Anatomy"
+description = "Onion Routing Anatomy is released under GPL-3.0-or-later: what you may do with the book and its sources, the conditions, translations and third-party material."
+body = """
+<h1>License</h1>
+<p class="lead">Text, figures, cover, LaTeX sources, laboratory code and documentation are
+released under the <strong>GNU General Public License, version 3 or (at your option) any later
+version</strong> (GPL-3.0-or-later). Copyright © 2026 Alessandro Greco.</p>
+
+<h2 id="you-can">What you can do</h2>
+<ul>
+<li>Read, copy and share the book, in any number of copies, free of charge or not.</li>
+<li>Study and modify it, and distribute modified versions.</li>
+<li>Use it for teaching, in courses and in training.</li>
+</ul>
+<p>The book is free of charge. That is a choice about how it is distributed; the rights to use
+and redistribute it come from the license, which also allows anyone to redistribute it,
+including commercially, as long as the conditions of the GPL are respected.</p>
+
+<h2 id="conditions">The conditions</h2>
+<ul>
+<li>Keep the copyright notice and the license, and pass the same rights on: a modified
+version must also be released under the GPL.</li>
+<li>Whoever distributes the PDF or EPUB must also make the corresponding source available.
+For this book the source is the content of <code>source/</code> together with the
+<code>Makefile</code> that builds the files.</li>
+<li>The work is provided without warranty.</li>
+</ul>
+<p>The legal text is the one in the <a href="{{blob}}/LICENSE">LICENSE</a> file; this page is
+only a summary.</p>
+
+<h2 id="translations">Translations</h2>
+<p>The translations were generated with AI tools and are under review. To the extent that
+rights subsist in them, they are released under the same license.</p>
+
+<h2 id="third-party">Third-party material</h2>
+<p>Some material keeps its own terms: the text of the GPL itself; a one-line patch to
+Chutney and a patch to tor (BSD 3-Clause license); test vectors from the Tor specifications;
+public documents of the Tor network used as examples; the fonts embedded in the PDF files;
+short quotations from other works. The full list is in
+<a href="{{blob}}/NOTICE.md">NOTICE.md</a>.</p>
+"""
+
+[pages.independence]
+title = "Independence — Onion Routing Anatomy"
+description = "Onion Routing Anatomy is an independent work, not endorsed by or affiliated with the Tor Project. No advertising, sponsorship or tracking."
+body = """
+<h1>Independence</h1>
+<p class="lead">This book is an independent work. It is not endorsed or sponsored by, or
+affiliated with, the Tor Project.</p>
+
+<h2 id="tor-project">The Tor Project</h2>
+<p>The book studies the Tor software, its specifications and its research. It does not speak
+for the Tor Project, and the opinions in it are not those of the Tor Project. To use Tor, get
+it from the Tor Project's official channels.</p>
+<p>“Tor” and the Tor onion logo are trademarks of The Tor Project, Inc. The book does not use
+the logo; the onion cross-section on the cover is original artwork.</p>
+
+<h2 id="no-ads">No advertising, no tracking</h2>
+<p>The book has no sponsors and contains no advertising. This website uses no cookies,
+scripts, web fonts, analytics or third-party services. It is hosted on GitHub Pages; like
+any web server, GitHub may record the IP addresses of visitors, as described in its privacy
+statement.</p>
+
+<h2 id="corrections">Corrections</h2>
+<p>Independence also means that no organisation has reviewed the book on behalf of its
+readers: corrections come from the people who read it. If you find an error,
+<a href="{{p:contribute}}">please report it</a>.</p>
+"""

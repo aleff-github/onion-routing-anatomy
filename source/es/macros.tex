@@ -1,0 +1,38 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Se conservan los identificadores LaTeX y los estilos del original italiano.
+% Solo se localiza el texto que ve el lector.
+\input{../it/macro}
+\renewcommand{\proposta}[1]{Propuesta~#1\index{Propuestas!#1}}
+% Se conserva el término técnico inglés del segundo argumento.
+\renewcommand{\termine}[2]{\emph{#1} (#2)\index{#1}}
+\renewcommand{\aggiornatoal}[2]{%
+  \begin{center}\small\color{torgrigio}\textit{Última verificación: #1 --- #2}\end{center}}
+\renewcommand{\dacontrollare}[1]{\textcolor{avviso}{\textbf{[PENDIENTE DE VERIFICACIÓN: #1]}}}
+\renewtcolorbox{obiettivi}{base,colback=torviola!5,colframe=torviola,title={Objetivos del capítulo}}
+\renewtcolorbox{approfondimento}[1][]{base,colback=torgrigio!4,colframe=torgrigio,title={En profundidad\ifx&#1&\else: #1\fi}}
+\renewtcolorbox{attenzione}[1][]{base,colback=avviso!5,colframe=avviso,title={Advertencia\ifx&#1&\else: #1\fi}}
+\renewtcolorbox{storia}[1][]{base,colback=torverde!5,colframe=torverde!70!black,title={Nota histórica\ifx&#1&\else: #1\fi}}
+\renewtcolorbox{specbox}[1]{base,colback=white,colframe=torviola!60,title={De la especificación: #1}}
+\renewtcolorbox{laboratorio}[2][]{base,colback=torverde!4,colframe=torverde!60!black,
+  title={\ifx&#1&\refstepcounter{laboratorio}Laboratorio \thechapter.\arabic{laboratorio}\else Laboratorio~#1\fi: #2}}
+\renewenvironment{esercizio}[1][1]{\refstepcounter{esercizio}\par\medskip
+  \noindent\textbf{Ejercicio \theesercizio}\ \stelle{#1}\quad}{\par}
+\renewenvironment{soluzione}[1]{\par\medskip\noindent\textbf{Solución \ref{#1}.}\quad}{\par}
+
+
+% Los ejemplos de código contienen diagnósticos españoles con caracteres
+% acentuados. listings no gestiona UTF-8 como el texto corriente; se añaden
+% los mapeos de español y se conservan los del original italiano.
+\lstset{literate=
+  {á}{{\'a}}1 {Á}{{\'A}}1
+  {é}{{\'e}}1 {É}{{\'E}}1
+  {í}{{\'i}}1 {Í}{{\'I}}1
+  {ó}{{\'o}}1 {Ó}{{\'O}}1
+  {ú}{{\'u}}1 {Ú}{{\'U}}1
+  {ñ}{{\~n}}1 {Ñ}{{\~N}}1
+  {ü}{{\"u}}1 {Ü}{{\"U}}1
+  {¿}{{\textquestiondown}}1 {¡}{{\textexclamdown}}1
+  {à}{{\`a}}1 {è}{{\`e}}1 {ì}{{\`i}}1
+  {ò}{{\`o}}1 {ù}{{\`u}}1
+}

@@ -1,0 +1,19 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 无障碍替代文本。
+\altfig{本图仅比较 DSA 第 4 条与出口中继的技术行为，不自动确定法律免责。客户端通过 RELAY\_BEGIN 指定目的地，出口建立 TCP 并执行策略，将 RELAY\_DATA 中的应用字节写入 TCP 流，而非原样转发 Tor cell。}
+% 单纯传输通道条件与出口中继行为对比
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.35cm,
+  cond/.style={draw,rounded corners=2pt,text width=4.2cm,align=left,minimum height=0.8cm},
+  tor/.style={draw=torviola,fill=torviola!8,rounded corners=2pt,text width=5.4cm,align=left,minimum height=0.8cm}]
+  \node[cond] (a) {（a）不发起传输};
+  \node[cond,below=of a] (b) {（b）不选择接收方};
+  \node[cond,below=of b] (c) {（c）不选择或修改信息};
+  \node[tor,right=1.2cm of a] (ta) {客户端发送 \texttt{RELAY\_BEGIN}；出口打开 TCP};
+  \node[tor,right=1.2cm of b] (tb) {目的地由客户端指定；策略可拒绝};
+  \node[tor,right=1.2cm of c] (tc) {\texttt{RELAY\_DATA} 字节写入 TCP 流};
+  \foreach \x in {a,b,c} \draw[<->,torgrigio] (\x) -- (t\x);
+  \node[above=4pt of a,font=\sffamily\small] {欧盟条例（EU）2022/2065，第~4 条};
+  \node[above=4pt of ta,font=\sffamily\small] {Tor 出口中继};
+  \node[font=\sffamily\tiny,text=torgrigio,align=center,below=0.5cm of c,xshift=3.3cm] {免责须逐案判断};
+\end{tikzpicture}

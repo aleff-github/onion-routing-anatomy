@@ -1,0 +1,25 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 替代文本。
+\altfig{HTTPS 连接示意图：通信内容位于标注为已加密的方框中，而周围的元数据仍以明文可见，包括源 IP 地址、目的 IP 地址、时间信息以及数据包大小和发送频率。}
+% HTTPS 能保护什么，以及观察者仍能看到什么。
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  riga/.style={draw,minimum height=0.65cm,align=center},
+  visibile/.style={riga,fill=avviso!12,draw=avviso!60},
+  protetto/.style={riga,fill=torverde!15,draw=torverde!60!black}]
+  \node[client,minimum width=1.6cm] (u) at (0,0) {用户};
+  \node[server,minimum width=1.6cm] (s) at (10.6,0) {网站};
+  \draw[very thick,torgrigio!50] (u) -- (s);
+  \node[font=\sffamily\scriptsize,text=torgrigio] at (5.3,0.45) {HTTPS};
+  \node[visibile,text width=1.9cm] (a) at (2.5,-1.5) {发送方\\IP 地址};
+  \node[visibile,text width=1.9cm] (b) at (4.6,-1.5) {网站\\IP 地址};
+  \node[visibile,text width=1.9cm] (c) at (6.7,-1.5) {时间与持续时长};
+  \node[visibile,text width=1.9cm] (d) at (8.8,-1.5) {发送与接收\\的字节数};
+  \node[protetto,text width=4.2cm] (e) at (3.4,-2.9) {请求的页面与内容};
+  \node[protetto,text width=4.2cm] (f) at (7.9,-2.9) {凭据、消息正文};
+  \node[text=avviso] at (0.5,-1.5) {\textbf{元数据}};
+  \node[text=avviso,font=\sffamily\tiny] at (0.5,-1.85) {明文};
+  \node[text=torverde!45!black] at (0.5,-2.9) {\textbf{内容}};
+  \node[text=torverde!45!black,font=\sffamily\tiny] at (0.5,-3.25) {已加密};
+  \foreach \n in {a,b,c,d} \draw[dotted,avviso!70] (\n.north) -- (\n.north |- u.south);
+\end{tikzpicture}

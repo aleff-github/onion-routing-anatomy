@@ -1,0 +1,93 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Capítulo \ref{cap:01-anonimato}: anonimato, vigilancia y metadatos}
+
+\begin{soluzione}{es:01-metadati}
+Con HTTPS, el proveedor de Internet ve la dirección IP del sitio y posiblemente su dominio, por la resolución DNS y, a menudo, por el campo SNI de TLS. También observa el momento de la conexión, su duración y el volumen de tráfico. Con una VPN, el proveedor solo ve la conexión con el servidor VPN; sin embargo, el operador de la VPN puede observar lo mismo que antes veía el proveedor de Internet. Con Tor, el proveedor observa una conexión con un repetidor o puente Tor, sus tiempos y volumen. Ningún punto individual de la red Tor puede ver simultáneamente al usuario y el destino.
+\end{soluzione}
+
+\begin{soluzione}{es:01-termini}
+Una cuenta creada con un nombre ficticio es seudonimato. Un mensaje sin firma en un tablón constituye anonimato, siempre que ningún otro dato identifique a su autor. Una carta firmada con iniciales representa un seudonimato débil y puede permitir identificar a su autor. Una donación anónima en efectivo es un ejemplo de anonimato.
+\end{soluzione}
+
+\begin{soluzione}{es:01-insieme}
+El conjunto de anonimato se reduce de cincuenta usuarios de Tor a quienes hablan italiano y además están despiertos a las tres de la madrugada, quizá solo unas pocas personas. Tor oculta una dirección IP, no el comportamiento. El idioma, los horarios, el estilo de escritura y los datos personales pueden identificar a alguien aunque el tráfico de red no lo haga.
+\end{soluzione}
+
+\begin{soluzione}{es:01-vpn}
+Un proveedor VPN ve tanto al usuario como sus destinos. Toda la confianza se concentra en un operador que podría registrar la actividad, verse obligado legalmente a entregar los datos o resultar comprometido. Tor distribuye la confianza entre tres repetidores administrados independientemente, ninguno de los cuales ve ambos extremos. Vincular usuario y destino exigiría comprometer u observar simultáneamente el primer y el último salto.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:02-radici}: los orígenes}
+
+\begin{soluzione}{es:02-mix}
+La probabilidad al azar es 1 entre 100. Si el observador enviara 99 de los 100 mensajes de un lote, reconocería sus propios mensajes salientes e identificaría el único restante como el de la víctima. Desaparecería el anonimato. Es el \emph{ataque $n-1$}, al que las redes mix reales se enfrentan mediante lotes más sofisticados, tráfico ficticio y controles sobre mensajes entrantes.
+\end{soluzione}
+
+\begin{soluzione}{es:02-penet}
+Utiliza una \emph{dirección de respuesta anónima}, en el sentido de Chaum. El usuario prepara una \enquote{cebolla de retorno} cifrada por capas para una cadena de mezcladores. La capa interior contiene su dirección y una clave para cifrar la respuesta. El destinatario añade su respuesta a la cebolla; cada mezclador elimina una capa y ninguno, individualmente, conoce el destino final. No se necesita una tabla central de rutas.
+\end{soluzione}
+
+\begin{soluzione}{es:02-crowds}
+En cada paso, la solicitud se reenvía a otro miembro del grupo con probabilidad $3/4$ y se envía al sitio con probabilidad $1/4$. El número de miembros atravesados sigue una distribución geométrica con media $1/(1/4)=4$, contando el primer paso de reenvío. Un miembro no puede saber si quien le remitió la solicitud la originó, porque el reenvío intermedio sigue la misma regla.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:03-nascita-tor}: del encaminamiento cebolla del NRL al Tor Project}
+
+\begin{soluzione}{es:03-cinque}
+Con tres saltos, un nodo central malicioso conocía inmediatamente las dos redes organizativas de los extremos porque las entradas y salidas estaban situadas dentro de ellas. Con cuatro saltos, quien comprometiera un nodo cercano a uno de los extremos sabría qué nodo adicional atacar para reconstruir el circuito; con cinco, necesitaría un compromiso más. Tor utiliza tres saltos porque sus repetidores no residen en las redes de los usuarios y porque cada salto adicional incrementa la latencia sin reducir demasiado la principal amenaza de correlación entre entrada y salida. Los guardias ayudan específicamente frente a esa amenaza.
+\end{soluzione}
+
+\begin{soluzione}{es:03-cipolla}
+Una cebolla única cifrada con las claves públicas permanentes de los nodos no proporciona secreto hacia adelante. Quien consiga después esas claves podrá descifrar las cebollas grabadas. Con construcción telescópica, cada salto realiza un intercambio efímero de claves y los secretos temporales se descartan tras utilizarlos. El cliente también construye el circuito salto a salto y puede identificar inmediatamente a un repetidor que no responde y sustituirlo. Con una sola cebolla, el fallo solo se descubre después de intentar la ruta completa.
+\end{soluzione}
+
+\begin{soluzione}{es:03-fiducia}
+Es un ejercicio de argumentación abierta. Entre los elementos verificables figuran el código y las especificaciones publicados, las compilaciones reproducibles, los análisis independientes de la literatura científica y una red administrada por operadores independientes. Entre los elementos que todavía requieren confianza están la correspondencia entre los binarios distribuidos y las fuentes publicadas, aunque puede verificarse parcialmente, la posible colusión de las autoridades de directorio y la existencia de vulnerabilidades desconocidas. La seguridad debe evaluarse mediante verificabilidad y confianza distribuida, no suponerse a partir de las fuentes de financiación del proyecto.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:04-modello-minaccia}: el modelo de amenazas}
+
+\begin{soluzione}{es:04-casi}
+(a) Sí: el operador de red solo ve una conexión con un repetidor Tor. (b) Sí: el sitio ve la dirección de la salida. (c) No en cuanto a la identidad: el propio usuario se identifica al iniciar sesión en la cuenta. Tor solo oculta desde dónde se conecta. (d) Probablemente no: un adversario que observe ambos extremos, usuario y periódico, podría intentar una correlación temporal, precisamente el escenario excluido del modelo de amenazas de Tor.
+\end{soluzione}
+
+\begin{soluzione}{es:04-usabilita}
+Un sistema difícil de usar atrae únicamente a unos pocos usuarios muy motivados, a menudo quienes más necesitan protección. El mero hecho de utilizarlo los distingue y deja un conjunto de anonimato pequeño. Un sistema fácil de usar que millones de personas adoptan por motivos ordinarios ayuda a ocultar a quienes tienen necesidades más delicadas.
+\end{soluzione}
+
+\begin{soluzione}{es:04-modello}
+Es un ejercicio abierto. Entre los adversarios posibles figuran el gobierno o empleador de la fuente que observa la red local, el proveedor de correo o mensajería y entidades que controlan redes en uno u otro país. Tor impide que la red local sepa con quién se comunica el periodista y que el servicio conozca su dirección IP. No protege el contenido de los mensajes sin cifrado de extremo a extremo, los metadatos visibles al servicio, como cuentas y marcas temporales, los dispositivos comprometidos ni la correlación realizada por un adversario que observe ambos extremos. Un servicio onion como SecureDrop reduce varios de estos riesgos.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:05-crittografia}: criptografía esencial}
+
+\begin{soluzione}{es:05-xor}
+$C_1 \oplus C_2 = P_1 \oplus P_2$, porque la secuencia de cifrado reutilizada se cancela. Si se conoce $P_1$, puede recuperarse $P_2=C_1\oplus C_2\oplus P_1$.
+\end{soluzione}
+
+\begin{soluzione}{es:05-shake}
+La salida de 16 bytes coincide con los primeros 16 bytes de la salida de 32: SHAKE genera una sola secuencia que puede leerse hasta la longitud deseada. Una KDF puede, por ello, solicitar una secuencia larga y dividirla en partes. Sin embargo, pedir longitudes distintas para usos diferentes \emph{no} proporciona separación de dominios; siguen siendo necesarias etiquetas distintas.
+\end{soluzione}
+
+\begin{soluzione}{es:05-dh}
+Ambos secretos compartidos coinciden. Una clave pública de ceros representa un punto de orden pequeño y produciría un secreto compartido nulo con independencia de la clave privada: un secreto conocido por cualquiera. La biblioteca \texttt{cryptography} se niega a devolverlo. ntor exige explícitamente esta comprobación (\cref{sec:ntor}); de lo contrario, un adversario podría forzar un secreto predecible.
+\end{soluzione}
+
+\begin{soluzione}{es:05-etichette}
+Sin separación de dominios, un valor calculado en un contexto podría aceptarse en otro. Por ejemplo, una MAC generada para autenticar un mensaje de intercambio de claves podría presentarse como clave o prueba en otra fase o protocolo que utilice la misma función y claves. Las etiquetas de dominio hacen que los conjuntos de entradas de los diferentes usos sean distintos por construcción.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:06-architettura}: arquitectura de red}
+
+\begin{soluzione}{es:06-vista}
+Guardia: dirección IP del usuario, horarios y volumen del tráfico, pero no destino. Intermedio: ni usuario ni destino. Salida: destino y contenido no cifrado por la aplicación, pero no usuario. HSDir: ninguna información sobre un usuario que visite un sitio ordinario. Autoridad de directorio: normalmente ninguna información sobre una visita concreta. Puede ver la dirección IP de un cliente que solicite documentos de directorio \emph{directamente}, especialmente durante el arranque. Si los obtiene de un directorio de reserva o una caché, ese servidor y no la autoridad observa la solicitud.
+\end{soluzione}
+
+\begin{soluzione}{es:06-pr}
+\texttt{Link=3-5} anuncia protocolos de enlace hasta la versión 5 (\cref{cap:07-canali}). \texttt{Relay=2-6} incluye ntor, ntor-v3 (\texttt{Relay=4}) y CGO (\texttt{Relay=6}). \texttt{FlowCtrl=1-2} indica SENDME autenticado y control de congestión. El repetidor puede servir como salida CGO si también tiene indicador \texttt{Exit} y negocia el control de congestión junto con CGO (\cref{sec:ntor3}).
+\end{soluzione}
+
+\begin{soluzione}{es:06-livelli}
+100\,KB de datos de aplicación requieren aproximadamente $102400/498 \approx 206$ celdas DATA, o unos $206\times514\approx106$\,KB sobre el enlace. Hay que añadir algunas celdas para la solicitud, la apertura del flujo y los mensajes SENDME (alrededor de siete, uno por cada 31 celdas de datos), además de la sobrecarga de los registros TLS. En total, es aproximadamente un 5--7\% por encima de la carga útil, sin contar los intercambios iniciales.
+\end{soluzione}

@@ -1,0 +1,160 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Tor Browser, Tails e Whonix}\label{cap:23-browser}
+\aggiornatoal{23 settembre 2026}{documento di progetto di Tor Browser (2018); manuale di Tor Browser; documentazione di Tails e Whonix}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item spiegare perché un browser qualsiasi configurato per usare Tor non basta;
+  \item elencare i requisiti di sicurezza e di privacy su cui è progettato Tor Browser;
+  \item collegare l'isolamento per sito di Tor Browser all'isolamento degli stream di tor;
+  \item confrontare Tor Browser, Tails e Whonix per ciò che proteggono e per il prezzo che chiedono.
+\end{itemize}
+\end{obiettivi}
+
+Il modello di minaccia del 2004 dichiarava che Tor non normalizza i protocolli delle applicazioni (\cref{sec:minaccia-nonobiettivi}): se il browser rivela chi sei, la cipolla non serve a niente. Questo capitolo descrive gli strumenti che si occupano proprio di quel livello: Tor Browser, che riduce le fughe e la tracciabilità a livello applicativo, e due ambienti, Tails e Whonix, che estendono le protezioni a più componenti del sistema senza eliminare ogni rischio.
+
+% ---------------------------------------------------------------------------
+\section{Perché non basta un proxy}\label{sec:browser-proxy}
+
+Impostare un browser comune perché usi la SocksPort di tor nasconde l'indirizzo IP in molti casi, ma non in tutti, e non nasconde quasi nient'altro:
+\begin{itemize}
+  \item alcune componenti possono aprire connessioni fuori dal proxy: risoluzioni DNS locali, WebRTC, estensioni, programmi esterni aperti dal browser;
+  \item i cookie e le altre forme di memoria del browser collegano le visite di oggi a quelle di ieri, fatte magari senza Tor;
+  \item un sito può raccogliere decine di caratteristiche del browser (dimensioni della finestra, caratteri installati, lingua, fuso orario, dettagli del rendering) e combinarle in un'\textbf{impronta} che distingue un utente tra milioni;
+  \item se tutte le schede usano lo stesso circuito, un tracciatore presente su più siti vede le stesse richieste arrivare dallo stesso exit nello stesso momento.
+\end{itemize}
+Il primo problema mette a rischio l'indirizzo; gli altri il \emph{collegamento} tra attività diverse, che è ciò che Tor promette di impedire.
+
+% ---------------------------------------------------------------------------
+\section{Tor Browser}\label{sec:browser-tb}
+
+Tor Browser è una versione di Firefox ESR, il ramo a supporto esteso di Mozilla, modificata dal Tor Project e distribuita insieme a tor. Il suo progetto è descritto in un documento che, pur non più aggiornato nei dettagli, resta il riferimento per i principi~\cite{perry2018torbrowser}. Distingue due gruppi di requisiti.
+
+\paragraph{Requisiti di sicurezza.} Riguardano l'uso sicuro di Tor, e una loro violazione espone subito l'utente:
+\begin{description}
+  \item[Obbedienza al proxy] nessun contenuto deve aggirare tor;
+  \item[Separazione dello stato] nessuna informazione condivisa con altri browser o con la navigazione senza Tor;
+  \item[Nessuna scrittura su disco] i dati della navigazione non devono essere conservati oltre la sessione senza un'azione esplicita dell'utente; i file scaricati o salvati, i log di sistema e le attività esterne al browser richiedono cautele proprie;
+  \item[Isolamento dell'applicazione] tutto ciò che il browser lascia sul sistema deve poter essere rimosso cancellandolo.
+\end{description}
+
+\paragraph{Requisiti di privacy.} Riguardano il collegamento tra attività diverse, e sono organizzati attorno all'\textbf{origine nella barra degli indirizzi}, cioè il sito che l'utente sta visitando:
+\begin{description}
+  \item[Identificatori] ciò che un terzo (un tracciatore incorporato in più siti) memorizza visitando un sito non deve essere leggibile quando lo stesso terzo compare su un altro sito;
+  \item[Impronte] le caratteristiche del browser non devono permettere di collegare le attività su siti diversi;
+  \item[Lungo periodo] l'utente deve poter cancellare tutto e ottenere una nuova identità con un gesto semplice.
+\end{description}
+Il documento aggiunge un principio di metodo che vale la pena ricordare: le protezioni non devono cambiare il modo in cui l'utente si aspetta che un browser funzioni. Il predecessore di Tor Browser, l'estensione Torbutton, permetteva di attivare e disattivare Tor nello stesso browser, e gli utenti si confondevano tra schede aperte nei due stati: un'interfaccia che induce in errore è un difetto di sicurezza.
+
+\subsection{Un circuito per sito}
+
+L'isolamento per origine arriva fino alla rete. Tor Browser apre gli stream verso la SocksPort indicando nelle credenziali SOCKS il sito della barra degli indirizzi, e tor, che per default isola gli stream con credenziali diverse (\opt{IsolateSOCKSAuth}), li assegna a circuiti diversi. È il meccanismo che abbiamo verificato dal vivo nel Laboratorio~11 (\cref{sec:lab-stem}). Il manuale lo descrive dal punto di vista dell'utente~\cite{tbmanual}: due siti che incorporano lo stesso tracciatore sono serviti da circuiti diversi, mentre tutte le schede dello stesso sito condividono il circuito.
+
+Due comandi agiscono su questo schema:
+\begin{description}
+  \item[Nuovo circuito per questo sito] ricarica il sito su un circuito nuovo, per esempio se l'exit non riesce a raggiungerlo; non cancella nulla e non cambia i circuiti degli altri siti.
+  \item[Nuova identità] chiude tutte le schede, cancella cookie, cronologia e ogni altro stato, e fa usare circuiti nuovi per tutto: è l'attuazione del requisito di lungo periodo.
+\end{description}
+Nessuno dei due cambia il guard, che resta lo stesso per mesi per le ragioni della \cref{sec:guard}.
+
+L'isolamento per sito va inteso come \emph{separazione tra siti}, non come garanzia che ogni sito possieda sempre un solo circuito per tutta la sessione: circuiti vecchi possono scadere o essere sostituiti. Il comando \enquote{Nuovo circuito per questo sito} ricarica la scheda corrente; le altre schede dello stesso sito useranno il nuovo circuito quando saranno ricaricate, mentre le connessioni già in corso non vengono necessariamente interrotte. \enquote{Nuova identità} interrompe anche attività e download in corso; nessuna delle due opzioni è pensata per forzare il cambio del guard, che tor gestisce separatamente.
+
+\subsection{Contro le impronte}
+
+La strategia di Tor Browser contro il fingerprinting non è rendere ogni utente diverso, ma renderli tutti \emph{uguali}: se tutti gli utenti di Tor Browser presentano gli stessi valori, l'impronta distingue soltanto \enquote{un utente di Tor Browser}. Ne derivano scelte visibili: la finestra si apre con dimensioni arrotondate e, quando l'utente la ridimensiona, il contenuto è circondato da margini che ne arrotondano le misure (il \emph{letterboxing}); il fuso orario dichiarato è UTC; molte interfacce che espongono dettagli del sistema sono disattivate o uniformate. È anche la ragione per cui installare estensioni, o modificare impostazioni, è sconsigliato: ogni differenza riduce il gruppo in cui ci si nasconde, lo stesso principio dell'anonimato come insieme del \cref{cap:01-anonimato}.
+
+L'obiettivo è \emph{ridurre le differenze osservabili}, non garantire l'identità perfetta delle impronte. Piattaforma, lingua, livello di sicurezza e altre caratteristiche possono continuare a distinguere gruppi di utenti: la protezione va valutata come riduzione dell'unicità, non come promessa di un'impronta identica per tutti.
+
+\subsection{I livelli di sicurezza}
+
+Molte vulnerabilità dei browser sfruttano JavaScript e le funzioni più complesse. Tor Browser offre tre livelli~\cite{tbmanual}:
+\begin{description}
+  \item[Standard] tutte le funzioni sono attive; è il livello predefinito.
+  \item[Più sicuro] JavaScript è disattivato sui siti senza HTTPS; alcuni caratteri e simboli matematici sono disattivati; audio e video partono solo con un clic.
+  \item[Il più sicuro] JavaScript è disattivato ovunque, e sono limitati anche immagini e altri contenuti: restano utilizzabili i siti statici.
+\end{description}
+La scelta è un compromesso tra sicurezza e usabilità, e ha a sua volta un costo in termini di impronta: il livello scelto è uno dei valori che un sito può dedurre.
+
+\begin{approfondimento}[Build riproducibili]
+Chi scarica Tor Browser deve fidarsi che il programma corrisponda al codice pubblico. Il Tor Project produce build \emph{riproducibili}: chiunque, ricompilando gli stessi sorgenti con lo stesso ambiente, ottiene file identici bit per bit a quelli distribuiti. Il documento di progetto descrive il lavoro necessario per eliminare le fonti di differenza (date, percorsi, ordine dei file negli archivi)~\cite{perry2018torbrowser}. Così un attacco che inserisse codice malevolo nei computer di compilazione verrebbe scoperto da chi confronta i risultati.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Oltre il browser}\label{sec:browser-sistemi}
+
+Tor Browser protegge solo il proprio traffico: le altre applicazioni del computer continuano a usare la rete direttamente, e un errore, o una vulnerabilità sfruttata nel browser, può ancora rivelare l'indirizzo reale. Due sistemi affrontano il problema a livello dell'intero computer, con architetture diverse (\cref{fig:architetture}).
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig23-architetture}
+\caption{Tre modelli di instradamento e isolamento, non garanzie assolute di anonimato. (a) Tor Browser instrada il proprio traffico tramite tor, ma le altre applicazioni dell'host possono collegarsi direttamente. (b) In Tails le regole firewall impediscono normalmente alle applicazioni di aggirare tor; l'\emph{Unsafe Browser}, previsto per i captive portal, è un'eccezione esplicita e non anonima. Tails è un sistema live su USB, normalmente eseguito in RAM, con persistenza opzionale. (c) Whonix separa Workstation e Gateway (tor) in due VM collegate tramite rete virtuale isolata; una compromissione dell'host o dell'hypervisor può comunque vanificarne la protezione.}
+\label{fig:architetture}
+\end{figure}
+
+\subsection{Tails}
+
+Tails è un sistema operativo basato su Debian che si avvia da una chiavetta USB~\cite{tailsabout}. Due proprietà lo caratterizzano:
+\begin{description}
+  \item[Tutto attraverso Tor] le applicazioni che provano a collegarsi a Internet senza passare per tor vengono bloccate.
+  \item[Amnesia] il sistema gira in memoria, non scrive sul disco del computer e dimentica tutto allo spegnimento; ciò che l'utente vuole conservare va in una \emph{memoria persistente} cifrata sulla chiavetta, che è facoltativa.
+\end{description}
+Tails include Tor Browser e altre applicazioni configurate in modo prudente. Il progetto è confluito nel Tor Project nel settembre 2024~\cite{torblogtails}. La sua documentazione è esplicita sui limiti: Tails non protegge da un computer con hardware manomesso, per esempio un registratore di tasti, né da una chiavetta preparata su un computer infetto.
+
+Questa è una proprietà del normale funzionamento di Tails, non una garanzia assoluta che nessun supporto possa mai contenere tracce: l'utente può montare esplicitamente dischi o creare dati persistenti; malware, hardware compromesso e comportamenti esterni al sistema possono inoltre invalidare le ipotesi di sicurezza.
+
+\subsection{Whonix}
+
+Whonix separa le funzioni in due macchine virtuali. Il \textbf{Gateway} esegue tor ed è l'unico collegato alla rete; la \textbf{Workstation} esegue le applicazioni ed è collegata soltanto al Gateway, attraverso una rete interna. Tutto ciò che esce dalla Workstation passa per tor, per costruzione e non per configurazione. Il vantaggio rispetto a Tails è l'isolamento: anche un attacco che prenda il pieno controllo della Workstation, con privilegi di amministratore, non vede l'indirizzo reale, perché la macchina non lo conosce. Il prezzo è che la sicurezza dipende dal software di virtualizzazione, e che non c'è amnesia, a meno di usare Whonix all'interno di sistemi che la forniscono.
+
+La separazione Gateway/Workstation è una barriera importante ma \emph{non una garanzia assoluta} contro una Workstation compromessa. L'avversario può ancora usare dati applicativi per identificare l'utente e, se compromette host, hypervisor o Gateway, può compromettere la protezione della rete. Il firewall e la corretta configurazione dell'ambiente restano essenziali.
+
+\paragraph{La control port filtrata.} Alcune applicazioni della Workstation, compreso Tor Browser per il comando Nuova identità, hanno bisogno della ControlPort di tor, che si trova sul Gateway. Ma il protocollo di controllo (\cref{sec:stem-protocollo}) permette anche di chiedere a tor il suo indirizzo pubblico, con \texttt{GETINFO address}: esattamente ciò che la Workstation non deve sapere. Whonix interpone quindi \emph{onion-grater}, un proxy che lascia passare solo i comandi di una lista consentita~\cite{whonixgrater}. È un esempio chiaro di come una funzione innocua in un contesto diventi una fuga in un altro.
+
+\begin{attenzione}[Nessuno strumento sostituisce le abitudini]
+Tor Browser, Tails e Whonix riducono gli errori tecnici possibili, ma non quelli di comportamento: accedere a un account personale, aprire documenti scaricati fuori dal sistema protetto, raccontare dettagli di sé. Il \cref{cap:28-opsec} è dedicato a questo livello.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item Un browser comune dietro Tor rischia fughe fuori dal proxy e, soprattutto, collegamenti tra attività attraverso stato, impronte e circuiti condivisi.
+  \item Tor Browser è progettato su requisiti espliciti: obbedienza al proxy, niente stato condiviso o su disco, nessun collegamento tra siti diversi, nuova identità a portata di mano.
+  \item L'isolamento per sito passa per le credenziali SOCKS e l'isolamento degli stream di tor.
+  \item Contro le impronte, Tor Browser uniforma molte caratteristiche per rendere più difficile distinguere gli utenti, senza garantire un'impronta perfettamente identica per tutti; i livelli di sicurezza riducono la superficie d'attacco.
+  \item Tails instrada normalmente il traffico attraverso Tor e limita le tracce persistenti, con eccezioni documentate; Whonix separa Workstation e Gateway, ma non protegge da ogni compromissione dell'host o dalle fughe applicative.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:23-identita}
+Che differenza c'è, in termini di circuiti e di stato del browser, tra \enquote{Nuovo circuito per questo sito} e \enquote{Nuova identità}? Perché nessuno dei due cambia il guard?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:23-estensioni}
+Un utente installa in Tor Browser un'estensione per bloccare la pubblicità, convinto di migliorare la propria privacy. Che cosa guadagna e che cosa perde?
+\end{esercizio}
+
+\textbf{Nota metodologica.} Lo script del Laboratorio~11 simula credenziali SOCKS distinte: non avvia tre vere schede di Tor Browser. Con credenziali uguali si può osservare il riuso di un circuito, ma non è garantito in ogni momento; circuiti scaduti o politiche di isolamento aggiuntive possono produrre circuiti diversi.
+
+\begin{esercizio}[2]\label{es:23-isolamento}
+Con la rete di laboratorio e lo script del Laboratorio~11, simula tre schede: due sullo stesso sito e una su un sito diverso, usando come credenziali SOCKS il nome del sito. Verifica con la ControlPort quali stream condividono un circuito.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:23-scelta}
+Per ciascuno di questi casi, indica tra Tor Browser, Tails e Whonix lo strumento più adatto e giustifica la scelta: (a) una persona che consulta siti censurati dal computer di casa; (b) una giornalista che deve lavorare su documenti riservati da computer di terzi; (c) un ricercatore che esegue a lungo programmi diversi che devono tutti usare Tor.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:23-impronta}
+Scegli cinque caratteristiche del browser che un sito può leggere con JavaScript e stima quanti bit di informazione porta ciascuna in un browser comune. Come le uniforma Tor Browser, e quali restano diverse tra gli utenti?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item M.~Perry, E.~Clark, S.~Murdoch, G.~Koppen, \titolo{The Design and Implementation of the Tor Browser}~\cite{perry2018torbrowser}.
+  \item Il manuale di Tor Browser~\cite{tbmanual}.
+  \item La documentazione di Tails~\cite{tailsabout} e la documentazione di Whonix, in particolare la pagina su onion-grater~\cite{whonixgrater}.
+\end{itemize}

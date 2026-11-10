@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa para el EPUB en español.
+\altfig{Circuito Tor del cliente al sitio de destino a través de los repetidores guardia, intermedio y de salida. Los recuadros bajo los repetidores y el sitio indican lo que observan a nivel de red, sin filtraciones de la aplicación: el guardia ve la IP de origen del cliente, la salida conoce el destino y el intermedio no conoce ninguno de los extremos. El sitio ve la IP de salida en lugar de la del cliente; un observador de ambos extremos podría correlacionar el tráfico.}
+% Qué información conoce cada observador a lo largo de un circuito.
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  sa/.style={fill=avviso!15,draw=avviso!60,rounded corners=1pt,minimum height=0.5cm,minimum width=1.5cm},
+  no/.style={fill=torverde!12,draw=torverde!50!black,rounded corners=1pt,minimum height=0.5cm,minimum width=1.5cm}]
+  \node[client,minimum width=1.5cm,minimum height=0.7cm] (c) at (0,0) {cliente};
+  \node[relay,minimum size=0.9cm] (g) at (2.6,0) {guardia};
+  \node[relay,minimum size=0.9cm] (m) at (5.2,0) {intermedio};
+  \node[relay,minimum size=0.9cm,fill=torverde!30] (e) at (7.8,0) {salida};
+  \node[server,minimum width=1.5cm,minimum height=0.7cm] (s) at (10.4,0) {sitio web};
+  \draw[cellaf] (c) -- (g); \draw[cellaf] (g) -- (m); \draw[cellaf] (m) -- (e);
+  \draw[->,thick,torgrigio] (e) -- (s);
+  \node[font=\sffamily\tiny,anchor=east,align=right] at (-1.0,-1.1) {conoce\\al cliente};
+  \node[font=\sffamily\tiny,anchor=east,align=right] at (-1.0,-1.9) {conoce\\el destino};
+  \node[sa] at (2.6,-1.1) {sí};
+  \node[no] at (5.2,-1.1) {no}; \node[no] at (7.8,-1.1) {no}; \node[no] at (10.4,-1.1) {no};
+  \node[no] at (2.6,-1.9) {no}; \node[no] at (5.2,-1.9) {no};
+  \node[sa] at (7.8,-1.9) {sí}; \node[sa] at (10.4,-1.9) {sí};
+  \node[align=center,font=\sffamily\tiny,text=avviso] at (5.2,-2.8) {ningún repetidor Tor conoce ambos extremos:\\quien observa entrada y salida puede correlacionar (cap.\ 26)};
+\end{tikzpicture}

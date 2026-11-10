@@ -1,0 +1,25 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% English EPUB alternative description.
+\altfig{Diagram of an HTTPS connection: content appears in boxes marked as encrypted, while surrounding metadata remains visible in plaintext, including source and destination IP addresses, timing, and packet sizes and frequency.}
+% What HTTPS protects and what an observer can still see.
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  riga/.style={draw,minimum height=0.65cm,align=center},
+  visibile/.style={riga,fill=avviso!12,draw=avviso!60},
+  protetto/.style={riga,fill=torverde!15,draw=torverde!60!black}]
+  \node[client,minimum width=1.6cm] (u) at (0,0) {user};
+  \node[server,minimum width=1.6cm] (s) at (10.6,0) {website};
+  \draw[very thick,torgrigio!50] (u) -- (s);
+  \node[font=\sffamily\scriptsize,text=torgrigio] at (5.3,0.45) {HTTPS};
+  \node[visibile,text width=1.9cm] (a) at (2.5,-1.5) {sender's\\IP address};
+  \node[visibile,text width=1.9cm] (b) at (4.6,-1.5) {website\\IP address};
+  \node[visibile,text width=1.9cm] (c) at (6.7,-1.5) {time and duration};
+  \node[visibile,text width=1.9cm] (d) at (8.8,-1.5) {bytes sent\\and received};
+  \node[protetto,text width=4.2cm] (e) at (3.4,-2.9) {requested page and content};
+  \node[protetto,text width=4.2cm] (f) at (7.9,-2.9) {credentials, message text};
+  \node[text=avviso] at (0.5,-1.5) {\textbf{metadata}};
+  \node[text=avviso,font=\sffamily\tiny] at (0.5,-1.85) {plaintext};
+  \node[text=torverde!45!black] at (0.5,-2.9) {\textbf{content}};
+  \node[text=torverde!45!black,font=\sffamily\tiny] at (0.5,-3.25) {encrypted};
+  \foreach \n in {a,b,c,d} \draw[dotted,avviso!70] (\n.north) -- (\n.north |- u.south);
+\end{tikzpicture}

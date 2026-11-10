@@ -1,0 +1,129 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Capítulo \ref{cap:11-stream}: flujos, SENDME y control de congestión}
+
+\begin{soluzione}{es:11-begin}
+El nombre de host debe escribirse en minúsculas: \texttt{example.com:443} seguido de un byte cero, es decir \texttt{6578616d706c652e636f6d3a343433 00}, y a continuación FLAGS con el bit 1 activado para aceptar IPv6: \texttt{00000001}.
+\end{soluzione}
+
+\begin{soluzione}{es:11-connected}
+La dirección IPv4 \texttt{c0000201} representa 192.0.2.1; el TTL \texttt{0000012c} equivale a 300 segundos. El cliente puede ignorar la dirección. Si la conserva, no debe reutilizarla entre circuitos: la salida podría haber mentido o devuelto una dirección única para reconocer al cliente.
+\end{soluzione}
+
+\begin{soluzione}{es:11-optimistic}
+Sin datos optimistas, el cliente espera \texttt{CONNECTED} antes de enviar la solicitud, lo que cuesta una ida y vuelta adicional de aproximadamente 600\,ms en una operación que necesita al menos dos RTT. Si falla la conexión, los datos en cola deben descartarse porque no existe un destino que los reciba. No deben entregarse mediante otra conexión.
+\end{soluzione}
+
+\begin{soluzione}{es:11-velocita}
+Un flujo puede tener como máximo 500 celdas en tránsito, aproximadamente $500\times498\approx249$\,KB por RTT. Con un RTT de 400\,ms son unos 620\,KB/s. Incluso con muchos flujos, el circuito queda limitado a \num{1000} celdas por RTT, aproximadamente 1,2\,MB/s. Con control de congestión, la ventana empieza en solo 124 celdas (unos 62\,KB), pero crece hasta que las mediciones RTT indican congestión, sin límite superior fijo.
+\end{soluzione}
+
+\begin{soluzione}{es:11-sendme-falso}
+Un cliente malicioso abre muchos flujos hacia un servidor que envía numerosos datos, quizá uno propio, lee muy poco y envía repetidamente mensajes \texttt{SENDME} falsificados. La salida sigue transmitiendo y las celdas se acumulan en las colas de guardia, intermedio y cliente, agotando la memoria de los repetidores. \texttt{SENDME} autenticado exige demostrar que el cliente recibió la celda que provoca el mensaje. Si el contenido fuera predecible, por ejemplo un archivo conocido, el cliente podría calcular el resumen sin recibirlo; los bytes de relleno aleatorios impiden ese atajo.
+\end{soluzione}
+
+\begin{soluzione}{es:11-resolve}
+Esquema: envía \texttt{RESOLVE} con un StreamID nuevo y el nombre terminado en cero; interpreta después \texttt{RESOLVED} como una secuencia de tuplas con tipo, longitud, valor y TTL. Para un nombre inexistente, la salida envía una entrada de error (\texttt{0xF0} o \texttt{0xF1}), cuyo contenido debe ignorarse.
+\end{soluzione}
+
+\begin{soluzione}{es:11-policy}
+La salida responde con \texttt{END}, razón 4 (\texttt{EXITPOLICY}), seguida de la dirección de destino, cuatro bytes para IPv4, y un TTL de cuatro bytes. El cliente puede utilizarlo para no volver a intentar el mismo destino mediante esa salida.
+\end{soluzione}
+
+\begin{soluzione}{es:11-rtt}
+Medimos el tiempo que tarda un \texttt{SENDME} en llegar a la salida, más el tiempo que necesita la salida desbloqueada para enviar celdas adicionales y que estas lleguen al cliente. Cuando la salida espera \texttt{SENDME}, esto aproxima el RTT del circuito observado por el cliente. Una segunda descarga simultánea alarga las colas y aumenta los valores medidos: precisamente la señal utilizada por el control de congestión para reducir su ventana.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:12-directory}: sistema de directorios}
+
+\begin{soluzione}{es:12-validita}
+El intervalo de votación es una hora, desde \texttt{valid-after} hasta \texttt{fresh-until}. El cliente elige un instante aleatorio entre $11{:}00+\tfrac34\cdot60'=11{:}45$ y $11{:}45+\tfrac78\cdot75'\approx12{:}50$. Si a las 13:00 aún no tiene un consenso nuevo, el anterior ha caducado formalmente. No obstante, el cliente continúa utilizándolo mientras se considere \emph{razonablemente vigente}, es decir, durante menos de 24 horas después de caducar, conforme a \file{REASONABLY\_LIVE\_TIME} en \file{networkstatus.c}. Puede seguir construyendo circuitos mientras intenta repetidamente obtener un consenso reciente. Aproximadamente 24 horas después de la caducidad deja de confiar en el antiguo.
+\end{soluzione}
+
+\begin{soluzione}{es:12-flag}
+Probablemente \texttt{Running} y \texttt{Valid}, además de \texttt{Fast}, porque 500\,KB/s supera los 100\,KB/s. Quizá \texttt{V2Dir}, si el repetidor funciona también como caché de directorio. No \texttt{Stable}, \texttt{Guard} ni \texttt{HSDir}, que requieren días o semanas de funcionamiento. Tampoco \texttt{Exit}, porque su política solo permite el puerto 443, mientras que ese indicador exige tráfico de salida tanto por el 80 como por el 443.
+\end{soluzione}
+
+\begin{soluzione}{es:12-partizione}
+La caché entrega a un cliente concreto un consenso de dos horas de antigüedad, todavía válido, que no incluye repetidores añadidos recientemente. Así selecciona rutas de un conjunto ligeramente distinto del utilizado por los demás, lo que podría facilitar reconocer su tráfico. El ataque queda limitado por las tres horas de validez del consenso, por la necesidad de una firma de autoridad legítima (la caché no puede inventar consensos) y por la selección aleatoria de cachés que hacen los clientes. Solicitar microdescriptores mediante su resumen y no mediante la identidad del repetidor impide que la caché entregue a ese cliente una versión diferente de la clave, porque el resumen queda fijado por el consenso firmado.
+\end{soluzione}
+
+\begin{soluzione}{es:12-mediana}
+Con tres mediciones, la mediana es 5200. Una medición inflada no la altera. Si la tercera autoridad fuera la única que midiera ese repetidor, no habría tres mediciones suficientes para utilizar su mediana. El consenso utilizaría entonces el ancho de banda anunciado o votado, con \texttt{Unmeasured=1} y un límite superior, de modo que la medición exagerada no influiría en el resultado.
+\end{soluzione}
+
+\begin{soluzione}{es:12-voti}
+El voto contiene líneas ausentes o diferentes en el consenso. Entre ellas figuran evaluaciones de ancho de banda \texttt{Measured} de las autoridades que lo miden, líneas \texttt{m} que identifican métodos de consenso admitidos, indicadores asignados por cada autoridad, sus \texttt{flag-thresholds} y compromisos con la aleatoriedad compartida. El consenso conserva únicamente los resultados combinados.
+\end{soluzione}
+
+\begin{soluzione}{es:12-md}
+Calcula el hash del texto que comienza en la línea \texttt{onion-key} del microdescriptor y termina en el salto de línea anterior al siguiente microdescriptor, o al final del documento, incluidas las líneas de la clave RSA codificada en PEM. El resumen SHA-256 en base64, sin caracteres \texttt{=} finales, debe coincidir con la línea \texttt{m} del consenso.
+\end{soluzione}
+
+\begin{soluzione}{es:12-autorita}
+Con una autoridad detenida, las otras dos siguen votando y producen un consenso con dos firmas, suficientes para la mayoría $\lfloor3/2\rfloor+1=2$. Con dos detenidas, la única superviviente no alcanza la mayoría y no se produce otro consenso. Aun así, el cliente puede seguir utilizando el último como \emph{razonablemente vigente} durante unas 24 horas después de su caducidad. En la red de laboratorio un consenso solo dura 40 segundos, pero ese margen de 24 horas sigue vigente, así que la interrupción no resulta visible inmediatamente.
+\end{soluzione}
+
+\begin{soluzione}{es:12-ns}
+Un consenso \texttt{ns} normalmente lleva firmas SHA-1; la especificación solo permite ese algoritmo para esa variante. Su línea \texttt{r} contiene además el resumen del descriptor completo de cada repetidor y cada entrada tiene también una línea \texttt{p} que resume su política de salida.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:13-percorso}: selección de rutas}
+
+\begin{soluzione}{es:13-ordine}
+La salida tiene las condiciones más estrictas: debe aceptar el destino solicitado. Elegirla primero garantiza que existe una salida adecuada. Elegir primero el guardia podría eliminar la única salida válida por restricciones de familia o red y obligar a repetir la selección. También existe una razón estadística: las exclusiones afectan a las posiciones siguientes y, por tanto, deberían recaer sobre las que ofrecen el conjunto más amplio de candidatos.
+\end{soluzione}
+
+\begin{soluzione}{es:13-peso}
+Como guardia: $20000\times0/10000=0$ (\texttt{Wgd=0}). Como intermedio: $20000\times0=0$ (\texttt{Wmd=0}). Como salida: $20000\times10000/10000=20000$ (\texttt{Wed=10000}). Con los pesos de este consenso, el repetidor se utiliza exclusivamente como salida.
+\end{soluzione}
+
+\begin{soluzione}{es:13-guard}
+Sin guardias persistentes, la probabilidad de compromiso supera el 50\% cuando $1-(1-c^2)^C>0.5$, es decir, $C>\ln0.5/\ln(1-c^2)$: aproximadamente \num{6932} circuitos con $c=1\%$ y 17 con $c=20\%$. Con un guardia fijo, la probabilidad permanece cerca de $c$, es decir, 1\% y 20\%, respectivamente. Los guardias son insuficientes frente a un adversario muy poderoso, pero la diferencia sigue siendo considerable.
+\end{soluzione}
+
+\begin{soluzione}{es:13-sybil}
+El adversario debe aportar ancho de banda real: las probabilidades de selección dependen del que miden las autoridades, no únicamente de valores anunciados. Las salidas también se vigilan estrechamente, entre otros mecanismos mediante \texttt{BadExit}. El límite de dos repetidores por dirección obliga a conseguir numerosas direcciones. Declarar una familia impide que sus nodos aparezcan dos veces en un mismo circuito; no declararla aumenta el riesgo de que las autoridades los descubran y excluyan. Finalmente, los pesos reservan la capacidad de salida escasa para salidas auténticas, donde cuenta el ancho de banda del adversario.
+\end{soluzione}
+
+\begin{soluzione}{es:13-campione}
+Sin límite de muestra, un adversario que controle la red local del cliente podría bloquear las conexiones con todos los guardias honestos. El cliente probaría otros guardias indefinidamente hasta encontrar uno accesible, acabando por elegir uno adversario. Con una muestra limitada, agota sus intentos y deja de añadir guardias, con el posible coste de perder conectividad en lugar de seleccionar automáticamente uno controlado por el atacante.
+\end{soluzione}
+
+\begin{soluzione}{es:13-famiglie}
+Es un ejercicio práctico. Descarga los microdescriptores de CollecTor junto con los consensos correspondientes. Para cada repetidor, construye el conjunto de identificadores de familia mediante \texttt{family-ids} o listas \texttt{family} recíprocas, y rechaza un candidato que comparta familia con un repetidor ya seleccionado.
+\end{soluzione}
+
+\begin{soluzione}{es:13-operatori}
+Es un ejercicio de investigación. Las familias grandes suelen representar una cuota de probabilidad de selección de salida mucho mayor que cualquier repetidor individual. El riesgo efectivo de concentración depende, por tanto, de los operadores, no solo del número de repetidores. Esto explica la preocupación de la comunidad por la diversidad de operadores y las familias no declaradas (\cref{cap:27-casi-rete}).
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:14-onion-services}: servicios onion v3}
+
+\begin{soluzione}{es:14-indirizzo}
+$32+2+1=35$ bytes, es decir, 280 bits. Base32 codifica cinco bits por carácter, por lo que se requieren $280/5=56$ caracteres sin relleno. Un error de escritura aleatorio tiene una probabilidad aproximada de $2^{-16}$ de coincidir por casualidad con la suma de comprobación. El byte de versión también debe seguir siendo \texttt{0x03}, lo que reduce aún más la probabilidad de un error aleatorio no detectado.
+\end{soluzione}
+
+\begin{soluzione}{es:14-periodo}
+A las 09:00 UTC del 1 de enero de 2026 han transcurrido \num{29454300} minutos desde la época Unix. Si restamos el desplazamiento de 720 minutos quedan \num{29453580}, así que $\lfloor29453580/1440\rfloor=20453$. El período \num{20453} comenzó a las 12:00 UTC del 31 de diciembre de 2025, porque las 09:00 todavía son anteriores al mediodía.
+\end{soluzione}
+
+\begin{soluzione}{es:14-hsdir}
+El adversario necesita la clave cegada del período y, por tanto, conocer la dirección del servicio; además, el SRV del período y las posiciones de sus propios repetidores en el anillo. Utilizaría esos valores para generar identidades de repetidor situadas inmediatamente después de los índices del servicio. El SRV solo se conoce cuando las autoridades lo publican, aproximadamente medio día antes de que comience el período correspondiente. El adversario no puede preparar con varios días de anticipación repetidores posicionados con precisión, y los nuevos nodos aún necesitan obtener el indicador \texttt{HSDir}, que exige al menos 96 horas de funcionamiento.
+\end{soluzione}
+
+\begin{soluzione}{es:14-ruoli}
+Un HSDir ve una clave cegada, no la dirección del servicio, y recibe solicitudes mediante circuitos anónimos. Un punto de introducción ve una clave de autenticación y un circuito procedente del servicio y puede contar solicitudes de introducción. Un punto de encuentro ve una cookie, dos circuitos y tráfico cifrado que circula entre ambos. El punto de introducción resulta especialmente útil para estimar popularidad porque observa cada intento de conexión, aunque no conozca la dirección correspondiente. Sin embargo, quien ya conozca la dirección podría descargar el descriptor y establecer esa correspondencia.
+\end{soluzione}
+
+\begin{soluzione}{es:14-anonimo}
+En un circuito de un salto, el HSDir es el primer repetidor y conoce la IP del cliente. Podría relacionar \emph{quién} está buscando \emph{qué} servicio, al menos por la clave cegada y por la dirección si ya la conoce. Rechazar solicitudes no anónimas obliga a los clientes a obtener descriptores mediante otros repetidores.
+\end{soluzione}
+
+\begin{soluzione}{es:14-anello}
+Es un ejercicio práctico. Con más de $2\times4$ HSDir, el servicio deja de cargar su descriptor en todos. Solicitarlo a cada HSDir mediante un circuito de tres saltos debería encontrarlo exactamente en los nodos calculados para el período actual o el siguiente, ya que el servicio publica descriptores correspondientes a ambos.
+\end{soluzione}
+
+\begin{soluzione}{es:14-ipt}
+El valor base64 contiene un contador de especificadores de enlace, seguido de los especificadores en formato \texttt{EXTEND2} (\cref{sec:extend2}). Por ejemplo, el tipo \texttt{00} proporciona dirección y ORPort, el tipo \texttt{02} una huella RSA y el tipo \texttt{03} una identidad Ed25519. Identifica el repetidor por su ORPort, igual a 5100 más el número de nodo. La línea \texttt{auth-key} contiene un certificado de tipo 9, firmado por la clave de firma del descriptor, que certifica la clave de autenticación del servicio en ese punto de introducción.
+\end{soluzione}

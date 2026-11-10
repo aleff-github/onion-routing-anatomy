@@ -1,0 +1,181 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{发布洋葱服务}\label{cap:21-onion-pratica}
+\aggiornatoal{2026 年 9 月 23 日}{tor 0.4.9.13；Onionbalance 文档}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 配置洋葱服务并保护它的密钥；
+  \item 避免泄露服务器真实位置的配置错误；
+  \item 通过 Onion-Location 向普通网站的访问者提供 \texttt{.onion} 版本；
+  \item 通过受限发现机制将访问权限限制给获得授权的客户端（实验~13）；
+  \item 评估个性化地址、单跳洋葱服务及 Onionbalance 负载均衡机制。
+\end{itemize}
+\end{obiettivi}
+
+\Cref{cap:14-onion-services} 已经解释了洋葱服务的工作原理。本章将介绍对应的实践操作：发布一个服务，避免可能破坏匿名性的常见错误，并根据实际运维需求选择适当工具。
+
+% ---------------------------------------------------------------------------
+\section{第一个洋葱服务}\label{sec:onionp-primo}
+
+只需在 \file{torrc} 中添加两行：
+\begin{lstlisting}[language=torrc]
+HiddenServiceDir /var/lib/tor/my_service/
+HiddenServicePort 80 127.0.0.1:8080
+\end{lstlisting}
+\opt{HiddenServiceDir} 路径必须允许 tor 进程读写；在本书实验中，它是 Chutney \emph{容器内部}的路径。这个入门示例配置\emph{公开}的洋葱服务，不需要 \file{alice.auth} 文件。客户端授权及其 \file{authorized\_clients/*.auth} 文件将在本章后文单独介绍。
+第一行指定 tor 存储服务密钥的目录。第二行将其 \texttt{.onion} 地址的\emph{虚拟}端口 80 映射到本地服务器的端口 8080。当 tor 重启时，会在该目录内创建以下文件：
+\begin{description}
+  \item[\file{hostname}] \texttt{.onion} 地址（\cref{sec:os-indirizzo}）。
+  \item[\file{hs\_ed25519\_public\_key}、\file{hs\_ed25519\_secret\_key}] 服务的身份密钥对。\textbf{谁拥有私钥，谁就控制这个地址}：可以发布描述符，并冒充服务。因此应像保护证书私钥一样保护它，并妥善备份。如果丢失私钥，原地址就无法恢复。
+\end{description}
+只有运行 tor 的用户才能访问该目录，否则 tor 会拒绝使用它。一个 tor 进程可以托管多个服务，每个服务使用自己的目录。在实验中，我们通过再添加两行配置，为 \texttt{test009h} 创建了第二个服务。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图21-服务}
+\caption{配置公开的 v3 洋葱服务只需 \opt{HiddenServiceDir} 与 \opt{HiddenServicePort} 两条指令。tor 在服务目录生成 \file{hostname} 和 Ed25519 身份密钥；地址由公钥、校验和及版本字节编码成 56 个 base32 字符（图中使用占位符）。虚拟端口 80 转发到 \texttt{127.0.0.1:8080}。私钥泄露可导致服务被冒用；本例无需 \file{alice.auth}。}
+\label{fig:servizio}
+\end{figure}
+
+\subsection{避免泄露服务器位置}
+
+协议虽然会隐藏服务器地址，但配置不当仍然可能泄露它。常见错误包括：
+\begin{itemize}
+  \item \textbf{同时允许从外网直接访问服务。} 如果 Web 服务器监听所有网络接口，而不只是 \texttt{127.0.0.1}，扫描互联网的人就可能发现它，并把页面内容与洋葱服务进行比较。应让服务器仅绑定到 localhost；更理想的做法是使用 Unix 套接字（\texttt{HiddenServicePort 80 unix:/path/socket}）。
+  \item \textbf{在响应中泄露细节。} 错误页面可能包含服务器名称，HTTP 头可能列出内部地址，TLS 证书可能对应某个公开域名，或者 Web 服务器的状态页面可能未经保护。
+  \item \textbf{使用外部资源。} 如果页面从普通网站加载图片或脚本，这些请求就会离开洋葱服务。在 Tor Browser 中，访问仍经过 Tor，因此不会直接泄露访客 IP，但这些外部请求不再享有洋葱地址提供的端到端身份认证与保护；出口中继可以观察连接元数据以及未加密的 HTTP 内容，但 HTTPS 仍能保护应用数据。服务器端应用若主动联系外部服务以获取更新或发送分析数据，则可能暴露服务器自身的地址。
+  \item \textbf{时钟与时间特征。} 如果服务器显示与某个时区对应的本地时间，或者总在某台已知公开服务器维护时不可用，就可能留下可供关联的线索。
+\end{itemize}
+在 \cref{cap:28-opsec} 中，我们将研究这些错误曾如何帮助调查人员定位真实服务。
+
+% ---------------------------------------------------------------------------
+\section{Onion-Location}\label{sec:onionp-location}
+
+许多公开网站，包括大型新闻机构、社交平台和 Tor Project，都提供 \texttt{.onion} 版本。普通网站可以通过以下 HTTP 响应头向使用 Tor Browser 的访客介绍这一版本：
+\begin{lstlisting}[numbers=none]
+Onion-Location: http://<address>.onion/path
+\end{lstlisting}
+也可以在网页中使用等效的 \texttt{meta} 元素。Tor Browser 随后会在地址栏显示按钮，供用户切换到洋葱版本。这样，访客不再经过出口中继，并且可以通过地址本身验证服务的身份；网站收到的 Tor 流量也无须经过有时会被封锁或受到额外审查的出口中继。
+
+% ---------------------------------------------------------------------------
+\section{受限发现}\label{sec:onionp-ristretta}
+
+某些个人服务，例如连接家用服务器的 SSH 或管理面板，不一定需要向所有知道地址的人开放。受限发现（\cref{sec:os-ristretta}）会加密描述符的第二层，使只有获得授权的客户端才能解密。其配置采用 X25519 密钥对~\cite{torspec}：
+\begin{description}
+  \item[服务端] 在服务的 \file{authorized\_clients/} 目录中为每位客户端放置一个 \file{.auth} 文件。文件内只有一行：\texttt{descriptor:\allowbreak x25519:}，后接客户端经过 base32 编码的公钥。
+  \item[客户端] \opt{ClientOnionAuthDir} 指定的目录中，为每个服务保存一个 \file{.auth\_private} 文件。内容由不带 \texttt{.onion} 后缀的地址、\texttt{:\allowbreak descriptor:\allowbreak x25519:} 和客户端经过 base32 编码的私钥组成。
+\end{description}
+Tor Browser 允许用户在访问需要授权的服务时输入私钥。
+
+\textbf{实验安全提示：}自动脚本 \file{labs/zh-Hans/实验室/restricted\_discovery.py} 在开始清理时会删除已有的 \file{restricted\_service/} 与 \file{onion\_auth/} 目录。只能在专用、可丢弃的 Chutney 私有网络中运行，并事先确认目录中没有需要保留的数据。\emph{不要对真实洋葱服务执行此脚本}。手动操作时应先写入授权文件，再重新加载相关节点。
+
+\begin{laboratorio}[13]{具有受限发现功能的洋葱服务}
+\textbf{目标。}在 \texttt{test009h} 上配置第二个洋葱服务，使其只允许持有授权密钥的客户端访问，并分别测试有密钥和无密钥的连接。\\
+\textbf{前置条件。}实验网络已经运行；本地有一台 Web 服务器监听 8080 端口。\\
+\textbf{预计时间。}1 小时。
+\end{laboratorio}
+
+\paragraph{步骤 1：生成客户端密钥对。}使用 \texttt{cryptography} 库：
+以下代码是能够独立运行的 Python 示例，会输出用于服务端的公钥授权行。私钥 \texttt{priv} 必须单独安全保存，以便随后创建 \file{.auth\_private}；不要将其泄露给他人。
+\begin{lstlisting}[language=Python]
+import base64
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives.serialization import (
+    Encoding, PrivateFormat, PublicFormat, NoEncryption
+)
+
+sk = X25519PrivateKey.generate()
+priv = sk.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
+pub = sk.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+b32 = lambda b: base64.b32encode(b).decode().rstrip("=")
+print("descriptor:x25519:" + b32(pub))
+\end{lstlisting}
+base32 字符串必须去掉末尾用作填充的 \texttt{=} 字符。
+此代码只打印公钥授权行，\emph{不会保存}私钥。如果作为独立脚本运行，进程结束后就会丢失 \texttt{priv}。手动操作时必须在进程退出前以严格权限安全保存私钥，或者使用随附的自动化实验脚本，由它生成客户端授权文件并在实验结束后清除临时密钥。不要把手动和自动化步骤混合运行。
+
+\paragraph{步骤 2：配置服务。}创建文件 \file{restricted\_service/authorized\_clients/alice.auth}，写入客户端公钥。在 \texttt{test009h} 的 \file{torrc} 中添加：
+\begin{lstlisting}[language=torrc,numbers=none]
+HiddenServiceDir /lab/net/nodes/009h/restricted_service
+HiddenServicePort 80 127.0.0.1:8080
+\end{lstlisting}
+然后发送 \texttt{HUP} 信号。tor 将生成服务地址并发布描述符。这里的 \file{/lab/} 是容器内挂载的实验目录。
+
+下面的命令从 tor 创建服务时一并生成的 \file{hostname} 文件中读取真实洋葱地址：每个网络都有自己的地址。下面的 SOCKS 错误和客户端日志来自此前的一次参考会话，可能有所不同。
+
+\paragraph{步骤 3：不提供密钥。}在网络客户端上执行：
+\begin{lstlisting}[numbers=none]
+$ ONION_ADDR=$(cat labs/zh-Hans/实验室/net/nodes/009h/restricted_service/hostname)
+$ curl --noproxy "" --socks5-hostname 127.0.0.1:9008 \
+    "http://${ONION_ADDR}/index.html"
+(curl: SOCKS proxy error 97)
+\end{lstlisting}
+客户端日志报告：
+\begin{lstlisting}[numbers=none]
+[notice] Fail to decrypt descriptor for requested onion address.
+         It is likely requiring client authorization.
+\end{lstlisting}
+客户端已找到并下载描述符，却无法解密第二层。它甚至不知道引介点在哪里，因此无法尝试建立连接。
+
+\begin{attenzione}[空目录可能使服务无法访问]
+如果 \file{authorized\_clients/} 存在但其中没有任何文件，服务仍会继续发布描述符，但 HSDir 会拒绝它：
+\begin{lstlisting}[numbers=none]
+[warn] Uploading hidden service descriptor: http status 400 ("Invalid HS
+       descriptor. Rejected.") response from dirserver 127.0.0.1:5106.
+\end{lstlisting}
+相关规范要求，描述符经过二次加密的层中至少要有一条 \texttt{auth-client} 记录~\spec{rend-spec}{Hidden service descriptors: encryption format}。实验中启用了受限发现，却没有授权客户端，因此没有生成这一记录，导致描述符无效。这是在撤销最后一个客户端的访问权限，或者先建目录、后放入密钥时可能遇到的运维陷阱。实验脚本若意外中断，也可能留下不完整的测试配置。
+\end{attenzione}
+
+\paragraph{步骤 4：提供密钥。}在 \opt{ClientOnionAuthDir} 指定的目录中写入 \file{.auth\_private} 文件，重新加载客户端配置，然后再次请求网页。这次页面成功送达。\file{labs/zh-Hans/实验室/restricted\_discovery.py} 会自动执行实验、清理临时内容并恢复 \file{torrc}。
+
+% ---------------------------------------------------------------------------
+\section{其他运维需求}\label{sec:onionp-altre}
+
+\subsection{个性化地址}
+
+以可识别单词开头的地址，可以帮助用户记忆。使用 \emph{mkp224o} 等专用程序不断生成随机密钥，直到地址具有所需前缀。base32 前缀每增加一个字符，期望尝试次数就乘以 32。普通计算机可能在合理时间内找到六到七个字符的前缀，但再增加一个字符，计算成本就会增加数十倍。如 \cref{sec:os-indirizzo} 所述，攻击者也可以生成具有相同前缀的地址。因此，前缀有助于识别，却不能用来认证服务。第三方程序生成的密钥，也必须像任何其他秘密密钥一样谨慎保护。
+
+\subsection{单跳服务}
+
+某些不需要隐藏服务器位置的公开网站，例如知名报纸的洋葱版本，可以牺牲服务端匿名性来换取速度。启用 \opt{HiddenServiceSingleHopMode} 和 \opt{HiddenServiceNonAnonymousMode} 后，服务会通过单跳电路连接引介点和汇合点。客户端仍然像平常一样保持匿名。发布描述符仍使用三跳电路：正如我们在 \cref{sec:lab-onion} 中发现的，HSDir 会拒绝直接请求，tor 手册也明确提到了这一点。选项名称中的 \enquote{NonAnonymous} 并非偶然：以此模式运行的 tor 实例不能同时用作匿名客户端。而且，这一选择很难逆转。一旦服务以非匿名模式运行过，它的 IP 地址就可能与 \texttt{.onion} 地址建立关联。简单地关闭选项并不会恢复匿名性。要重新获得匿名性，必须创建使用新密钥、新 \opt{HiddenServiceDir} 和新地址的服务，并使用干净的新实例。
+
+\subsection{Onionbalance}
+
+单个 tor 进程既可能成为性能瓶颈，也可能形成单点故障。Onionbalance~\cite{onionbalance} 允许多个服务器共用一个公开地址。每台服务器运行自己的洋葱服务，并拥有自己的引介点。Onionbalance 持有主地址的密钥，发布汇集所有服务器引介点的描述符。客户端在无感知的情况下被分配到不同服务器。Tor Project 自己的网站也使用 Onionbalance。
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item 洋葱服务只需要两行配置。其私钥\emph{控制}服务地址，必须得到保护并安全备份。
+  \item 服务器应只监听 localhost 或 Unix 套接字，而且不应通过响应或外部连接泄露自身信息。
+  \item Onion-Location 向 Tor Browser 访问者告知网站的洋葱版本。
+  \item 受限发现使用 X25519 密钥；没有授权的客户端甚至无法解密描述符。
+  \item 个性化地址、单跳服务和 Onionbalance 分别针对易识别性、速度和可扩展性。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:21-vanity}
+平均需要尝试多少次，才能生成具有六字符 base32 前缀的地址？八字符前缀呢？如果一台计算机每秒尝试一千万组密钥，分别需要多长时间？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:21-fuga}
+某洋葱服务在错误页面显示 \texttt{Apache/2.4.62 (Debian) Server at 192.0.2.10 Port 80}。这会泄露哪些信息？应如何避免？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:21-revoca}
+在实验~13 中，你会如何撤销 Alice 的访问权限？已经下载描述符的客户端会受到什么影响？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:21-socket}
+修改实验服务，让连接被转发到 Unix 套接字，而不是本地 TCP 端口。除了避免暴露端口之外，这还有哪些好处？
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item tor 手册中的 \opt{HiddenServiceDir}、\opt{HiddenServicePort} 和客户端授权相关条目。
+  \item Tor Project 关于洋葱服务和 Onionbalance 的文档~\cite{onionbalance}。
+\end{itemize}

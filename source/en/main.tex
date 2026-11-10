@@ -1,0 +1,36 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% English edition: PDF entry point.
+\documentclass[11pt,openright,twoside]{book}
+\input{preamble}
+\input{macros}
+\input{rights}
+\hypersetup{pdftitle={Anatomy of Tor}, pdfsubject={The Anonymity Protocol, Byte by Byte},
+  pdfauthor={Alessandro Greco}, pdflang={en-GB}}
+\title{Anatomy of Tor\\[0.5em]\large The Anonymity Protocol, Byte by Byte}
+\author{Alessandro Greco}
+\date{First edition --- version 1.0.0}
+% A listing right after a run-in heading (\paragraph) started on the heading's line: the
+% top rule of its frame began after the heading and ran off the page. Here the heading
+% keeps a line of its own (the same fix as in source/it/main.tex).
+\makeatletter
+\AddToHook{env/lstlisting/before}{\if@noskipsec\leavevmode\par\fi}
+\makeatother
+
+\begin{document}
+\frontmatter
+\maketitle
+% Colophon on the verso of the title page.
+\thispagestyle{empty}
+\null\vfill
+\Colophon
+\clearpage
+\tableofcontents
+\include{chapters/00-preface}
+
+\mainmatter
+\input{structure}
+\backmatter
+\printbibliography[heading=bibintoc,title={Bibliography}]
+\printindex
+\end{document}

@@ -1,0 +1,156 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Medir la red: Tor Metrics y OONI}\label{cap:24-metrics}
+\aggiornatoal{23 de septiembre de 2026}{datos de Tor Metrics hasta el 20 de septiembre de 2026; consenso del 23 de septiembre de 2026 a las 15:00; especificaciones OONI ts-023 y ts-030}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item describir los datos que publica el Tor Project y su procedencia;
+  \item explicar cómo se estima el número de usuarios en una red diseñada para no conocerlos y cuál es la incertidumbre de esas estimaciones;
+  \item extraer estadísticas de un consenso real (laboratorio~15);
+  \item explicar cómo mide OONI el bloqueo de Tor desde el punto de vista de los usuarios.
+\end{itemize}
+\end{obiettivi}
+
+Una red de anonimato plantea un problema peculiar a sus operadores: mejorarla requiere medirla, pero medir implica recopilar información precisamente sobre aquello que debe proteger. El enfoque del Tor Project consiste en medir con moderación, agregar y publicar resultados y documentar cada paso para que cualquier persona pueda reproducir los cálculos~\cite{metricsreproducible}. En este capítulo seguiremos el recorrido de los datos desde su origen hasta los gráficos y después observaremos la red desde fuera mediante las mediciones de OONI.
+
+% ---------------------------------------------------------------------------
+\section{Fuentes de datos}\label{sec:metrics-fonti}
+
+Casi todo lo que se conoce públicamente sobre la red Tor procede de documentos ya estudiados:
+\begin{description}
+  \item[Consensos y descriptores] (\cref{cap:12-directory}): lista de repetidores, indicadores, pesos de ancho de banda, versiones y políticas de salida.
+  \item[Descriptores extra-info] Publicados por cada repetidor junto con su descriptor, contienen recuentos históricos de bytes transferidos y estadísticas agregadas, entre ellas el número de solicitudes de directorio por país.
+  \item[Mediciones activas] OnionPerf descarga periódicamente archivos a través de Tor desde distintas ubicaciones mundiales y registra tiempos de transferencia y fallos.
+\end{description}
+
+\textbf{CollecTor} archiva estos documentos desde los primeros años de la red y permite descargarlos. \textbf{Tor Metrics} genera gráficos y tablas a partir de ellos, acompañados de datos CSV descargables y métodos documentados. \textbf{Relay Search} facilita consultas sobre repetidores concretos. El consenso empleado en los laboratorios del libro (\file{fonti/collector}) procede de CollecTor.
+
+% ---------------------------------------------------------------------------
+\section{Contar usuarios anónimos}\label{sec:metrics-utenti}
+
+Tor no registra usuarios y ningún repetidor puede saber si dos conexiones pertenecen a la misma persona. ¿Cómo puede, entonces, estimar la red que tiene unos tres millones de usuarios? El método es indirecto (\cref{fig:stima}). Cada cliente descarga periódicamente un consenso y las solicitudes al directorio pueden contarse sin identificar al solicitante. Los repetidores que prestan el servicio de directorio cuentan las solicitudes correctas cada día, agrupadas por país deducido de la dirección de origen. Publican los totales agregados en descriptores extra-info, redondeando los recuentos por país al múltiplo de ocho superior para que las cifras pequeñas y exactas revelen menos información~\spec{dir-spec}{Extra-info document format}.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig24-estimacion}
+\caption{De solicitudes correctas de directorio a una estimación indirecta de \emph{clientes conectados de media}, no de personas distintas. Los repetidores que sirven directorios y los puentes producen series agregadas separadas en descriptores extra-info; los recuentos por país de \texttt{dirreq-v3-reqs} se redondean al múltiplo de 8 superior. CollecTor archiva los documentos. Tor Metrics corrige el redondeo restando 4 a los valores válidos, estima la fracción de cobertura $\mathit{frac}$ y aplica $\lfloor r(R)/(\mathit{frac}\cdot10)\rfloor$. El divisor 10 supone una media de solicitudes por cliente y día; se excluyen las fechas con $\mathit{frac}<10\%$ o $\mathit{frac}>110\%$.}
+\label{fig:stima}
+\end{figure}
+
+Tor Metrics recopila esas cifras y aplica tres pasos~\cite{metricsreproducible}:
+\begin{enumerate}
+  \item Compensa el redondeo restando la mitad del intervalo de redondeo a cada valor.
+  \item Estima la \textbf{fracción}, $\mathit{frac}$, de solicitudes de directorio de toda la red cubiertas por los repetidores que aportan datos, teniendo en cuenta cuánto tiempo estuvieron operativos y cuánto tráfico de directorio atendieron.
+  \item Divide las solicitudes registradas por esa fracción para estimar el total de la red y después lo divide entre diez:
+\[ r(N) = \left\lfloor \frac{r(R)}{\mathit{frac} \cdot 10} \right\rfloor. \]
+\end{enumerate}
+
+El divisor diez es una suposición. Un cliente que permanece conectado continuamente hace aproximadamente quince solicitudes diarias, pero muchos solo están en línea parte del día, y el Tor Project eligió diez como media. Se descartan las estimaciones con una fracción de cobertura inferior al 10\,\% o superior al 110\,\%.
+
+\begin{attenzione}[Qué significa \enquote{usuarios}]
+El resultado estima el número medio de \emph{clientes conectados}, no de personas individuales. Un cliente conectado dos horas diarias suele generar menos solicitudes que uno activo las veinticuatro horas, pero la proporción no es fija; varios programas que ejecutan Tor en un equipo cuentan como varios clientes. Los cambios de comportamiento del software, como descargar consensos con menor frecuencia, modifican la estimación aunque el número de personas permanezca constante. Los gráficos son especialmente útiles para interpretar \emph{cambios}, no cifras absolutas.
+\end{attenzione}
+
+\paragraph{Las cifras en la fecha de referencia del libro.} Entre el 1 de agosto y el 20 de septiembre de 2026, los usuarios diarios estimados con conexión directa oscilaron entre 2,8 y 3,5 millones, con fracciones de cobertura del 57\,\% al 73\,\%. La media italiana fue de unos \num{60000}, pero los resultados diarios presentan intervalos esperados muy amplios: el 20 de septiembre, por ejemplo, entre unos \num{34000} y \num{111000}. Cambios dentro de intervalos de esta amplitud no demuestran por sí solos que haya ocurrido un acontecimiento. Ese mismo día, las estimaciones de usuarios de puentes eran de aproximadamente \num{98000} para obfs4, \num{60000} para Snowflake y \num{35000} para WebTunnel.
+
+\subsection{Detectar la censura}
+
+Metrics utiliza las mismas series temporales para señalar posibles episodios de censura. En países con cantidades significativas de usuarios, compara el cambio semanal de cada país con las variaciones habituales en los demás y destaca las fechas en que una cifra queda fuera del intervalo esperado~\cite{metricsreproducible}. Una caída repentina de usuarios directos acompañada de un aumento de usuarios de puentes es una señal característica de bloqueo. Es un indicio, no una demostración. Para confirmarlo se necesitan mediciones dentro del país, tarea de OONI.
+
+% ---------------------------------------------------------------------------
+\section{Rendimiento}\label{sec:metrics-prestazioni}
+
+OnionPerf mide, desde ubicaciones fijas, el tiempo necesario para descargar archivos de diversos tamaños mediante Tor, los fallos y la latencia de los circuitos: el intervalo entre enviar una solicitud HTTP y recibir las cabeceras de respuesta~\cite{metricsreproducible}. El 20 de septiembre de 2026, la latencia mediana hacia un servidor público era de unos 110--140\,ms desde el punto de medición alemán, 280\,ms desde el estadounidense y más de 500\,ms desde Hong Kong. Importa la distancia geográfica respecto a la concentración principal de la red, en Europa y Norteamérica. Algunos puntos de medición emplean Conflux, el sistema de rutas múltiples de \cref{cap:31-futuro}, lo que permite comparar situaciones similares.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: leer un consenso real}\label{sec:lab-metrics}
+
+\begin{laboratorio}[15]{Obtener estadísticas de red a partir de un consenso}
+\textbf{Objetivo.} Extraer las estadísticas principales de la red de un consenso real de CollecTor mediante un módulo nuevo, \file{labs/es/codigo/torlab/metrics.py}.\\
+\textbf{Requisitos previos.} Laboratorio~6 (\file{directory.py}) y laboratorio~7 (\file{path\_selection.py}); no se necesita una red en ejecución.\\
+\textbf{Tiempo estimado.} 1 hora.
+\end{laboratorio}
+
+El módulo añade una función \texttt{summary} que reutiliza el analizador del consenso del laboratorio~6 y las dos funciones de estimación de usuarios. También ordena los recuentos por nombre cuando los valores coinciden. Sin esta precaución, su orden cambiaría entre ejecuciones debido al orden de iteración de los conjuntos de Python. Para el consenso histórico del 23 de septiembre de 2026 a las 15:00, primero prepara los datos desde la raíz del repositorio con \texttt{make -C labs/es data} (se requiere conexión a Internet para descargarlos). Aplicado a ese consenso (salida abreviada):
+\begin{lstlisting}[language=bash,numbers=none]
+$ PYTHONPATH=labs/es/codigo python3 -m torlab.metrics labs/es/datos/collector/consensus-microdesc-2026-09-23-15
+relay: 9358
+flag: {'Running': 9358, 'Valid': 9358, 'Fast': 8961, 'Stable': 8199,
+       'V2Dir': 7674, 'Guard': 5306, 'HSDir': 4050, 'Exit': 3177,
+       'BadExit': 32, 'MiddleOnly': 28, 'StaleDesc': 21, 'Authority': 10}
+total_bandwidth: 198927900
+exit_bandwidth_share: 0.3308947161257923
+guard_bandwidth_share: 0.7010271560701139
+versions: [('Tor 0.4.9.12', 6027), ('Tor 0.4.9.11', 2520), ...]
+networks16: [('64.65', 771), ('192.42', 636), ('204.8', 598), ...]
+\end{lstlisting}
+
+Algunas observaciones:
+\begin{itemize}
+  \item Los \num{9358} repetidores concuerdan con el gráfico de Tor Metrics, que registra \num{9416} repetidores y \num{2333} puentes el 20 de septiembre.
+  \item Aproximadamente un tercio de los repetidores tiene indicador \texttt{Exit} y representa cerca de un tercio del ancho de banda medido; los guardias representan el 70\,\%. Estas fracciones se solapan porque un repetidor puede poseer ambos indicadores. El desequilibrio se corrige mediante los pesos estudiados en \cref{sec:percorso-pesi}.
+  \item \texttt{BadExit} (32 repetidores) y \texttt{MiddleOnly} (28) reflejan las decisiones de las autoridades sobre repetidores sospechosos o mal configurados.
+  \item Diez repetidores llevan el indicador \texttt{Authority}, pero solo nueve autoridades votan el consenso (\cref{sec:arch-ruoli}). La décima es \texttt{Serge}, la autoridad de puentes, que posee el indicador pero no vota.
+  \item La mayoría de los repetidores ejecutan versiones recientes de la serie 0.4.9.
+  \item Varias redes /16 alojan cientos de repetidores, normalmente pertenecientes a grandes operadores de salidas. La regla de un repetidor por red /16 (\cref{sec:percorso-vincoli}) limita la dependencia de una sola red.
+\end{itemize}
+
+La suma de los pesos de ancho de banda del consenso representa unidades medidas por las autoridades, no tráfico realmente transferido. Para estimar el tráfico, Metrics utiliza historiales de bytes de los descriptores extra-info.
+
+% ---------------------------------------------------------------------------
+\section{OONI}\label{sec:metrics-ooni}
+
+El \emph{Open Observatory of Network Interference} (OONI) mide la censura de Internet desde el punto de vista de los usuarios. Voluntarios de todo el mundo instalan OONI Probe, que realiza pruebas periódicas y publica resultados abiertos. Algunas pruebas se refieren específicamente a Tor~\cite{oonitor}:
+\begin{description}
+  \item[\texttt{tor}] Comprueba si son accesibles determinadas autoridades de directorio y puentes. Las pruebas van más allá de abrir una conexión TCP e incluyen acciones específicas del protocolo, como un intercambio obfs4.
+  \item[\texttt{torsf}] Intenta iniciar tor mediante Snowflake y registra si el proceso de conexión se completa y cuánto tarda.
+\end{description}
+
+Las especificaciones de las pruebas incluyen precauciones para no publicar direcciones privadas de puentes: incorporarlas a los resultados equivaldría a entregárselas a los censores. Metrics y OONI se complementan. Metrics puede mostrar una disminución de usuarios en un país; OONI permite investigar si repetidores o puentes eran realmente inaccesibles desde dentro de ese país e identificar la técnica de bloqueo.
+
+\begin{approfondimento}[Medir sin perjudicar]
+Toda estadística publicada por un repetidor implica una compensación. Cuanto más detalle, mayor utilidad, pero también mayor riesgo de revelar información. Por eso los recuentos se redondean y agregan por día y país. La investigación de red sigue los mismos principios (\cref{sec:rp-perche}): recopilar el mínimo necesario, agregar antes de publicar y no conservar datos innecesarios.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item Los datos de red proceden de consensos, descriptores y documentos extra-info archivados por CollecTor, y de mediciones activas de OnionPerf. Tor Metrics los analiza mediante métodos documentados y reproducibles.
+  \item Los usuarios se estiman por solicitudes de directorio: solicitudes declaradas divididas por la fracción cubierta y después por diez. Así se estima el promedio de clientes conectados, especialmente útil para estudiar variaciones.
+  \item Los mismos datos pueden sugerir episodios de censura que requieren confirmación mediante mediciones locales.
+  \item Un consenso real proporciona números de repetidores, indicadores, cuotas de ancho de banda, versiones y concentración por redes.
+  \item OONI mide desde dentro de los países la accesibilidad de autoridades y puentes y el funcionamiento de Snowflake.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:24-dieci}
+Si todos los clientes comenzaran a descargar consensos con la mitad de frecuencia, ¿qué ocurriría con la estimación de usuarios, suponiendo que el número de personas no cambiara? ¿Cómo podría advertirlo alguien que interpretara los gráficos?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:24-frazione}
+En un día, los repetidores que proporcionan datos registran veinte millones de solicitudes y la fracción de cobertura estimada es del 60\,\%. ¿Cuántos usuarios estimaría Metrics? ¿Y si esa fracción fuera del 8\,\%?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:24-flag}
+Amplía \texttt{summary} para calcular la cuota de ancho de banda de repetidores con ambos indicadores, \texttt{Guard} y \texttt{Exit}, y la probabilidad ponderada global de que la salida de un circuito pertenezca a una de las cinco redes /16 más representadas.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:24-censura}
+Descarga desde Metrics las series temporales de usuarios directos y de puentes para un país que haya sufrido un episodio documentado de bloqueo de Tor. Describe qué sucede con ambas series en las fechas del bloqueo.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:24-privacy}
+Los recuentos por país se redondean hacia arriba a múltiplos de ocho. Describe un ataque que ese redondeo dificulta y explica por qué no protege frente a un adversario que controle muchos repetidores.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item Página \titolo{Reproducible Metrics} del Tor Project~\cite{metricsreproducible}, con los métodos utilizados para cada gráfico.
+  \item Especificaciones de pruebas OONI~\cite{oonitor} y OONI Explorer, \url{https://explorer.ooni.org/}.
+  \item Formato de los descriptores extra-info, \spec{dir-spec}{Extra-info document format}.
+\end{itemize}

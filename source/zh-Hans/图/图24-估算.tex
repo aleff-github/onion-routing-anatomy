@@ -1,0 +1,18 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 无障碍替代文本。
+\altfig{Tor Metrics 对每日平均在线客户端数量的间接估算示意，直接连接中继和通过网桥连接的客户端分别统计。提供目录服务的中继和网桥约每 24 小时统计一次成功的目录请求。extra-info 描述符中的 dirreq-v3-reqs 按国家汇总，并向上舍入为 8 的倍数。CollecTor 归档这些描述符；Tor Metrics 对有效的舍入计数减去 4，汇总观察到的请求数 r(R)，估计报告覆盖比例 frac，计算 floor(r(R)/(frac 乘以 10))。其中 10 是每名客户端平均每天请求次数的假设。覆盖比例低于 10\% 或高于 110\% 的日期会被剔除。结果估计的是平均同时在线客户端数量，不是不同自然人的人数。}
+% 使用汇总目录请求间接估计平均在线客户端数，而非人数
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.5cm,
+  box/.style={draw,rounded corners=2pt,align=center,minimum height=0.9cm,text width=2.3cm}]
+  \node[box,fill=torviola!10] (r) {中继／网桥\\统计成功的\\目录请求};
+  \node[box,right=of r] (x) {extra-info\\\texttt{dirreq-v3-reqs}};
+  \node[box,right=of x] (c) {CollecTor\\归档数据};
+  \node[box,right=of c,fill=torverde!15] (m) {Tor Metrics：\\$\lfloor r(R)/(\mathit{frac}\cdot10)\rfloor$};
+  \draw[->] (r) -- (x); \draw[->] (x) -- (c); \draw[->] (c) -- (m);
+  \node[below=2pt of r,font=\sffamily\tiny,text=torgrigio,align=center] {约 24 小时\\统计周期};
+  \node[below=2pt of x,font=\sffamily\tiny,text=torgrigio,align=center] {按国家取整至 8 的\\倍数（再减 4）};
+  \node[below=2pt of c,font=\sffamily\tiny,text=torgrigio,align=center] {$\mathit{frac}$：估计\\报告覆盖率};
+  \node[below=2pt of m,font=\sffamily\tiny,text=torgrigio,align=center] {平均在线客户端\\并非独立人数};
+  \node[below=0.95cm of c,font=\sffamily\tiny,text=avviso,align=center] {若 $\mathit{frac}<10\%$ 或 $\mathit{frac}>110\%$ 则剔除日期};
+\end{tikzpicture}

@@ -1,0 +1,388 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Circuit Construction: TAP, CREATE\_FAST, ntor, and ntor-v3}\label{cap:09-circuiti}
+\aggiornatoal{23 September 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; proposals 216, 332, 350}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item describe how a client builds a circuit one hop at a time with CREATE2 and EXTEND2;
+  \item explain what a circuit handshake must guarantee: relay authentication, secrecy, and forward secrecy;
+  \item follow the CREATE\_FAST, ntor, and ntor-v3 handshakes step by step, and understand why TAP was abandoned;
+  \item derive the four keys for one hop (Df, Db, Kf, Kb) from the negotiated key material;
+  \item verify an implementation against the official test vectors;
+  \item build real circuits to a relay on the laboratory network (Laboratory~3).
+\end{itemize}
+\end{obiettivi}
+
+With a channel open (\cref{cap:07-canali}) and the alphabet of cells at our disposal (\cref{cap:08-celle}), we have everything we need to construct Tor's central structure: the \textbf{circuit}. In this chapter, we will see how the client establishes a secret shared with each relay along the path, known to no other party, and how it turns that secret into the keys that encrypt the traffic. The use of those keys in layered encryption is the subject of \cref{cap:10-cifratura-relay}.
+
+% ---------------------------------------------------------------------------
+\section{One Hop at a Time}\label{sec:circ-telescopio}
+
+The client constructs the circuit \emph{incrementally}, or \enquote{telescopically}~\cite{dingledine2004tor}:
+\begin{enumerate}
+  \item It chooses a path, for example guard $R_1$, middle $R_2$, and exit $R_3$ (\cref{cap:13-percorso}).
+  \item Over its channel to $R_1$, it sends a \cella{CREATE2} cell containing the first half of a cryptographic handshake. $R_1$ responds with \cella{CREATED2}, after which the client and $R_1$ share key material.
+  \item It sends an \texttt{EXTEND2} message, encrypted for $R_1$, asking $R_1$ to extend the circuit to $R_2$. That message contains the first half of a new handshake, this time intended for $R_2$.
+  \item $R_1$ opens (or reuses) a channel to $R_2$ and sends it a \cella{CREATE2} cell carrying that handshake data. The \cella{CREATED2} response returns to $R_1$, which forwards it to the client in an \texttt{EXTENDED2} message.
+  \item The client completes the handshake with $R_2$ and repeats the process for $R_3$, this time through both $R_1$ and $R_2$.
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig09-telescope}
+\caption{Telescopic construction of a three-hop circuit. Each handshake takes place between the client and just one relay; intermediate relays merely carry the messages. Dashed arrows indicate messages traveling within the circuit, encrypted using keys from hops that have already been established.}
+\label{fig:telescopio}
+\end{figure}
+
+This arrangement has a fundamental consequence. The handshake with $R_3$ passes through $R_1$ and $R_2$, but it is encrypted for $R_3$'s public key: neither $R_1$ nor $R_2$ can derive its shared secret. And because each hop uses a different secret, no relay can read what the client exchanges with the others. Guard $R_1$ knows who the client is but not where the traffic goes; exit $R_3$ knows where the traffic goes but not who sent it.
+
+\begin{storia}[First-Generation Onion Routing]
+In the original Naval Research Laboratory system, the client built a single \enquote{onion}: a message encrypted in layers using the public keys of every relay. Each relay peeled off one layer to discover the next hop and its own session key (\cref{cap:03-nascita-tor}). A relay compromised in the future could have decrypted recorded onions. Tor's telescopic circuit, with an ephemeral Diffie-Hellman exchange for every hop, introduced \emph{forward secrecy}: once session keys are erased, even possession of long-term keys does not make it possible to decrypt past traffic~\cite{dingledine2004tor}.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{Cells and Messages}\label{sec:circ-celle}
+
+\subsection{CREATE2 and CREATED2}
+
+The \cella{CREATE2} format is deliberately generic~\spec{tor-spec}{Create and Created cells}: a handshake type (HTYPE, 2 bytes), a length (HLEN, 2 bytes), and the data (HDATA). \cella{CREATED2} contains only HLEN and HDATA, since the type is already known. Everything fits into a fixed-length cell, so handshake data cannot exceed $509 - 4 = 505$ bytes in \cella{CREATE2}.
+
+\begin{center}
+\begin{tabular}{cll}
+\toprule
+HTYPE & Handshake & Status \\
+\midrule
+\texttt{0x0000} & TAP & obsolete; removed in tor 0.4.9.1-alpha \\
+\texttt{0x0001} & --- & reserved \\
+\texttt{0x0002} & ntor & in use \\
+\texttt{0x0003} & ntor-v3 & in use; preferred \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+If the handshake succeeds, the relay responds with \cella{CREATED2}; if it fails, it responds with \cella{DESTROY}. The new cell's CircID follows the rules in \cref{sec:circid}: in link protocol~4 and later, the party that opened the channel uses values with the most significant bit set to 1.
+
+\subsection{EXTEND2 and EXTENDED2}\label{sec:extend2}
+
+The \texttt{EXTEND2} relay message (relay command 14) contains, in addition to the \cella{CREATE2} fields, a list of \emph{link specifiers} telling the relay how to reach the next hop and identify it~\spec{tor-spec}{Extend and Extended messages}:
+
+\begin{center}
+\begin{tabular}{cll}
+\toprule
+Type & Contents & Length \\
+\midrule
+\texttt{00} & IPv4 address and ORPort & 6 \\
+\texttt{01} & IPv6 address and ORPort & 18 \\
+\texttt{02} & legacy RSA identity (SHA-1, 20 bytes) & 20 \\
+\texttt{03} & Ed25519 identity & 32 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The extending relay must verify \emph{every} indicated identity, and may extend the circuit only if the relay it reaches proves possession of them during the channel handshake described in \cref{cap:07-canali}. This is how the client can be sure that its handshake reaches the intended relay even though it never talks directly to $R_2$. The relay also rejects requests to extend the circuit to itself or to the relay from which the request originated.
+
+Two details show how carefully the protocol considers \emph{indistinguishability}. First, the specification recommends always sending specifiers in the same order (\texttt{00}, \texttt{02}, \texttt{03}, \texttt{01}), so the order does not reveal which implementation produced them. Second, \texttt{EXTEND2} always travels inside a \cella{RELAY\_EARLY} cell (\cref{sec:comandi}); the limited number of these cells prevents the construction of arbitrarily long circuits.
+
+\texttt{EXTENDED2} (relay command 15) has exactly the same body as \cella{CREATED2}.
+
+% ---------------------------------------------------------------------------
+\section{What a Handshake Must Achieve}\label{sec:circ-requisiti}
+
+Before examining the handshakes individually, we should establish what we expect from them. At the end, the client and relay must share a secret with the following properties:
+\begin{description}
+  \item[Relay authentication] The client must know that it shares the secret with \emph{that specific} relay and no one else. The relay, by contrast, must learn nothing about the client: the handshake is authenticated \emph{in only one direction}; otherwise every relay would know the client's identity.
+  \item[Secrecy] A network observer, or an earlier relay in the circuit that forwards the messages, must not be able to derive the secret.
+  \item[Forward secrecy] Even someone who obtains the relay's long-term keys in the future must not be able to reconstruct past session secrets.
+  \item[Efficiency] A heavily used relay performs thousands of handshakes per second, so computational cost matters.
+\end{description}
+Each handshake we will examine makes different trade-offs between these requirements.
+
+% ---------------------------------------------------------------------------
+\section{TAP: The First Handshake}\label{sec:tap}
+
+Tor's original handshake, TAP (\emph{Tor Authentication Protocol}), combined conventional Diffie-Hellman key exchange over a 1,024-bit modular group with 1,024-bit RSA public-key encryption. The client encrypted its Diffie-Hellman half using the relay's RSA \enquote{onion} key; only the intended relay could decrypt it and reply. The keys were then derived using KDF-TOR, a SHA-1-based function (\cref{sec:circ-chiavi}).
+
+TAP met the requirements, but with steadily shrinking security margins: 1,024 bits are inadequate for both RSA and modular Diffie-Hellman, the hybrid-encryption construction was regarded as fragile, and the handshakes were computationally expensive. Starting in 2013, TAP was supplemented by ntor, and with tor 0.4.9.1-alpha relays stopped supporting TAP altogether (\proposta{350}). One trace remains: for compatibility, relays still publish the old RSA \enquote{onion} key in their descriptors. On the laboratory network we can see it in microdescriptors under \texttt{onion-key}, alongside the \texttt{ntor-onion-key} that is actually used.
+
+% ---------------------------------------------------------------------------
+\section{CREATE\_FAST: When a Public Key Is Unnecessary}\label{sec:create-fast}
+
+There is one case in which a public-key handshake is unnecessary: the \emph{first} hop. The client has just opened a TLS channel to that relay and verified its identity, so TLS already gives it an encrypted, authenticated channel. \cella{CREATE\_FAST} takes advantage of this~\spec{tor-spec}{CREATE\_FAST/CREATED\_FAST cells}:
+\begin{enumerate}
+  \item The client sends 20 random bytes $X$.
+  \item The relay responds with 20 random bytes $Y$ and 20 bytes $KH$.
+  \item Both derive key material with KDF-TOR from $K_0 = X \| Y$. The first 20 bytes must match $KH$, proving that the relay received $X$.
+\end{enumerate}
+
+The security of \cella{CREATE\_FAST} depends entirely on the TLS channel: anyone able to read the TLS traffic could also read $X$ and $Y$. It should therefore be used only for single-hop circuits. A typical use case is a client starting up that needs to download directory information from a relay whose onion key it does not yet know. The tor source states this explicitly: \file{should\_use\_create\_fast\_for\_circuit} (in \file{src/core/or/circuitbuild.c}) selects \cella{CREATE\_FAST} only if the client has no usable onion key for the first hop.
+
+\begin{attenzione}[CREATE\_FAST Reveals the First Hop]
+A relay receiving \cella{CREATE\_FAST} knows with certainty that it is the circuit's first hop and therefore that the party at the other end of the channel is the client. The specification suggests that relays use precisely this clue to reject single-hop circuits that try to exit to the Internet.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{ntor}\label{sec:ntor}
+
+The ntor handshake, proposed by Goldberg, Stebila, and Ustaoglu~\cite{goldberg2013ntor} and introduced into Tor with \proposta{216} (tor 0.2.4.8-alpha, 2013), replaces RSA and modular Diffie-Hellman with \textbf{Curve25519}, a fast elliptic-curve key exchange using keys of only 32 bytes (\cref{cap:05-crittografia}).
+
+\subsection{The Ingredients}
+
+The relay has a medium-term Curve25519 onion key: secret $b$ and public $B = b\,G$, published in its descriptor as \texttt{ntor-onion-key}. The client knows $B$ and the relay's identity (here, its 20-byte RSA fingerprint, \texttt{ID}). We use $\mathrm{EXP}(P, k)$ to denote a Curve25519 Diffie-Hellman exchange between point $P$ and scalar $k$, and $H(x, t)$ for the HMAC-SHA256 of message $x$ under key $t$. The $t$ keys are constant strings derived from the protocol identifier \texttt{"ntor-curve25519-sha256-1"}.
+
+\subsection{The Protocol}
+
+\begin{enumerate}
+  \item The client generates an ephemeral key pair $(x, X)$ and sends the following in \cella{CREATE2}: \texttt{ID} (20 bytes), $B$ (32 bytes, identifying which onion key it used), and $X$ (32 bytes). The total is 84 bytes.
+  \item The relay checks \texttt{ID} and $B$, generates an ephemeral pair $(y, Y)$, and computes
+  % In EPUB this formula is an SVG image; accessible alternative text is defined
+  % in epub.mk4 because tex4ht does not apply \altfig to display mathematics.
+  % Any formula change also requires reviewing that alt-text rule.
+  \[ \mathit{secret\_input} = \mathrm{EXP}(X, y) \,\|\, \mathrm{EXP}(X, b) \,\|\, \texttt{ID} \,\|\, B \,\|\, X \,\|\, Y \,\|\, \texttt{PROTOID}. \]
+  From this it derives $\mathit{KEY\_SEED} = H(\mathit{secret\_input}, t_{\mathit{key}})$ and a confirmation value $\mathit{AUTH}$. It responds with $Y$ (32 bytes) and $\mathit{AUTH}$ (32 bytes).
+  \item The client computes the same $\mathit{secret\_input}$ using its own secrets, $\mathrm{EXP}(Y, x) \,\|\,\allowbreak \mathrm{EXP}(B, x) \,\|\, \ldots$, and checks that $\mathit{AUTH}$ matches.
+\end{enumerate}
+
+The handshake's core consists of two Diffie-Hellman exchanges:
+\begin{itemize}
+  \item $\mathrm{EXP}(X, y) = \mathrm{EXP}(Y, x)$ combines two \textbf{ephemeral} keys, providing forward secrecy because $x$ and $y$ are erased immediately after the handshake.
+  \item $\mathrm{EXP}(X, b) = \mathrm{EXP}(B, x)$ involves the relay's onion key and provides \textbf{authentication}: only a party that knows $b$ can compute it and therefore produce the correct $\mathit{AUTH}$.
+\end{itemize}
+Neither exchange is sufficient alone. Without the first, someone stealing $b$ in the future could reconstruct everything; without the second, an intermediary could impersonate the relay. The client, meanwhile, uses no long-term key: the relay knows only that it shares the secret with \enquote{whoever sent $X$}.
+
+\begin{approfondimento}[Check for the Point at Infinity]
+The specification requires both parties to verify that no Diffie-Hellman exchange produces the \enquote{point at infinity}, represented here by an all-zero result. An adversary could send a small-order point as $Y$, forcing $\mathrm{EXP}(Y, x)$ to a predictable value. For Curve25519, this simple check is a sufficient alternative to fully checking that $Y$ belongs to the correct group. In Laboratory~3 it corresponds to three lines in the \file{x25519\_dh} function.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{ntor-v3}\label{sec:ntor3}
+
+ntor has one limitation: it carries nothing beyond the keys. Over time, it became necessary to \emph{negotiate} options when establishing a hop, such as the use of congestion control (\cref{cap:11-stream}) or CGO (\cref{cap:10-cifratura-relay}). ntor-v3 (\proposta{332}) extends ntor with \textbf{encrypted messages} in both directions, while also changing several cryptographic choices.
+
+\subsection{What Changes}
+
+\begin{itemize}
+  \item The relay identity is now its \textbf{Ed25519} identity (32 bytes), rather than its RSA fingerprint.
+  \item The hash functions come from the SHA-3 family: SHA3-256 for hashing and MACs, and SHAKE-256 for variable-length key derivation. Every input is prefixed with a length-encoded domain label (the $\mathrm{ENCAP}$ function), so a value calculated for one purpose cannot be mistaken for a value intended for another.
+  \item A verification string \texttt{VER}, known to both parties, participates in every calculation: a handshake performed in one context cannot be reused in another. For ordinary circuits, tor uses \texttt{"circuit extend"} (the \file{NTOR3\_CIRC\_VERIFICATION} constant in \file{src/core/crypto/onion\_crypto.c}).
+  \item The client can send a message $CM$ and the relay a message $SM$, both encrypted.
+\end{itemize}
+
+\subsection{The Protocol}
+
+\begin{enumerate}
+  \item The client generates $(x, X)$ and immediately calculates $B_x = \mathrm{EXP}(B, x)$. From $B_x$ and the public parameters, it derives two \enquote{phase 1} keys: one to encrypt $CM$ using AES-256-CTR and one to authenticate it with a MAC. It sends \texttt{ID} (32), $B$ (32), $X$ (32), encrypted $CM$, and a MAC (32).
+  \item The relay calculates $\mathrm{EXP}(X, b) = B_x$, derives the same phase-1 keys, verifies the MAC, and decrypts $CM$. It then generates $(y, Y)$ and combines both exchanges, $\mathrm{EXP}(X, y)$ and $\mathrm{EXP}(X, b)$, into a $\mathit{key\_seed}$. Using SHAKE-256, it derives a key to encrypt its response $SM$ and the circuit key stream. It replies with $Y$ (32), $\mathit{AUTH}$ (32), and encrypted $SM$.
+  \item The client verifies $\mathit{AUTH}$, decrypts $SM$, and derives the same key stream.
+\end{enumerate}
+
+\begin{attenzione}[The Client Message Lacks Forward Secrecy]
+$CM$ is encrypted with keys that depend only on $B_x$, which is derived using the relay's onion key. Someone who records the handshake and later obtains $b$ could decrypt $CM$. The specification states this explicitly: only the relay's data benefit from forward secrecy. Consequently, $CM$ must contain only negotiation parameters, never user data.
+\end{attenzione}
+
+\subsection{Extensions}
+
+The messages $CM$ and $SM$ share a common format~\spec{tor-spec}{Sending extensions in the circuit extension handshake}: one byte giving the extension count, followed for each extension by its type (1 byte), length (1 byte), and data. The extensions defined for circuit creation are:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}cl>{\raggedright\arraybackslash}X@{}}
+\toprule
+Type & Direction & Meaning \\
+\midrule
+1 & client $\to$ relay & \file{CC\_FIELD\_REQUEST}: client requests congestion control from \proposta{324}; empty body \\
+2 & relay $\to$ client & \file{CC\_FIELD\_RESPONSE}: relay accepts; 1 byte, \file{sendme\_inc} \\
+3 & client $\to$ relay & subprotocol request, such as \texttt{[02 06]} for CGO (\texttt{Relay=6}) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Which Handshake Does tor Use Today?}
+
+In tor 0.4.9.13, the choice is made separately for each hop (\file{circuit\_pick\_create\_handshake}). ntor-v3 is used when the relay supports congestion control and that feature is enabled, as is normally the case on the current network, or when CGO negotiation is desired. Otherwise, tor falls back to ntor. In practice, as the specification observes, modern clients almost always use ntor-v3, with ntor retained as a compatibility alternative.
+
+% ---------------------------------------------------------------------------
+\section{From Negotiated Secrets to Circuit Keys}\label{sec:circ-chiavi}
+
+Each handshake produces a stream of pseudorandom bytes from which the keys used to encrypt relay cells under the traditional scheme (called \enquote{tor1}) are extracted~\spec{tor-spec}{Setting circuit keys}:
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+Key & Bytes & Purpose & Direction \\
+\midrule
+Df & 20 & running digest seed (SHA-1) & client $\to$ relay \\
+Db & 20 & running digest seed (SHA-1) & relay $\to$ client \\
+Kf & 16 & AES-128-CTR key & client $\to$ relay \\
+Kb & 16 & AES-128-CTR key & relay $\to$ client \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The total is 72 bytes (the \file{CPATH\_KEY\_MATERIAL\_LEN} constant in tor's code). How the stream is produced depends on the handshake:
+\begin{description}
+  \item[KDF-TOR] (CREATE\_FAST, and formerly TAP) $K = \mathrm{SHA1}(K_0 \| \texttt{00}) \,\|\, \mathrm{SHA1}(K_0 \| \texttt{01}) \,\|\, \ldots$. The first 20 bytes form $KH$, followed by Df, Db, Kf, and Kb. The single-byte counter limits output to 5,120 bytes, far more than needed.
+  \item[KDF-RFC5869] (ntor) uses HKDF with SHA-256 and \file{KEY\_SEED} as the key; Df, Db, Kf, and Kb occupy the first 72 bytes.
+  \item[SHAKE-256] (ntor-v3) uses the first 32 bytes to encrypt $SM$; Df, Db, Kf, and Kb follow.
+\end{description}
+
+Separate keys for the two directions are not a luxury. If the client and relay used the same AES-CTR key in both directions, the encrypted streams would reuse the same keystream, and XORing two cells would reveal the XOR of the two plaintexts.
+
+CGO changes the key arrangement; we will examine it in \cref{cap:10-cifratura-relay}.
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: Building Real Circuits}\label{sec:lab-circuiti}
+
+\begin{laboratorio}[3]{Circuit Handshakes}
+\textbf{Objective.} Write \file{labs/en/code/torlab/ntor.py} with CREATE\_FAST, ntor, and ntor-v3; verify it against the official test vectors; build single-hop circuits to a relay on the laboratory network.\\
+\textbf{Prerequisites.} Laboratories~1 and~2; the running laboratory network; the \texttt{cryptography} library (X25519, AES), and the standard \texttt{hashlib} module (SHA-3, SHAKE).\\
+\textbf{Estimated time.} 3--4 hours.
+\end{laboratorio}
+
+\paragraph{Step 1: ntor-v3 in a Few Lines.} The implementation follows the specification almost literally. First, the helper functions:
+\begin{lstlisting}[language=Python]
+NTOR3_PROTOID = b"ntor3-curve25519-sha3_256-1"
+def _t(name):  return NTOR3_PROTOID + b":" + name.encode()
+def _encap(s): return struct.pack(">Q", len(s)) + s
+def _h3(s, t): return hashlib.sha3_256(_encap(t) + s).digest()
+def _mac3(k, msg, t):
+    return hashlib.sha3_256(_encap(t) + _encap(k) + msg).digest()
+def _kdf3(s, t, n): return hashlib.shake_256(_encap(t) + s).digest(n)
+\end{lstlisting}
+Then the client side of the handshake:
+\begin{lstlisting}[language=Python]
+def ntor3_client_start(ID, B, message, ver=b"circuit extend", x=None): 
+    sk, X = x25519_generate(x)
+    Bx = x25519_dh(sk, B)
+    phase1 = _kdf3(Bx + ID + X + B + NTOR3_PROTOID + _encap(ver),
+                  _t("kdf_phase1"), 64)
+    enc_k1, mac_k1 = phase1[:32], phase1[32:]
+    encrypted = aes_ctr(enc_k1, message)
+    mac = _mac3(mac_k1, ID + B + X + encrypted, _t("msg_mac"))
+    state = Ntor3State(sk, X, B, ID, Bx, mac, ver)
+    return state, ID + B + X + encrypted + mac
+
+def ntor3_client_finish(st, response, length=72):
+    Y, auth, msg = response[:32], response[32:64], response[64:]
+    secret_input = (x25519_dh(st.x, Y) + st.Bx + st.ID + st.B + st.X + Y
+                    + NTOR3_PROTOID + _encap(st.ver))
+    key_seed = _h3(secret_input, _t("key_seed"))
+    verify = _h3(secret_input, _t("verify"))
+    auth_input = (verify + st.ID + st.B + Y + st.X + st.mac
+                  + _encap(msg) + NTOR3_PROTOID + b"Server")
+    if not hmac.compare_digest(_h3(auth_input, _t("auth_final")), auth):
+        raise HandshakeError("invalid ntor-v3 AUTH")
+    stream = _kdf3(key_seed, _t("kdf_final"), 32 + length)
+    return aes_ctr(stream[:32], msg), stream[32:]
+\end{lstlisting}
+The $\mathit{AUTH}$ comparison uses \file{hmac.compare\_digest}, which takes the same amount of time regardless of where the two values differ. An ordinary comparison might reveal how many initial bytes are correct through timing measurements.
+
+\paragraph{Step 2: Test Vectors.} We do not verify a cryptographic handshake merely by \enquote{making it work}: two implementations with the same mistake would work perfectly well together. Instead, we use the specification's \textbf{test vectors}: fixed inputs (including the supposedly \enquote{random} keys) and expected outputs, byte for byte. \proposta{332} provides a complete vector for ntor-v3, and \proposta{216} provides several for ntor's HKDF function. The \file{labs/en/code/torlab/test/test\_ntor.py} file reproduces them; for example:
+\begin{lstlisting}[language=Python]
+def test_ntor3_vectors_proposal_332():
+    st, hdata = ntor3_client_start(h(V["ID"]), h(V["B"]), h(V["CM"]),
+                                    ver=h(V["VER"]), x=h(V["x"]))
+    assert hdata.hex() == V["client"]
+    sm, stream = ntor3_client_finish(st, h(V["server"]), length=256)
+    assert sm == h(V["SM"])
+    assert stream[:32].hex() == V["keystream_start"]
+\end{lstlisting}
+Other tests verify that an altered $\mathit{AUTH}$ or a different \texttt{VER} string causes the handshake to fail.
+
+\paragraph{Step 3: The Relay's Keys.} To perform the handshake, we need the relay's Ed25519 identity and \texttt{ntor-onion-key}. A real client obtains them from the consensus and microdescriptors (\cref{cap:12-directory}); we take them from the same sources, using the laboratory client's \file{cached-microdescs.new} file, where each relay has an entry like this:
+\begin{lstlisting}[numbers=none]
+onion-key
+-----BEGIN RSA PUBLIC KEY-----
+MIGJAoGBAJet1Oxp+cvg/vgryEmJuVv2s++WxQt5Id1BQ9UNwCOVFcYvEN9KVklM
+...
+-----END RSA PUBLIC KEY-----
+ntor-onion-key gsi2OisnQE96UkjOVvBKtWDLfwRdYG9d4DScg2wz4Qs
+id ed25519 Kz1dj/u6/g7WvhHrt9Ds0jVZjKC+KHo26hWViXAJ1Pg
+\end{lstlisting}
+Notice the old TAP key, still published but unused, and the two base64 lines we actually need.
+
+\paragraph{Step 4: Against a Real Relay.} We open a channel to \texttt{test003r} using Laboratory~1, and send a \cella{CREATE2} for each handshake type:
+\begin{lstlisting}[language=Python]
+c = open_channel("127.0.0.1", 5103, expected_identity=ed)
+st, hd = ntor3_client_start(ed, B, encode_extensions([]))
+c.send(Cell(0x80000001, CellCommand.CREATE2,
+              create2_body(HTYPE_NTOR_V3, hd)))
+r = c.receive()
+sm, stream = ntor3_client_finish(st, hdata_created2(r.body))
+keys = CircuitKeys.from_stream(stream)
+\end{lstlisting}
+Repeating the test with the variants gives:
+\begin{lstlisting}[numbers=none]
+<- CircID=0x80000001 CREATED2 body=509 bytes
+   ntor-v3 ok, relay message: []
+<- CircID=0x80000002 CREATED2 body=509 bytes
+   ntor-v3 with CC_FIELD_REQUEST ok, response: [(2, b'\x1f')]
+<- CircID=0x80000003 CREATED2 body=509 bytes
+   ntor ok
+<- CircID=0x80000004 CREATED_FAST body=509 bytes
+   CREATE_FAST ok
+<- CircID=0x80000005 DESTROY body=509 bytes     (modified MAC)
+   reason: 1
+\end{lstlisting}
+All of the handshakes succeed when unaltered. In the second case, the relay accepts congestion control and responds with extension 2, with \file{sendme\_inc} equal to 31 (\cref{cap:11-stream}). In the last case we deliberately changed one bit of the MAC: the relay rejects the handshake with a \cella{DESTROY} whose reason is 1, \texttt{PROTOCOL}. The actual reason may be disclosed here because this relay originates the error; it is not forwarding another node's \cella{DESTROY} (\cref{sec:comandi}).
+
+\paragraph{An Unexpected Observation.} In \cref{cap:07-canali}, we saw that a new channel receives no \cella{PADDING} cells. Now this channel has four open circuits, yet not one cell arrives during twenty seconds of waiting. The reason lies in tor's code (\file{src/core/or/relay.c}): a relay considers a channel \enquote{in use}, and therefore eligible for padding, only when it carries a circuit that extends beyond that relay. Our single-hop circuits do not count. In \cref{cap:10-cifratura-relay}, when we extend a circuit, padding will appear.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item A circuit is built one hop at a time: \cella{CREATE2}/\cella{CREATED2} with the first relay, then \texttt{EXTEND2}/\texttt{EXTENDED2} through the circuit for subsequent relays. Each handshake involves the client and just one relay.
+  \item \texttt{EXTEND2} contains link specifiers (address, RSA and Ed25519 identities); the extending relay must verify those identities.
+  \item A circuit handshake authenticates the relay but not the client, and must provide secrecy and forward secrecy.
+  \item TAP (1,024-bit RSA and DH) was removed in tor 0.4.9.1-alpha. \cella{CREATE\_FAST} relies on TLS and should be used only for single-hop circuits.
+  \item ntor combines two Curve25519 exchanges: ephemeral--ephemeral for forward secrecy, and ephemeral--onion-key for authentication.
+  \item ntor-v3 uses the Ed25519 identity and the SHA-3 family, adding encrypted messages to negotiate options such as congestion control and CGO; the client message lacks forward secrecy.
+  \item The key stream supplies Df and Db (20 bytes each) and Kf and Kb (16 bytes each): a key and a digest for each direction.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:09-dimensioni}
+Calculate the length of HDATA in \cella{CREATE2} for ntor and for ntor-v3 with a three-byte message. What is the maximum size of the ntor-v3 $CM$ message in a \cella{CREATE2} cell?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:09-fast}
+Why must \cella{CREATE\_FAST} not be used for the second hop of a circuit? What could the first relay do?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:09-direzioni}
+Why do the client and relay use different AES keys in the two directions (Kf and Kb)? Describe what would happen if they used just one key.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-extend2}
+Write in hexadecimal the body header of an \texttt{EXTEND2} message (specifier count and IPv4 specifier) to extend a circuit to laboratory relay \texttt{test004r}. How many bytes does the entire message occupy with ntor-v3 and a single-byte $CM$?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-ds}
+In the ntor handshake, suppose the client uses only $\mathrm{EXP}(Y, x)$ and omits $\mathrm{EXP}(B, x)$. Describe a concrete attack by an intermediate relay forwarding the handshake to the next hop. Now suppose instead that the client omits $\mathrm{EXP}(Y, x)$: which property is lost?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-ver}
+What is the purpose of ntor-v3's \texttt{VER} string? Imagine a protocol other than Tor using the same handshake with the same keys: what might happen without \texttt{VER}?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-cc}
+Repeat laboratory Step 4 with subprotocol request \texttt{[02 06]} (CGO) in addition to \file{CC\_FIELD\_REQUEST}. Does the relay accept it? Using the specification for \proposta{359}, explain why CGO also requires congestion control.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:09-ntor-ref}
+The tor repository includes a Python reference implementation of ntor (\file{src/test/ntor\_ref.py}). Use it to generate complete ntor handshake test vectors (client and relay sides), and add them to \file{test\_ntor.py}.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:09-relay}
+Implement the \emph{relay side} of ntor-v3 (functions \file{server\_part1} and \file{server\_part2}) and verify it using the \proposta{332} vectors. Then run a complete handshake between your client and relay, in memory.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification}, the \enquote{Creating and extending circuits} and \enquote{Setting circuit keys} chapters~\cite{torspec}.
+  \item I.~Goldberg, D.~Stebila, B.~Ustaoglu, \titolo{Anonymity and one-way authentication in key exchange protocols}~\cite{goldberg2013ntor}: the paper that defines ntor and establishes its security.
+  \item Proposal 216 (ntor), Proposal 332 (ntor-v3), and Proposal 350 (removal of TAP).
+\end{itemize}

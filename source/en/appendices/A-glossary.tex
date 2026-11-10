@@ -1,0 +1,62 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Glossary of Tor Terms}\label[appendice]{cap:A-glossario}
+
+This glossary defines the technical terms used throughout the English edition. Each entry also points to the chapter where the term is introduced.
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.1cm}>{\raggedright\arraybackslash}p{8.0cm}r@{}}
+\toprule
+Term & Meaning & Ch. \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+traffic analysis & Inferring information from the timing, volume, and addressing of communications without reading their contents. & \ref{cap:01-anonimato} \\
+anonymity & Remaining unidentifiable within a set of subjects, called the anonymity set. & \ref{cap:01-anonimato} \\
+Sybil attack & Presenting many identities, such as multiple relays, to a network to increase the chances of being selected. & \ref{cap:26-attacchi} \\
+directory authority & One of the small number of servers that vote on and sign the consensus. & \ref{cap:12-directory} \\
+bridge & A relay absent from the public consensus that serves as an entry point for users facing censorship. & \ref{cap:16-censura} \\
+channel & A TLS connection between two adjacent Tor nodes, carrying cells from multiple circuits. & \ref{cap:07-canali} \\
+cell & The transmission unit on a channel: ordinarily 514 bytes, with variable lengths for certain commands. & \ref{cap:08-celle} \\
+blinded key & A key derived from an onion service's identity key for a given period, concealing the service's address from HSDirs. & \ref{cap:14-onion-services} \\
+family key & A key shared by relays operated by the same organization, certifying their family membership. & \ref{cap:22-relay} \\
+circuit ID & A circuit identifier local to one channel; it changes at every hop. & \ref{cap:08-celle} \\
+circuit & A layered-encrypted route through multiple relays, constructed one hop at a time. & \ref{cap:09-circuiti} \\
+consensus & The authority-signed document listing relays, their flags, and their weights. & \ref{cap:12-directory} \\
+congestion control & Adjusting the quantity of in-flight circuit data according to observed round-trip time. & \ref{cap:11-stream} \\
+flow control & Preventing a sender from overwhelming a receiver by means of windows and SENDME messages. & \ref{cap:11-stream} \\
+traffic correlation & Recognizing that two observed flows at different network points belong to the same communication. & \ref{cap:26-attacchi} \\
+descriptor & A document by which a relay or onion service publishes its keys, addresses, and properties. & \ref{cap:12-directory} \\
+exit relay & The last relay on a circuit, opening the connection to the destination. & \ref{cap:06-architettura} \\
+family & A group of relays under common management that must not appear together in one circuit. & \ref{cap:13-percorso} \\
+flag & A property assigned to a relay by directory authorities, such as \texttt{Guard}, \texttt{Exit}, or \texttt{Stable}. & \ref{cap:12-directory} \\
+forward secrecy & A property under which compromise of a long-term key does not allow past traffic to be decrypted. & \ref{cap:05-crittografia} \\
+guard, entry guard & The first relay of a client's circuits, selected persistently and reused over an extended period. & \ref{cap:13-percorso} \\
+handshake & An exchange of messages through which two parties agree on keys, such as ntor or ntor-v3. & \ref{cap:09-circuiti} \\
+hidden service directory & A relay that stores and serves onion-service descriptors. & \ref{cap:14-onion-services} \\
+middle relay & A relay in the middle of a circuit that knows neither the originating client nor the destination. & \ref{cap:06-architettura} \\
+stream isolation & Assigning different streams to different circuits, for example on the basis of SOCKS credentials. & \ref{cap:18-stem} \\
+link protocol & The versioned protocol used over a channel, negotiated with a \cella{VERSIONS} cell. & \ref{cap:07-canali} \\
+relay message & The content of a \cella{RELAY} cell addressed to a particular hop, such as \texttt{BEGIN} or \texttt{DATA}. & \ref{cap:08-celle} \\
+microdescriptor & A compact descriptor containing only the relay information a client needs. & \ref{cap:12-directory} \\
+threat model & An explicit description of which adversaries and threats a system is intended to resist. & \ref{cap:04-modello-minaccia} \\
+unlinkability & The inability of an observer to determine whether two actions belong to the same subject. & \ref{cap:01-anonimato} \\
+onion service (formerly hidden service) & A service reachable through Tor whose address encodes its public key; formerly called a hidden service. & \ref{cap:14-onion-services} \\
+padding & Filler data in cells or on a channel, used to conceal lengths and timing. & \ref{cap:07-canali} \\
+bandwidth weights & Consensus coefficients balancing relay selection across different circuit positions. & \ref{cap:13-percorso} \\
+pluggable transport (PT) & A separate program transforming Tor traffic to resist recognition or blocking, such as obfs4, Snowflake, or WebTunnel. & \ref{cap:16-censura} \\
+exit policy & An ordered rule set describing which destinations an exit relay will accept. & \ref{cap:22-relay} \\
+proof of work (PoW) & A computational challenge a client solves to gain priority when accessing an onion service under attack. & \ref{cap:15-dos} \\
+proposal & A numbered document used to discuss and design a change to the Tor protocol. & \ref{cap:31-futuro} \\
+pseudonym & An identifier different from a person's real name, allowing actions to be linked without disclosing identity. & \ref{cap:01-anonimato} \\
+introduction point & A relay chosen by an onion service to receive initial contact requests. & \ref{cap:14-onion-services} \\
+rendezvous point & A relay chosen by the client at which the client's and onion service's circuits join. & \ref{cap:14-onion-services} \\
+relay, onion router & A Tor network node that forwards cells. & \ref{cap:06-architettura} \\
+SENDME & A message acknowledging received circuit data and reopening a flow-control window. & \ref{cap:11-stream} \\
+subprotocol & A versioned family of protocol features advertised by relays and clients, such as \texttt{Link} or \texttt{Relay}. & \ref{cap:30-arti} \\
+stream & An application data flow, such as a TCP connection, carried over a circuit. & \ref{cap:11-stream} \\
+vanguard & A middle-layer relay held fixed for a period to help protect an onion service's guard. & \ref{cap:13-percorso} \\
+website fingerprinting & Recognizing which page was visited using only sizes and timing of encrypted traffic. & \ref{cap:26-attacchi} \\
+\end{longtable}
+}

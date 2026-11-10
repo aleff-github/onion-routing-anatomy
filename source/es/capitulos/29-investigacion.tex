@@ -1,0 +1,141 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Investigación académica sobre Tor}\label{cap:29-ricerca}
+\aggiornatoal{23 de septiembre de 2026}{artículos citados en este capítulo; portal de investigación del Tor Project; consenso del 23 de septiembre de 2026}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item identificar los principales foros donde se publica investigación sobre Tor y los recursos proporcionados por el Tor Project;
+  \item medir cuantitativamente el anonimato, desde la entropía hasta el tiempo transcurrido hasta la primera exposición;
+  \item seleccionar el método experimental apropiado: modelización analítica, simulación, emulación o medición;
+  \item simular miles de clientes durante meses empleando un consenso real (laboratorio~19).
+\end{itemize}
+\end{obiettivi}
+
+Tor ha estado impulsado por la investigación desde sus comienzos. El encaminamiento cebolla surgió en un laboratorio de investigación (\cref{cap:03-nascita-tor}); el diseño de Tor se presentó en una conferencia académica~\cite{dingledine2004tor}; y muchos de los mecanismos abordados en este libro, desde los guardias hasta el control de congestión, surgieron como respuesta a investigaciones publicadas. Este capítulo se dirige a quienes desean realizar sus propias investigaciones: dónde publicar, cómo medir el anonimato, qué herramientas experimentales utilizar y qué principios de seguridad respetar.
+
+% ---------------------------------------------------------------------------
+\section{Dónde se publica investigación sobre Tor}\label{sec:ric-dove}
+
+La investigación sobre redes de anonimato se publica principalmente en dos clases de foros:
+\begin{description}
+  \item[Privacy Enhancing Technologies Symposium (PETS)] y su revista, \emph{Proceedings on Privacy Enhancing Technologies} (PoPETs), un foro especializado: el trabajo pionero sobre medición del anonimato que veremos se presentó en el taller PET de 2002, antes de que existiera la revista PoPETs~\cite{diaz2002measuring}.
+  \item[Grandes conferencias de seguridad] USENIX Security, ACM CCS, IEEE Symposium on Security and Privacy y NDSS. Muchos de los artículos de \cref{cap:26-attacchi} se presentaron en estas conferencias.
+\end{description}
+La \emph{Anonymity Bibliography} de Free Haven recopila publicaciones en este ámbito desde hace más de veinte años y constituye un punto de partida natural para una revisión bibliográfica.
+
+El Tor Project también mantiene un portal de investigación que reúne datos, herramientas, informes técnicos, temas de investigación propuestos e información sobre el Research Safety Board. Sus orientaciones destacan que el protocolo y la red evolucionan continuamente: las mediciones realizadas sin comprender su funcionamiento interno pueden llevar a conclusiones equivocadas. Por ello, se anima a los investigadores a ponerse en contacto con el proyecto desde las primeras fases para conocer experimentos simultáneos y cambios previstos.
+
+% ---------------------------------------------------------------------------
+\section{Medir el anonimato}\label{sec:ric-metriche}
+
+En \cref{cap:01-anonimato} definimos el anonimato como indistinguibilidad dentro de un conjunto. Sin embargo, desde la perspectiva de un adversario, no todos sus miembros son igualmente probables. Tras observar tráfico, el adversario podría asignar probabilidades mucho mayores a unos usuarios que a otros. El número de integrantes del conjunto no basta.
+
+\paragraph{Grado de anonimato.} En 2002, Díaz y sus colaboradores propusieron medir el anonimato mediante la entropía de la distribución de probabilidades que un adversario atribuye a los posibles remitentes~\cite{diaz2002measuring}. Si $p_i$ es la probabilidad que el adversario asigna al usuario $i$ como remitente, la entropía es
+\[ H(X) = -\sum_{i=1}^{N} p_i \log_2 p_i, \]
+y alcanza su máximo, $H_M = \log_2 N$, cuando los $N$ usuarios son igualmente probables. El \textbf{grado de anonimato} es la razón
+\[ d = \frac{H(X)}{H_M}, \qquad 0 \le d \le 1: \]
+para $N\ge 2$, vale 1 si la distribución posterior es uniforme; esto no demuestra por sí solo la ausencia de información nueva. Vale 0 cuando un remitente tiene probabilidad 1. Para $N=1$, la razón no está definida ($H_M=0$).
+
+Una interpretación intuitiva de la entropía es $2^{H(X)}$: el número de usuarios igualmente probables que producirían la misma incertidumbre. Un conjunto de \num{1000} usuarios en el que el adversario haya reducido los sospechosos a dos, cada uno con probabilidad 0,5, proporciona tanta incertidumbre como un conjunto de dos: $H = 1$ bit.
+
+\paragraph{Límites de las mediciones puntuales.} La entropía describe una observación individual, pero la exposición en Tor se acumula con el tiempo, como vimos en \cref{sec:att-correlazione}: cada circuito crea otra oportunidad para el adversario. Johnson y sus colaboradores propusieron por tanto medidas \emph{longitudinales}, entre ellas la probabilidad de desanonimización al menos una vez durante cierto período y el tiempo mediano hasta la primera exposición, calculadas simulando el comportamiento de usuarios sobre datos reales de la red~\cite{johnson2013users}. Seguiremos un enfoque semejante en el laboratorio.
+
+% ---------------------------------------------------------------------------
+\section{Cuatro métodos}\label{sec:ric-metodi}
+
+\begin{description}
+  \item[Modelización analítica] Un modelo matemático, como el grado de anonimato o el modelo de ataques Sybil de \cref{sec:att-sybil}. Es rápido y general, pero depende de hipótesis que los sistemas reales inevitablemente incumplen en cierta medida.
+  \item[Simulación de comportamiento] Reproduce un componente simplificado del sistema, como la selección de rutas, utilizando datos reales. TorPS, el simulador de rutas desarrollado por Johnson y sus colaboradores~\cite{johnson2013users}, y nuestro laboratorio~19 siguen este enfoque. Es rápido, pero no puede reflejar nada que el modelo haya omitido.
+  \item[Emulación y simulación de redes] Ejecuta el software real en una red privada, como el laboratorio Chutney utilizado en este libro, o dentro de un simulador de eventos discretos como Shadow~\cite{jansen2012shadow}, capaz de ejecutar miles de repetidores y clientes en una sola máquina con tiempo virtual (\cref{sec:rp-shadow}). Resulta especialmente útil para investigar el rendimiento, porque permite probar cambios propuestos al protocolo en una red realista antes de desplegarlos.
+  \item[Mediciones en la red pública] Solo la medición directa revela lo que sucede en la red real. También conlleva el mayor riesgo para usuarios reales y exige un diseño experimental cuidadoso (\cref{sec:ric-sicurezza}).
+\end{description}
+Una investigación sólida suele combinar varios métodos: el análisis matemático sugiere una hipótesis, la simulación la pone a prueba a gran escala y una medición cuidadosamente diseñada examina su realismo.
+
+\begin{approfondimento}[Medir sin observar a individuos]
+PrivCount, desarrollado por Jansen y Johnson, muestra cómo pueden coexistir la medición y la privacidad~\cite{jansen2016privcount}. Los repetidores participantes cuentan sucesos relevantes, pero los contadores se ocultan mediante valores aleatorios compartidos con otros participantes. Se añade ruido según los principios de la \emph{privacidad diferencial}. Solo se hace visible un resultado agregado y deliberadamente perturbado, lo que limita las inferencias sobre usuarios individuales. En 2016, los autores utilizaron PrivCount para estimar aproximadamente \num{710000} usuarios conectados simultáneamente, de los cuales \num{550000} estaban activos en un instante determinado, y observaron que el tráfico dirigido a puertos web representaba el 91\% de los bytes observados en las salidas participantes (estudio de 2016). Esto lleva un paso más allá los principios de privacidad del redondeo de estadísticas de repetidores (\cref{sec:metrics-utenti}).
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: tiempo hasta la primera exposición}\label{sec:lab-ricerca}
+
+\begin{laboratorio}[19]{Meses de circuitos en una simulación}
+\textbf{Objetivo.} Utilizar un consenso real para estimar cuántos clientes puede desanonimizar con el tiempo un adversario que controla cierta cuota del ancho de banda, con guardias persistentes y sin ellos.\\
+\textbf{Requisitos previos.} Laboratorios~7 y~15; no es necesaria una red en ejecución.\\
+\textbf{Tiempo estimado.} 1--2 horas.
+\end{laboratorio}
+
+El módulo \file{labs/es/codigo/torlab/simulation.py} reutiliza los pesos del laboratorio~7. El adversario añade un guardia y una salida que representan cada uno una fracción $q$ del ancho de banda ponderado correspondiente a su posición en el circuito. Simulamos \num{2000} clientes durante 180 días, cada uno de los cuales crea 20 circuitos diarios.
+
+El modelo sustituye el guardia persistente según un calendario aproximado para un guardia \emph{confirmado}. Según guard-spec y el código de \file{entrynodes.c}, un guardia confirmado se elimina de la muestra \texttt{GUARD\_CONFIRMED\_MIN\_LIFETIME} (60 días) después de la confirmación, y \texttt{CONFIRMED\_ON\_DATE} se retrotrae aleatoriamente hasta \texttt{GUARD\_LIFETIME}/10 (12 días). Esto produce en el modelo intervalos de 48--60 días. Los 120 días de \texttt{GUARD\_LIFETIME} regulan la caducidad de guardias no confirmados en la muestra. La selección real depende además de las listas de guardias, accesibilidad y sustituciones. Una versión temprana de este laboratorio simuló erróneamente rotaciones cada 120 días, reduciendo aproximadamente a la mitad el número de rotaciones y subestimando el riesgo casi en esa misma proporción. Como comparación, también simulamos clientes que eligen un guardia nuevo para cada circuito. Un cliente se considera comprometido el primer día que uno de sus circuitos incluye tanto un guardia como una salida del adversario.
+
+El modelo es intencionadamente sencillo: ignora repetidores intermedios, familias, redes /16, guardias de reserva y fallos. Para mantenerlo rápido, no utiliza \texttt{random.choices}, que volvería a calcular miles de pesos en cada selección. En su lugar emplea búsqueda binaria sobre pesos acumulados, lo que permite millones de selecciones sin recalcular todos los pesos; el tiempo depende del equipo.
+
+El consenso público no se incluye en el repositorio: se descarga una sola vez con \texttt{make -C labs/es data}, que lo guarda en \file{labs/es/datos/collector/} comprobando su cabecera, no sus firmas. La simulación es determinista: con el mismo modelo, consenso, proporción y semilla, el resultado es siempre este:
+
+\begin{lstlisting}[language=bash,numbers=none]
+$ PYTHONPATH=labs/es/codigo python3 -m torlab.simulation labs/es/datos/collector/consensus-microdesc-2026-09-23-15 0.05
+adversario: 5% del ancho de banda de guardias y 5% de salidas; 2000 clientes, 180 días, 20 circuitos/día
+guardia persistente     1d:  2.6%    7d:  4.4%   30d:  4.4%   90d:  9.4%  180d: 18.4%  mediana: None
+guardia por circuito    1d:  4.3%    7d: 27.9%   30d: 76.5%   90d: 98.9%  180d:100.0%  mediana: 15
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig29-compromiso}
+\caption{Laboratorio~19, simulación simplificada: 2000 clientes, 20 circuitos diarios durante 180 días, con el consenso del 23 de septiembre de 2026; el adversario posee un 5\% del ancho de banda ponderado de guardias y un 5\% del de salidas. La proporción acumulada contabiliza a quienes usaron al menos un circuito con ambos extremos adversarios en el modelo. Los guardias persistentes rotan en momentos distintos para cada cliente (intervalos simulados de 48--60 días), no en tres fechas comunes. No son observaciones de desanonimización real en la red pública.}
+\label{fig:compromissione}
+\end{figure}
+
+La \cref{fig:compromissione} muestra ambas curvas. Sin guardias persistentes, la mitad de los clientes resulta comprometida en quince días y casi todos en tres meses, ya que cada circuito añade otra oportunidad independiente. Con guardias persistentes, la exposición de un cliente depende en gran medida de la primera selección del guardia. Alrededor del 4\% del total de clientes, los que eligieron un guardia adversario, quedan comprometidos al principio; el resto permanece protegido hasta que rota su guardia. Las rotaciones se distribuyen entre los clientes (aproximadamente cada 48--60 días por cliente en el modelo) y crean nuevas oportunidades de exposición, elevando el total hasta aproximadamente el 18\% después de seis meses. Cuando la cuota de ancho de banda adversaria es del 1\%, el resultado correspondiente a seis meses cae a aproximadamente el 4\%, frente al 31\% sin guardias persistentes.
+
+Estos resultados, basados en la instantánea de referencia de septiembre de 2026, ilustran la razón de ser de los guardias. En este modelo simplificado, su efecto principal consiste en redistribuir la exposición entre clientes, sin garantizar una reducción del riesgo en cada circuito. Para la mayoría de los usuarios, el riesgo modelado es inicialmente casi nulo, pero para un grupo menor es alto. La duración de los guardias implica, por tanto, un compromiso. Una rotación más lenta protege durante más tiempo a los usuarios con guardias honestos, pero prolonga la exposición de quienes tienen guardias adversarios. Un adversario paciente que permanezca meses en la red obtiene oportunidades nuevas con cada rotación.
+
+% ---------------------------------------------------------------------------
+\section{Investigar de forma segura}\label{sec:ric-sicurezza}
+
+\Cref{cap:25-legale} presentó las directrices del Tor Research Safety Board~\cite{trsb}. Al diseñar un experimento, pregúntate primero: \emph{¿requiere realmente mi pregunta de investigación utilizar la red pública?} Muchas preguntas sobre rendimiento y ataques pueden responderse mediante Shadow o una red privada, con experimentos reproducibles y control de variables. Cuando sea indispensable medir la red pública, sigue los principios expuestos: actúa únicamente sobre tu propio tráfico, recoge la mínima cantidad de datos, agrega antes de publicar y consulta al Board y al Tor Project antes de empezar.
+
+La historia reciente ofrece ejemplos contrastantes. \Cref{cap:27-casi-rete} describió un experimento, o ataque, que afectó a usuarios reales mediante una señal visible para los repetidores receptores, pero no directamente para observadores externos de conexiones TLS cifradas. PrivCount, en cambio, demuestra que es posible medir la red con detalle sin exponer a usuarios individuales. La diferencia no radica solo en las herramientas, sino en el diseño experimental.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item La investigación sobre Tor aparece en PETS y en las principales conferencias de seguridad. El Tor Project facilita datos, herramientas y un Research Safety Board.
+  \item La entropía mide el anonimato para una observación individual; el grado de anonimato lo normaliza entre cero y uno. A lo largo del tiempo se necesitan medidas como la probabilidad de compromiso en un intervalo determinado.
+  \item Los modelos analíticos, simulaciones de comportamiento, emulación o simulación de redes y mediciones en la red pública responden a distintas preguntas y entrañan distintos riesgos.
+  \item En la simulación con el consenso de referencia, los guardias persistentes reducen considerablemente la fracción de clientes comprometidos con el tiempo, al concentrar la exposición en menos clientes.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:29-entropia}
+Un adversario observa un sistema de cuatro usuarios y asigna las probabilidades $1/2$, $1/4$, $1/8$ y $1/8$. Calcula la entropía, el grado de anonimato y el número equivalente de usuarios igualmente probables.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:29-metodo}
+Elige y justifica el método más apropiado para cada pregunta: (a) ¿cómo cambiaría la latencia si los circuitos tuvieran cuatro saltos? (b) ¿Cuántos usuarios acceden a Tor desde un país concreto? (c) ¿Reduciría un nuevo algoritmo de selección de guardias el tiempo hasta la primera exposición?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:29-durata}
+Ejecuta la función \texttt{simulate} del laboratorio~19 con \texttt{guard\_lifetime} establecido en 30 y 180 días, en vez de los 60 predeterminados, y compara la fracción de clientes comprometidos tras 180 días. Explica los resultados.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:29-asimmetria}
+Repite el laboratorio~19 con un adversario que controle el 10\% del ancho de banda de salida pero ninguno de guardias, y después con otro que controle el 10\% del ancho de banda de guardias pero ninguno de salida. ¿Qué puede conseguir cada uno y por qué?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:29-torps}
+Amplía el simulador con tres características que el modelo actual ignora: clientes que reutilizan circuitos durante diez minutos en lugar de crear otros constantemente, la restricción /16 entre guardias y salidas, y un adversario que controle todo el sistema autónomo de una gran red. ¿Qué incorporaciones modifican más los resultados?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item C.~Díaz, S.~Seys, J.~Claessens, B.~Preneel, \titolo{Towards Measuring Anonymity}~\cite{diaz2002measuring}.
+  \item R.~Jansen, A.~Johnson, \titolo{Safely Measuring Tor}~\cite{jansen2016privcount}.
+  \item Portal de investigación del Tor Project, \url{https://research.torproject.org/}.
+  \item La \emph{Anonymity Bibliography}, \url{https://www.freehaven.net/anonbib/}.
+\end{itemize}

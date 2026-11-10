@@ -1,0 +1,281 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Onion Services v3}\label{cap:14-onion-services}
+\aggiornatoal{23 September 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; rend-spec v3}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item explain what an onion service provides and how it differs from a site reached through an exit;
+  \item derive a service's public key from its \texttt{.onion} address and vice versa;
+  \item describe blinded keys, time periods, and how a client locates the responsible HSDirs;
+  \item read the layered structure of a descriptor;
+  \item follow the introduction and rendezvous protocol step by step;
+  \item download, verify, and decrypt the descriptor of an onion service on the laboratory network (Laboratory~8).
+\end{itemize}
+\end{obiettivi}
+
+Until now, we have used Tor to conceal \emph{who} connects to a server. The server itself, however, has been public: its IP address was known, and the exit connected directly to it over the public network, learning the destination. The content was plaintext only if the application did not use end-to-end encryption such as HTTPS. \textbf{Onion services} reverse that arrangement. They let someone offer a service, such as a website, without revealing its network location. The client and service meet halfway, each protected by its own circuit, and neither learns the other's address.
+
+% ---------------------------------------------------------------------------
+\section{What an Onion Service Provides}\label{sec:os-proprieta}
+
+\begin{description}
+  \item[Service anonymity] The server's IP address is never exposed: the service communicates with the network only through Tor circuits that it initiates.
+  \item[Self-authenticating addresses] The \texttt{.onion} address \emph{encodes} the service's public key together with a checksum and version byte. Anyone connecting to that address knows cryptographically that they are communicating with the holder of the corresponding private key, without requiring certificate authorities.
+  \item[End-to-end encryption] Traffic between the client and service is encrypted with keys only those two parties know; there is no exit that can observe plaintext traffic.
+  \item[Reachability] The service does not need to accept inbound connections. It works behind a NAT or firewall that permits only outbound connections.
+\end{description}
+
+The cost is path length. In the basic model, the client reaches a meeting point through a three-hop circuit, and the service reaches it through another three-hop circuit: six relays in all, compared with three when connecting to a conventional website. With vanguards-lite enabled by default (\cref{sec:vanguards}), the path is no longer symmetrical. The service inserts a fixed second-layer relay, making its rendezvous-side circuit four hops (\file{S\,$\to$\,G\,$\to$\,L2\,$\to$\,M\,$\to$\,Rend}) compared with the client's three.
+
+\begin{storia}[From v2 to v3]
+\emph{Hidden services} have existed since 2004. The first widely deployed version, v2, used 16-character addresses derived from a 1024-bit RSA key by truncating a SHA-1 digest to 80 bits. It also allowed HSDirs to collect the addresses of services whose descriptors they hosted. Version 3 (\proposta{224}), available since tor 0.3.2.1-alpha (2017), introduced Ed25519 keys, 56-character addresses containing the entire public key, encrypted descriptors, and blinded keys. V2 services were fully disabled in October 2021 with tor 0.4.5.11 and 0.4.6.8. The name has changed too: today the term is \emph{onion service}.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{The Address}\label{sec:os-indirizzo}
+
+A v3 address base32-encodes the service's identity public key, a short checksum, and a version number~\spec{rend-spec}{Encoding onion addresses}:
+\[
+\texttt{address} = \mathrm{base32}(\mathit{PUBKEY} \,\|\, \mathit{CHECKSUM} \,\|\, \mathit{VERSION}) \,\|\, \texttt{".onion"}
+\]
+Here $\mathit{PUBKEY}$ is the 32-byte Ed25519 key, $\mathit{VERSION}$ is the byte \texttt{0x03}, and $\mathit{CHECKSUM}$ consists of the first 2 bytes of $\mathrm{SHA3\text{-}256}(\texttt{".onion checksum"} \,\|\, \mathit{PUBKEY} \,\|\, \mathit{VERSION})$. The resulting 35 bytes encode to exactly 56 base32 characters. The checksum does not protect against an adversary, who can calculate it like anyone else, but it detects typing errors.
+
+In one of our laboratory runs, the onion service had the following address. This is the address of the example preserved in \file{labs/en/code/torlab/test/data/}, which the laboratory tests use. All outputs in this section refer to that example and can therefore be reproduced without the network. When readers start their own network, it generates fresh keys and therefore a different address (\cref{sec:rp-file}).
+\begin{lstlisting}[numbers=none]
+wdjtp7qktdjkkgjjbbx2axvg2gri5p4tuhlc4bq23n7o3uwu4rveppqd.onion
+\end{lstlisting}
+The \file{key\_from\_address} function in Laboratory~8 extracts the public key from this address and verifies its checksum.
+
+\begin{attenzione}[You cannot recognize an address by memory]
+A random 56-character address is neither memorable nor easy to recognize at a glance. Users copy it from a source they consider trustworthy, and an address differing by only a few characters may go unnoticed. This is the main \emph{phishing} vector against onion services. \emph{Vanity addresses}, generated by trying millions of keys until their initial characters form a word, help only partially: an adversary can also generate an address with the same prefix. We return to this problem in \cref{cap:21-onion-pratica}.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Blinded Keys}\label{sec:os-accecate}
+
+\subsection{The problem}
+
+The service must publish information about how to reach it somewhere: the \emph{descriptor}. If it published the descriptor under its identity key, anyone operating an HSDir would see the addresses of all the services it hosted. They could enumerate those services or link one service's descriptors over time. That was precisely the situation with v2.
+
+\subsection{The solution}
+
+In v3, the service signs descriptors using a \textbf{blinded key}, different for each \emph{time period}~\spec{rend-spec}{Appendix A: Signature scheme with key blinding}. Given the identity key $A = aB$ (where $B$ is the Ed25519 base point), it computes a factor
+\begin{gather*}
+h = \mathrm{SHA3\text{-}256}(\texttt{"Derive temporary signing key\textbackslash 0"} \,\|\, A \,\|\, B \,\|\, N), \\
+N = \texttt{"key-blind"} \,\|\, \mathit{period} \,\|\, \mathit{period\_length}
+\end{gather*}
+(with certain bits forced, as for Ed25519 keys), and the blinded key is
+\[
+A' = h \cdot A.
+\]
+This construction has valuable properties:
+\begin{itemize}
+  \item anyone who knows the address, and therefore $A$, can calculate $A'$ for each period and knows where to look for the descriptor;
+  \item someone who sees only $A'$, such as an HSDir, cannot recover $A$ or determine that two blinded keys from different periods belong to the same service;
+  \item the service can sign under $A'$ using private key $a' = h \cdot a$, and the resulting signature verifies under $A'$ like an ordinary Ed25519 signature.
+\end{itemize}
+
+An unusual detail illustrates how closely the specification follows the code: the constant string includes a trailing zero byte because tor calculates its length using \texttt{sizeof} rather than \texttt{strlen}. A source comment (\file{src/feature/hs/hs\_common.c}) acknowledges that documenting the \enquote{surprise} in the specification was preferable to changing the code.
+
+\subsection{Credentials and offline keys}
+
+The identity key yields a \emph{credential}, $\mathrm{SHA3\text{-}256}(\texttt{"credential"} \,\|\, A)$. For each period, this in turn yields a \emph{subcredential}, $\mathrm{SHA3\text{-}256}(\texttt{"subcredential"} \,\|\, \mathit{credential} \,\|\, A')$. The subcredential is used in descriptor encryption and the introduction handshake: it demonstrates knowledge of the address, which an HSDir does not possess.
+
+The key hierarchy is also designed to allow the identity key to remain \emph{offline}. Each period's blinded key certifies a short-term descriptor-signing key (a type-8 Ed25519 certificate, \cref{tab:cert-types}). In principle, the server can receive advance signing keys and certificates for future periods without ever possessing the key corresponding to its address. Not every implementation supports this mode.
+
+% ---------------------------------------------------------------------------
+\section{Locating the Descriptor}\label{sec:os-hsdir}
+
+\subsection{Time periods}
+
+Time is divided into periods, one day long on the public network (the \texttt{hsdir-interval} consensus parameter)~\spec{rend-spec}{Dividing time into periods}. Periods do not begin at midnight but at noon UTC. They are offset by 12 hours from the authorities' shared-randomness protocol, which publishes a new \textbf{shared random value} (SRV) in the consensus every day at midnight. The period number is calculated from the minutes since 1 January 1970, minus the offset, divided by the interval. The specification gives an example: at 11:15:01 UTC on 13 April 2016, the time period is 16903, which began at noon the previous day. Laboratory~8 tests exactly this example.
+
+In test networks, with a vote every 20 seconds, waiting a day would be inconvenient. tor therefore reduces the period to one full SRV protocol round, or 24 votes (the \file{get\_time\_period\_length} function). In the laboratory, a period lasts 8 minutes and is offset by 4 minutes.
+
+\subsection{The HSDir ring}
+
+Which HSDir holds the descriptor? Each relay with the \texttt{HSDir} flag occupies a position on a 256-bit \emph{ring}~\spec{rend-spec}{Where to publish a hidden service descriptor}:
+\[
+\mathit{relay\_index} = \mathrm{SHA3\text{-}256}(\texttt{"node-idx"} \,\|\, \textit{Ed25519 identity} \,\|\, \mathit{SRV} \,\|\, \mathit{period} \,\|\, \mathit{period\_length})
+\]
+For each of two \emph{replicas}, the service calculates an index:
+\[
+\mathit{service\_index}(r) = \mathrm{SHA3\text{-}256}(\texttt{"store-at-idx"} \,\|\, A' \,\|\, r \,\|\, \mathit{period\_length} \,\|\, \mathit{period}).
+\]
+The service uploads its descriptor to the first four HSDirs following each index around the ring (parameter \file{hsdir\_spread\_store}); the client randomly selects one of the first three (\file{hsdir\_spread\_fetch}). Including the SRV prevents an adversary from predicting far in advance which relays will be responsible for a service and placing malicious relays at the right positions to censor it or observe descriptor requests. The service publishes two descriptors at a time, for two consecutive periods, so it remains reachable to clients whose consensuses are slightly ahead or behind. Which two periods are used depends on the point in the cycle. Before or after SRV rotation, they are either the previous and current periods or the current and next periods~\spec{rend-spec}{Generating and publishing hidden service descriptors}.
+
+\begin{approfondimento}[Which SRV should be used?]
+Because periods and SRVs are offset by half a day, a client must select the SRV carefully. In the half-day between the beginning of a period and the next SRV, it uses the current SRV; in the other half-day, it uses the previous one. If the consensus lacks the required SRV---for example, immediately after a network starts---tor calculates a fallback, the \emph{disaster SRV}: $\mathrm{SHA3\text{-}256}(\texttt{"shared-random-disaster"} \,\|\, \mathit{period\_length} \,\|\, \mathit{period})$. The selection is implemented in \file{hs\_get\_current\_srv} and \file{hs\_get\_previous\_srv} (\file{src/feature/hs/hs\_common.c}). If the value is absent from the consensus, tor quietly falls back to the disaster SRV. This occurs on a newly created laboratory network and does not last long: in our network's authority log, the first SRV appears 115 seconds after startup; until then the consensus has no \texttt{shared-rand-current-value} line. To observe the fallback, inspect the first few minutes after creating the network. Once the network has been running for a while, as in \cref{sec:lab-onion}, the real SRVs are used.
+\end{approfondimento}
+
+\subsection{Anonymous requests only}
+
+A client fetches a descriptor with an HTTP request to \nolinkurl{/tor/hs/3/}, followed by the blinded key in base64 without trailing \texttt{=} characters, over a \file{BEGIN\_DIR} stream to the HSDir. There is one condition: the request must arrive over an \textbf{anonymous} circuit. An HSDir rejects a request arriving on a circuit opened directly by a client---that is, a single-hop circuit. We discovered this in the laboratory:
+\begin{lstlisting}[numbers=none]
+HTTP/1.0 503 Rejecting single hop HS v3 descriptor request
+\end{lstlisting}
+The check is in \file{connection\_dir\_is\_anonymous} (\nolinkurl{src/feature/dircommon/directory.c}). It prevents an HSDir from associating a descriptor request with the requesting client's IP address.
+
+% ---------------------------------------------------------------------------
+\section{The Descriptor}\label{sec:os-descrittore}
+
+The descriptor has three layers~\spec{rend-spec}{Generating and publishing hidden service descriptors}, shown in \cref{fig:os-descrittore}.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig14-descriptor}
+\caption{The v3 onion descriptor structure. HSDirs can read the signed outer wrapper; the first layer can be decrypted by clients knowing the onion identity. With restricted discovery, an authorized client's X25519 key is used to recover the descriptor cookie needed to decrypt the second layer.}
+\label{fig:os-descrittore}
+\end{figure}
+
+\paragraph{The outer layer} is plaintext and signed. It contains the version, validity period (\texttt{descriptor-lifetime}, 180 minutes in the laboratory), signing-key certificate issued by the blinded key, a revision counter, the encrypted \texttt{superencrypted} block, and a signature. The signature is an Ed25519 signature, made with the descriptor-signing key over text prefixed with \texttt{"Tor onion service descriptor sig v3"}. The prefix prevents a signature generated for a descriptor from being valid for something else. The revision counter must increase with every new version, so an HSDir does not accept descriptors older than the ones it already has.
+
+\paragraph{The first encrypted layer} is encrypted under a key derived from the blinded key and subcredential. An HSDir that does not know the address cannot read it. It contains the \emph{restricted discovery} fields (\cref{sec:os-ristretta}) and the second layer. To avoid revealing whether restricted discovery is enabled, the fields are always present, filled with random data when they are not needed.
+
+\paragraph{The second layer} contains the information needed to connect: supported handshake formats, flow-control parameters, any anti-DoS parameters, and, for each \textbf{introduction point}, the link specifiers needed to reach it (in base64), its ntor key, a certified authentication key, and an encryption key. By default, a service uses three introduction points.
+
+Both layers use the same scheme. A random 16-byte salt, secret data, and a layer-specific constant are fed into SHAKE-256 to derive an AES-256 key, initialization vector, and authentication key. The text is encrypted in counter mode and authenticated with SHA3-256. The first layer's plaintext is padded to a multiple of 10\,000 bytes, and \texttt{auth-client} lines to a multiple of 16, so that descriptor size reveals as little as possible about the number of introduction points and authorized clients.
+
+% ---------------------------------------------------------------------------
+\section{Introduction and Rendezvous}\label{sec:os-rendezvous}
+
+Armed with the descriptor, the client can connect. The protocol, shown in \cref{fig:os-rendezvous}, involves three \enquote{special} relays: an introduction point chosen by the service, a rendezvous point chosen by the client, and the HSDirs.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig14-rendezvous}
+\caption{The rendezvous protocol. Each arrow represents a multi-hop circuit; no direct connection joins the client, service, and intermediate points. Numbers indicate the order of the steps described in the text.}
+\label{fig:os-rendezvous}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{The service prepares introduction points.} It selects several relays, builds a circuit to each, and sends \file{ESTABLISH\_INTRO} (relay command 32) containing a different authentication key and a signature for each point. The relay replies with \file{INTRO\_ESTABLISHED} (38); from then on, it forwards requests bearing that key to the service.
+  \item \textbf{The service publishes its descriptor} to the responsible HSDirs, as described above.
+  \item \textbf{The client prepares the rendezvous.} It randomly selects a relay as its rendezvous point, builds a circuit to it, and sends \file{ESTABLISH\_RENDEZVOUS} (33) with a random 20-byte \emph{cookie}. The relay replies with \file{RENDEZVOUS\_ESTABLISHED} (39).
+  \item \textbf{The client introduces itself.} It builds a circuit to an introduction point and sends \texttt{INTRODUCE1} (34). The plaintext portion specifies the introduction point's authentication key. The encrypted portion, readable only by the service, contains the cookie, the rendezvous point's link specifiers and ntor key, and the first half of a handshake. The introduction point sends \file{INTRODUCE\_ACK} (40) to the client and forwards the message to the service as \texttt{INTRODUCE2} (35).
+  \item \textbf{The service reaches the rendezvous point.} It decrypts \texttt{INTRODUCE2}, checks that the message does not duplicate an already-seen request (the \emph{replay cache}), builds a circuit to the specified rendezvous point, and sends \texttt{RENDEZVOUS1} (36) with the cookie and the second half of the handshake.
+  \item \textbf{The rendezvous point joins the circuits.} It finds the client's circuit using the same cookie, forwards the handshake's second half in a \texttt{RENDEZVOUS2} (37), and from then on copies cells between the two circuits.
+\end{enumerate}
+
+The client-service handshake, called \emph{hs-ntor}, is an ntor variant (\cref{sec:ntor}) that includes the subcredential and the introduction point's authentication key. Only someone who knows the address can produce an \texttt{INTRODUCE1} that the service accepts. The derived keys add another layer of encryption, like a \emph{virtual hop} added to the client's circuit, and use SHA3-256 for the running digest rather than SHA-1 (\cref{sec:riconoscere}). Neither the introduction nor the rendezvous point can read the traffic.
+
+Over the joined circuit, the client opens streams with \texttt{BEGIN}, just as it would with an exit (\cref{cap:11-stream}). The service forwards these streams to local ports configured with \opt{HiddenServicePort}.
+
+\begin{approfondimento}[Why so many relays?]
+The introduction point knows the service only as \enquote{the authentication key of a circuit}; it does not know which \texttt{.onion} address it serves. The rendezvous point sees a random cookie and two circuits; it does not know which service it is connecting to which client. Each role sees only a fragment, and none knows the client's or service's IP address, which remain behind their respective guards.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Restricted Discovery}\label{sec:os-ristretta}
+
+A service may want to be reachable only by certain clients, for example as an administration panel. Under \textbf{restricted discovery} (formerly \emph{client authorization}), each authorized client has an X25519 key pair, and the service knows its public component. The service separately encrypts the descriptor's second-layer key for each client in the first layer's \texttt{auth-client} lines. Someone who knows the address but lacks an authorized key cannot read the introduction-point list and therefore cannot even attempt to connect. In tor, this is configured by adding client public keys to the service's \file{authorized\_clients} directory.
+
+% ---------------------------------------------------------------------------
+\section{Defenses}\label{sec:os-difese}
+
+Onion services are natural attack targets: a service cannot simply block attacking clients' IP addresses because it cannot see them. The principal defenses, discussed in more detail elsewhere, are:
+\begin{itemize}
+  \item \textbf{vanguards}, protecting the service's guard against attacks based on circuits built on demand (\cref{sec:vanguards});
+  \item the \textbf{replay cache}, preventing an attacker from making the service repeat the same work;
+  \item anti-DoS parameters that the service can set at introduction points through an \file{ESTABLISH\_INTRO} extension, limiting the number of \texttt{INTRODUCE2} messages per second;
+  \item \textbf{proof of work}, under which an attacked service asks clients to solve a small computational problem before serving them (\cref{cap:15-dos}).
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: Finding and Reading a Descriptor}\label{sec:lab-onion}
+
+\begin{laboratorio}[8]{The laboratory onion service's descriptor}
+\textbf{Objective.} Write \file{labs/en/code/torlab/onion.py}: address handling, blinded key, HSDir ring, descriptor download, verification, and decryption.\\
+\textbf{Prerequisites.} Laboratories~1--6; the laboratory network running.\\
+\textbf{Estimated time.} 4 hours.
+\end{laboratorio}
+
+\paragraph{Step 1: the blinded key.} Common cryptography libraries provide Ed25519 signatures, but not the point-by-scalar multiplication required to compute $A' = h \cdot A$. The module therefore includes a small implementation of Ed25519 arithmetic, about thirty lines derived from the formulas in RFC~8032, sufficient for this purpose but unsuitable for general use: it is slow and provides no protection against timing attacks.
+\begin{lstlisting}[language=Python]
+def blinding_factor(A, period, duration_minutes):
+    n = b"key-blind" + struct.pack(">QQ", period, duration_minutes)
+    h = bytearray(hashlib.sha3_256(
+        b"Derive temporary signing key\x00" + A + BASE_STR + n).digest())
+    h[0] &= 248; h[31] &= 63; h[31] |= 64
+    return int.from_bytes(h, "little")
+
+def blinded_key(A, period, duration_minutes):
+    return _encode_point(_multiply(blinding_factor(A, period, duration_minutes),
+                                   _decode_point(A)))
+\end{lstlisting}
+
+\paragraph{Step 2: the period and SRV.} The \texttt{time\_period\_info} function reproduces tor's calculation from the consensus's \texttt{valid-after} timestamp and voting interval, determining whether the current or previous SRV is needed. If the consensus lacks the required value, the disaster SRV is used.
+
+\paragraph{Step 3: tracing an error.} Our first run found the descriptor on none of the network's eight HSDirs. Because we had tried all of them, choosing the wrong HSDir could not explain the failure. That left the blinded key or the request. To separate those possibilities, we instructed the network's real client to download the descriptor through the control port (\texttt{HSFETCH}, followed by \texttt{GETINFO hs/client/desc/id/...}). We read the blinded key actually used by the service from the resulting certificate: it matched ours. The request was therefore at fault, and tor's source code revealed why: HSDirs reject single-hop requests. With a three-hop circuit to the HSDir, we obtained the descriptor. This is a broadly useful method: when an experiment fails, look for an intermediate point where your result can be compared with a reference implementation.
+
+\paragraph{Step 4: verifying and decrypting.} In this example, \texttt{path} is a list of three \texttt{RelayInfo} objects obtained from the laboratory network, with the HSDir last; \texttt{A} is the identity key and \texttt{Ap} its blinded key. Constructing those objects is not shown.
+\begin{lstlisting}[language=Python]
+d = download_descriptor(Ap, path)
+desc = parse_descriptor(d, A, Ap)
+\end{lstlisting}
+\file{parse\_descriptor} verifies that the signing-key certificate was issued by the expected blinded key, verifies the descriptor signature, and decrypts both layers. An abbreviated result from an earlier laboratory session:
+\begin{lstlisting}[numbers=none]
+lifetime 180 revision 662427 introduction points 3
+create2-formats 2
+flow-control 1-2 31
+introduction-point AwAGfwAAARPyAhQXE5GoH+wp3MoxW9M1QV6XSxb0fgM...
+onion-key ntor yRURxDb2eeEmF/p5M/bmHA+giwVyxjApKYyNY1KkCDo=
+auth-key
+-----BEGIN ED25519 CERT-----
+...
+\end{lstlisting}
+The \texttt{flow-control 1-2 31} line tells clients that the service supports congestion control, with the same \file{sendme\_inc} value of 31 encountered in \cref{cap:11-stream}.
+
+\paragraph{Step 5: a consistency check.} In the laboratory network there are eight HSDirs and the service uploads the descriptor to $2 \times 4 = 8$ of them---all of them. Finding the descriptor therefore does not prove that the ring calculation is correct. The client's log (\file{info.log}), however, records which HSDir it contacted: \texttt{test002a}, at 16:07. It is one of the three returned by our code for that replica at that moment. A single observation is not proof, but it is consistent. Exercise~\ref{es:14-anello} proposes a stronger test.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item An onion service offers a service without revealing its IP address; its \texttt{.onion} address contains and authenticates the service's public key.
+  \item Descriptors are signed with period-specific blinded keys that only someone knowing the address can link to the service.
+  \item Descriptor positions on the HSDir ring depend on the blinded key, period, and shared random value; clients download descriptors through anonymous requests.
+  \item The descriptor has a signed outer layer and two encrypted layers; the second lists introduction points.
+  \item Client and service meet at a rendezvous point selected by the client, following a request through an introduction point. The hs-ntor handshake adds an end-to-end encryption layer.
+  \item Restricted discovery, vanguards, replay caches, rate limits, and proof of work protect services.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:14-indirizzo}
+How many bytes does a v3 address encode, and why does it produce exactly 56 base32 characters? What is the probability that a random typing error will pass the checksum check?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:14-periodo}
+Calculate the public network's time-period number at 09:00 UTC on 1 January 2026. When did that period begin?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:14-hsdir}
+An adversary wants to block access to an onion service by making sure it controls the responsible HSDirs. What must it predict, and how far in advance can it do so? What role does the SRV play?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:14-ruoli}
+List what the introduction point, rendezvous point, and HSDir know about the client and service. Which of these roles would be most interesting to an adversary trying to estimate a service's popularity?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:14-anonimo}
+Why does an HSDir reject descriptor requests arriving over single-hop circuits? What could it learn otherwise?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:14-anello}
+Test the ring calculation more rigorously. Add relays to the laboratory network (exercise~\ref{es:19-rete}) until it has more than eight HSDirs, then check that the descriptor is available \emph{only} on the HSDirs selected by your code.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:14-ipt}
+Decode the link specifiers of an introduction point from the laboratory descriptor (the base64 value in an \texttt{introduction-point} line). Which laboratory relay is it? What does the certificate on the \texttt{auth-key} line contain?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item \titolo{Tor Rendezvous Specification - Version 3} (rend-spec)~\cite{torspec}: addresses, blinded keys, descriptors, introduction and rendezvous, including hs-ntor test vectors.
+  \item Proposal 224: the design of v3 services.
+  \item The shared-randomness specification (srv-spec): how authorities produce the SRV.
+\end{itemize}

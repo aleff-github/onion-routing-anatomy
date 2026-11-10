@@ -1,0 +1,17 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text (EPUB).
+\altfig{Two cumulative curves from Laboratory 19, a teaching simulation with 2,000 clients over 180 days, each building 20 circuits daily. The adversary controls 5\% of weighted guard bandwidth and 5\% of weighted exit bandwidth. A model compromise means at least one circuit had both adversarial endpoints: at day 180 the fraction is 100\% with a new guard on every circuit and 18.4\% with persistent guards. Guard rotations are staggered independently across clients, with simulated intervals of 48--60 days. These are not observations of actual deanonymizations.}
+% Guard rotations are per-client (simulated 48--60-day intervals), not global events.
+\begin{tikzpicture}[font=\sffamily\scriptsize,x=0.04cm,y=0.04cm]
+  \draw[->] (0,0) -- (190,0) node[below left] {days};
+  \draw[->] (0,0) -- (0,108) node[above] {\% compromised (model)};
+  \foreach \x in {0,30,60,90,120,150,180} \draw (\x,0) -- (\x,-2) node[below] {\x};
+  \foreach \y in {0,25,50,75,100} \draw (0,\y) -- (-2,\y) node[left] {\y};
+  \draw[thick,avviso] plot coordinates {(0,0.0) (5,21.1) (10,38.5) (15,51.1) (20,61.5) (25,69.7) (30,76.5) (35,81.7) (40,86.0) (45,89.2) (50,91.7) (55,93.3) (60,94.9) (65,96.2) (70,97.2) (75,97.9) (80,98.2) (85,98.7) (90,98.9) (95,99.1) (100,99.5) (110,99.7) (120,99.9) (165,100.0) (180,100.0)};
+  \draw[thick,torviola] plot coordinates {(0,0.0) (1,2.6) (3,4.3) (5,4.4) (48,4.4) (52,5.8) (56,7.1) (60,8.7) (64,9.4) (100,9.5) (108,10.8) (114,12.4) (120,13.2) (130,13.4) (160,14.4) (165,15.6) (170,17.0) (175,18.2) (180,18.4)};
+  \node[avviso,anchor=west] at (40,80) {new guard for every circuit};
+  \node[torviola,anchor=west] at (66,26) {persistent guard};
+% Guard rotations are per-client (simulated 48--60-day intervals), not global events.
+  \node[torgrigio,anchor=west,align=left] at (66,43) {staggered guard\\rotations};
+\end{tikzpicture}

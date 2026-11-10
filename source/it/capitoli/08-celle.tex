@@ -1,0 +1,573 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Le celle}\label{cap:08-celle}
+\aggiornatoal{23 settembre 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; Arti 2.6.0; link protocol 3--5}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item descrivere byte per byte il formato delle celle a lunghezza fissa e variabile;
+  \item spiegare perché Tor usa unità di dimensione costante e che cosa questa scelta protegge (e che cosa no);
+  \item interpretare il CircID e le regole con cui viene scelto su ogni canale;
+  \item riconoscere tutti i comandi di cella e i principali comandi relay;
+  \item leggere l'intestazione di un messaggio relay e sapere a che cosa servono \texttt{Recognized} e \texttt{Digest};
+  \item scrivere un codificatore/decodificatore di celle in Python (Laboratorio~2).
+\end{itemize}
+\end{obiettivi}
+
+Nel capitolo precedente abbiamo visto come due nodi Tor aprono un \emph{canale}: una connessione TLS su cui si accordano sulla versione del protocollo e si autenticano. In questo capitolo guardiamo \emph{che cosa viaggia} dentro quel canale. La risposta è semplice da enunciare: \textbf{celle}. Tutto ciò che Tor trasporta, dalla costruzione di un circuito alle pagine web scaricate, viaggia spezzettato in celle. Capire le celle significa avere in mano l'alfabeto con cui è scritto l'intero protocollo.
+
+% ---------------------------------------------------------------------------
+\section{Perché le celle}\label{sec:celle-perche}
+
+Un sistema di anonimato a bassa latenza non può nascondere \emph{che} due nodi comunicano, ma può cercare di non rivelare \emph{che cosa} si dicono e \emph{quanto} ne sono consapevoli i nodi intermedi. Se ogni nodo inoltrasse i dati così come arrivano, pacchetti di dimensione diversa, un osservatore potrebbe seguire un messaggio di 1\,337 byte lungo la rete semplicemente cercando un messaggio di quella lunghezza su ciascun collegamento.
+
+Il progetto originale dell'onion routing, e poi Tor~\cite{dingledine2004tor}, adotta per questo un'unità di trasmissione \textbf{di dimensione fissa}: la cella. Con celle tutte uguali:
+\begin{itemize}
+  \item la lunghezza del singolo messaggio non rivela il contenuto né identifica il flusso;
+  \item i relay possono gestire code e buffer in modo semplice ed efficiente;
+  \item l'intestazione minima permette di inoltrare una cella leggendo pochissimi byte.
+\end{itemize}
+
+\begin{attenzione}[Che cosa le celle \emph{non} nascondono]
+Le celle uniformano la \emph{dimensione} delle singole unità, non il \emph{numero} di unità né la loro \emph{temporizzazione}. Un avversario che osserva entrambe le estremità di un circuito può ancora correlare i volumi e i tempi del traffico. Questo è il limite fondamentale di Tor, che affronteremo nel \cref{cap:26-attacchi}; le difese parziali (padding a livello di canale e di circuito) sono discusse nei \cref{cap:07-canali,cap:26-attacchi} e nella Parte~V.
+\end{attenzione}
+
+\begin{storia}[512 byte]
+L'articolo del 2004 che presenta Tor descrive celle di 512 byte: 2 byte di identificativo di circuito, 1 byte di comando e 509 byte di dati~\cite{dingledine2004tor}. I 509 byte di corpo sono sopravvissuti fino a oggi; l'identificativo di circuito, invece, è cresciuto a 4 byte con il link protocol~4, portando la cella a 514 byte.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{Dal flusso TLS alle celle}\label{sec:celle-tls}
+
+Una volta completato l'handshake TLS, le due parti si scambiano celle \emph{in serie}, una dopo l'altra, come un flusso continuo di byte~\spec{tor-spec}{Cells (messages on channels)}. Il confine tra i record TLS e il confine tra le celle sono indipendenti: una cella può essere divisa su più record, e un record può contenere più celle o frammenti di celle. La specifica impone però che \enquote{la suddivisione in record TLS non deve rivelare informazioni sul tipo o sul contenuto delle celle} (trad. nostra).
+
+Da questo segue una conseguenza pratica per chi implementa il protocollo: il ricevente non può aspettarsi di leggere \enquote{una cella per volta} dal socket. Deve accumulare i byte in un buffer ed estrarre una cella solo quando è completa, lasciando nel buffer l'eventuale avanzo. Il nostro decodificatore del Laboratorio~2 funzionerà esattamente così.
+
+% ---------------------------------------------------------------------------
+\section{Il formato delle celle}\label{sec:celle-formato}
+
+Esistono due formati di cella: \textbf{a lunghezza fissa} e \textbf{a lunghezza variabile}. Entrambi iniziano con gli stessi due campi, \texttt{CircID} e \texttt{Command}.
+
+\subsection{Costanti}
+
+La specifica definisce le seguenti lunghezze~\spec{tor-spec}{Message lengths}, dove $v$ è la versione del link protocol negoziata sul canale:
+
+\begin{center}
+\begin{tabular}{lcl}
+\toprule
+Nome & Byte & Significato \\
+\midrule
+\file{CELL\_BODY\_LEN} & 509 & corpo di una cella a lunghezza fissa \\
+\file{CIRCID\_LEN}$(v)$, $v<4$ & 2 & lunghezza del CircID \\
+\file{CIRCID\_LEN}$(v)$, $v\ge4$ & 4 & \\
+\file{CELL\_LEN}$(v)$, $v<4$ & 512 & lunghezza di una cella fissa \\
+\file{CELL\_LEN}$(v)$, $v\ge4$ & 514 & \\
+\bottomrule
+\end{tabular}
+\end{center}
+\noindent Per ogni $v$ vale $\file{CELL\_LEN}(v) = 1 + \file{CIRCID\_LEN}(v) + \file{CELL\_BODY\_LEN}$.
+
+\begin{approfondimento}[Un vecchio nome]
+Nel codice e nella documentazione più vecchi \file{CELL\_BODY\_LEN} compare come \file{PAYLOAD\_LEN}. È lo stesso valore: 509.
+\end{approfondimento}
+
+\subsection{Celle a lunghezza fissa}
+
+La \cref{fig:cella-fissa} mostra la cella fissa nel link protocol attuale ($v\ge4$).
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig08-cella-fissa}
+\caption{Cella a lunghezza fissa (link protocol $\ge 4$): 4 byte di CircID, 1 byte di comando e 509 byte di corpo, per un totale di 514 byte. Se il contenuto utile è più corto di 509 byte, il resto del corpo è riempito con zeri. I numeri indicano l'offset in byte dall'inizio della cella.}
+\label{fig:cella-fissa}
+\end{figure}
+
+Quando l'informazione da trasmettere occupa meno di 509 byte, il mittente \textbf{deve} riempire la parte rimanente con byte a zero, e il ricevente \textbf{deve} ignorarli~\spec{tor-spec}{Padding fixed-length cell bodies}.
+
+\subsection{Celle a lunghezza variabile}
+
+Alcune celle, soprattutto quelle dell'handshake di canale, hanno bisogno di più di 509 byte (un certificato) o di molto meno. Per queste esiste il formato variabile (\cref{fig:cella-variabile}), che aggiunge un campo \texttt{Length} di 2 byte, intero \emph{big-endian}, e non prevede riempimento.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig08-cella-variabile}
+\caption{Cella a lunghezza variabile (link protocol $\ge 4$): dopo CircID e comando, un campo Length di 2 byte (big-endian) indica quanti byte di corpo seguono. Il corpo può quindi essere lungo da 0 a \num{65535} byte.}
+\label{fig:cella-variabile}
+\end{figure}
+
+\subsection{Come distinguere i due formati}
+
+Il ricevente deve sapere quanti byte leggere \emph{prima} di aver letto la cella. La regola è interamente basata sul comando~\spec{tor-spec}{Cells (messages on channels)}:
+\begin{itemize}
+  \item il comando 7 (\cella{VERSIONS}) è a lunghezza variabile;
+  \item ogni altro comando minore di 128 indica una cella fissa;
+  \item ogni comando maggiore o uguale a 128 indica una cella variabile.
+\end{itemize}
+In altre parole, il bit più significativo del byte di comando fa da indicatore del formato, con l'unica eccezione storica di \cella{VERSIONS}.
+
+\begin{storia}[L'eccezione di VERSIONS]
+Nel link protocol~1 tutte le celle erano fisse. Con il link protocol~2 fu introdotta la negoziazione di versione, e \cella{VERSIONS}, con il valore 7 successivo ai comandi già esistenti (0--6), divenne l'unica cella variabile. Con il link protocol~3 si decise di riservare ai comandi variabili l'intervallo $\ge 128$. Le versioni 1 e 2 sono oggi obsolete e le implementazioni non dovrebbero supportarle.
+\end{storia}
+
+\subsection{Il caso speciale di VERSIONS}
+
+C'è un problema di \enquote{uovo e gallina}: la lunghezza del CircID dipende dalla versione negoziata, ma la versione viene negoziata proprio con la cella \cella{VERSIONS}. La soluzione è che \cella{VERSIONS} si invia \textbf{sempre} come se fosse $v=0$, cioè con un CircID di 2 byte. Il suo corpo è una sequenza di interi big-endian di 2 byte, uno per ogni versione supportata. Un client che supporta le versioni 3, 4 e 5 invia quindi:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Byte & Campo & Significato \\
+\midrule
+\texttt{00 00} & CircID & 0, CircID di 2 byte \\
+\texttt{07} & Command & \cella{VERSIONS} \\
+\texttt{00 06} & Length & 6 byte di corpo \\
+\texttt{00 03 00 04 00 05} & Body & versioni 3, 4, 5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Entrambe le parti scelgono la versione \textbf{più alta presente in tutte e due} le celle \cella{VERSIONS}. Se non c'è una versione comune, o se il corpo ha un numero dispari di byte, la connessione va chiusa~\spec{tor-spec}{Negotiating versions with VERSIONS cells}.
+
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+Versione & Descrizione \\
+\midrule
+1 & (obsoleta) handshake con certificati iniziali \\
+2 & (obsoleta) handshake con rinegoziazione TLS; introduce le celle variabili \\
+3 & (obsoleta) handshake \enquote{in-protocol} attuale (\cref{cap:07-canali}) \\
+4 & CircID a 4 byte \\
+5 & supporto al link padding e alla sua negoziazione \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Nelle implementazioni attuali, tor offre le versioni 3, 4 e 5 (array \file{or\_protocol\_versions} in \file{src/core/or/connection\_or.c}), mentre Arti offre solo la 4 e la 5. Due istanze aggiornate negoziano quindi sempre la versione~5.
+
+% ---------------------------------------------------------------------------
+\section{Il CircID}\label{sec:circid}
+
+Il campo \texttt{CircID} indica a quale circuito appartiene la cella; vale 0 per le celle che non appartengono ad alcun circuito (per esempio \cella{VERSIONS}, \cella{NETINFO}, \cella{PADDING}).
+
+Il punto fondamentale è che \textbf{il CircID è locale al canale}. Un circuito a tre salti attraversa tre canali (client--guard, guard--middle, middle--exit) e ha un CircID \emph{diverso} su ciascuno. Ogni relay mantiene una tabella che associa la coppia (canale entrante, CircID) alla coppia (canale uscente, CircID), come mostra la \cref{fig:circid-locale}.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig08-circid}
+\caption{Lo stesso circuito ha un CircID diverso su ogni canale. Il guard e il middle traducono l'identificativo tramite una tabella di commutazione. Un osservatore di un singolo collegamento non può quindi riconoscere lo stesso circuito su un altro collegamento confrontando i CircID. I valori sono di esempio, ma rispettano la regola del bit più significativo descritta qui sotto: sul canale~2 il bit è a zero, cioè quella connessione l'aveva aperta il middle e il guard la sta riusando.}
+\label{fig:circid-locale}
+\end{figure}
+
+Questa scelta ha due vantaggi: nessun nodo deve coordinarsi con gli altri per scegliere gli identificativi, e il CircID non diventa un'etichetta globale che permetta di collegare i tratti di uno stesso circuito.
+
+\subsection{Chi sceglie il CircID}
+
+Il CircID viene scelto dal nodo che invia la cella di creazione (\cella{CREATE2}, \cref{cap:09-circuiti}). Poiché su un canale entrambe le parti possono creare circuiti, bisogna evitare che scelgano lo stesso valore contemporaneamente. La regola dipende dalla versione~\spec{tor-spec}{Choosing circuit IDs in create cells}:
+\begin{itemize}
+  \item \textbf{link protocol $\ge 4$}: il nodo che ha \emph{aperto} la connessione usa CircID con il bit più significativo (MSB) a 1; l'altro usa CircID con MSB a 0;
+  \item \textbf{link protocol $\le 3$}: la metà dello spazio si sceglieva confrontando le chiavi pubbliche di identità dei due relay (chi ha la chiave minore usa MSB a 0).
+\end{itemize}
+Il valore 0 è riservato; nessun altro valore lo è. Le implementazioni esistenti scelgono il CircID \textbf{a caso} tra i valori liberi, e la specifica raccomanda alle nuove implementazioni di fare lo stesso per non essere distinguibili. Tor rinuncia a creare nuovi circuiti su un canale dopo 64 tentativi consecutivi di trovare un valore libero.
+
+\begin{approfondimento}[Perché 4 byte]
+Con 2 byte e metà dello spazio disponibile, un canale può ospitare poco più di \num{32000} circuiti per lato, e la scelta casuale produce collisioni ben prima di esaurire lo spazio. La \proposta{214} (2012) lo dice senza giri di parole: \enquote{i relay stanno esaurendo i circuit ID} (trad. nostra). La proposta ha introdotto il link protocol~4 con CircID a 4 byte, implementato in tor 0.2.4.11-alpha.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{I comandi di cella}\label{sec:comandi}
+
+Il byte \texttt{Command} stabilisce come interpretare il corpo. Le tabelle seguenti riportano tutti i valori definiti~\spec{tor-spec}{Interpreting the fields: Command}. Nella colonna C, \enquote{sì} indica che il comando richiede un CircID diverso da zero e \enquote{no} che lo richiede uguale a zero; la colonna P indica la prima versione del link protocol che supporta il comando (se vuota: almeno dalla~3).
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{rlccl}
+\toprule
+Val. & Comando & C & P & Funzione \\
+\midrule
+0 & \cella{PADDING} & no & & padding di collegamento \\
+1 & \cella{CREATE} & sì & & crea circuito (TAP, deprecato) \\
+2 & \cella{CREATED} & sì & & risposta a CREATE (deprecato) \\
+3 & \cella{RELAY} & sì & & dati da estremo a estremo \\
+4 & \cella{DESTROY} & sì & & distrugge un circuito \\
+5 & \cella{CREATE\_FAST} & sì & & crea circuito senza crittografia a chiave pubblica \\
+6 & \cella{CREATED\_FAST} & sì & & risposta a CREATE\_FAST \\
+8 & \cella{NETINFO} & no & & ora e indirizzi \\
+9 & \cella{RELAY\_EARLY} & sì & & come RELAY, in numero limitato \\
+10 & \cella{CREATE2} & sì & & crea circuito (handshake estensibile) \\
+11 & \cella{CREATED2} & sì & & risposta a CREATE2 \\
+12 & \cella{PADDING\_NEGOTIATE} & sì & 5 & negoziazione del padding \\
+\bottomrule
+\end{tabular}
+\caption{Comandi delle celle a lunghezza fissa.}
+\label{tab:comandi-fissi}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{rlcl}
+\toprule
+Val. & Comando & C & Funzione \\
+\midrule
+7 & \cella{VERSIONS} & no & negoziazione del link protocol \\
+128 & \cella{VPADDING} & no & padding a lunghezza variabile \\
+129 & \cella{CERTS} & no & certificati \\
+130 & \cella{AUTH\_CHALLENGE} & no & sfida per l'autenticazione \\
+131 & \cella{AUTHENTICATE} & no & autenticazione dell'iniziatore \\
+132 & \cella{AUTHORIZE} & no & riservato \\
+\bottomrule
+\end{tabular}
+\caption{Comandi delle celle a lunghezza variabile.}
+\label{tab:comandi-variabili}
+\end{table}
+
+\paragraph{Comandi sconosciuti.} Non sono ammessi altri valori. Chi riceve un comando sconosciuto \emph{può} scartare la cella in silenzio e \emph{può} chiudere il canale. Il motivo di questa severità è che ogni nuovo comando viene introdotto insieme a una nuova versione del link protocol: un'implementazione corretta non invierà mai un comando che l'altra parte non ha dichiarato di supportare. Prima che il link protocol fosse versionato, invece, i comandi sconosciuti venivano ignorati nell'ipotesi che provenissero da una versione più recente di Tor.
+
+Possiamo raggruppare i comandi per funzione:
+\begin{description}
+  \item[Gestione del canale] \cella{VERSIONS}, \cella{CERTS}, \cella{AUTH\_CHALLENGE}, \cella{AUTHENTICATE}, \cella{NETINFO}: l'handshake del \cref{cap:07-canali}.
+  \item[Padding] \cella{PADDING}, \cella{VPADDING}, \cella{PADDING\_NEGOTIATE}: traffico fittizio per ostacolare l'analisi del traffico sul collegamento.
+  \item[Ciclo di vita del circuito] \cella{CREATE2}/\cella{CREATED2} (e le varianti storiche), \cella{DESTROY}: creazione e distruzione dei circuiti (\cref{cap:09-circuiti}).
+  \item[Trasporto] \cella{RELAY} e \cella{RELAY\_EARLY}: tutto ciò che viaggia \emph{dentro} un circuito.
+\end{description}
+
+\subsection{DESTROY}
+
+Il contenuto significativo di \cella{DESTROY} è un solo byte con il \emph{motivo} della chiusura~\spec{tor-spec}{Tearing down circuits}. La cella rimane però a lunghezza fissa: gli altri 508 byte del corpo sono padding a zero, come richiede la regola generale delle celle fisse. Chi riceve \cella{DESTROY} libera le risorse del circuito e, se non è l'estremo, propaga a sua volta un \cella{DESTROY} al nodo successivo.
+
+\begin{center}\small
+\begin{tabular}{rl@{\qquad}rl}
+\toprule
+0 & NONE & 7 & OR\_IDENTITY \\
+1 & PROTOCOL & 8 & CHANNEL\_CLOSED \\
+2 & INTERNAL & 9 & FINISHED \\
+3 & REQUESTED & 10 & TIMEOUT \\
+4 & HIBERNATING & 11 & DESTROYED \\
+5 & RESOURCELIMIT & 12 & NOSUCHSERVICE \\
+6 & CONNECTFAILED & & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{attenzione}[Il motivo come canale laterale]
+La specifica raccomanda di inviare \textbf{sempre} il motivo NONE e di non propagare il motivo ricevuto. Se un relay inoltrasse il motivo originale in entrambe le direzioni, due relay complici sullo stesso circuito potrebbero usarlo come segnale per scoprire di trovarsi sullo stesso circuito: un piccolo esempio di come anche un singolo byte possa diventare un \emph{side channel}.
+\end{attenzione}
+
+\subsection{RELAY\_EARLY}
+
+\cella{RELAY\_EARLY} ha lo stesso formato di \cella{RELAY} ma serve a \textbf{limitare la lunghezza dei circuiti}~\spec{tor-spec}{Handling RELAY\_EARLY cells}. Le regole sono:
+\begin{itemize}
+  \item un client deve inviare i messaggi di estensione del circuito (\texttt{EXTEND2}) solo dentro celle \cella{RELAY\_EARLY}; dalla versione 0.2.3.11-alpha i relay rifiutano le estensioni ricevute altrimenti;
+  \item un relay che riceve più di 8 celle \cella{RELAY\_EARLY} in avanti su un circuito dovrebbe chiuderlo; se ne riceve anche una sola \emph{all'indietro}, verso il client, deve chiuderlo subito;
+  \item per non rivelare la lunghezza del circuito, i client dovrebbero inviare come \cella{RELAY\_EARLY} anche le prime 8 celle circa non destinate al primo salto.
+\end{itemize}
+Senza questo limite, un avversario potrebbe costruire circuiti lunghissimi che passano più volte per gli stessi relay e amplificare così il proprio traffico: è l'attacco di congestione con percorsi lunghi descritto da Evans, Dingledine e Grothoff~\cite{evans2009congestion}.
+
+\begin{storia}[Un segnale inatteso]
+La regola che vieta \cella{RELAY\_EARLY} all'indietro nasce da un incidente del 2014: alcuni relay usarono celle \cella{RELAY\_EARLY} inviate verso il client come canale nascosto per marcare i circuiti degli utenti degli onion service. Ne parleremo in dettaglio nel \cref{cap:27-casi-rete}.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{Dentro le celle RELAY}\label{sec:relay}
+
+Le celle \cella{RELAY} e \cella{RELAY\_EARLY} trasportano i \textbf{messaggi relay}: i comandi che il client scambia con i nodi del circuito, da quelli per estenderlo fino ai dati degli stream TCP. Il loro corpo di 509 byte è cifrato a strati, uno per ogni salto: è la \enquote{cipolla} del \cref{cap:10-cifratura-relay}. Dal punto di vista del canale, quindi, il corpo di una cella RELAY è sempre pieno: non c'è riempimento a zero visibile.
+
+Una volta tolti tutti gli strati di cifratura, il corpo in chiaro ha il formato tradizionale della \cref{fig:relay}~\spec{tor-spec}{Relay cells}.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig08-relay}
+\caption{Corpo \emph{decifrato} di una cella RELAY nel formato tradizionale: 11 byte di intestazione, fino a 498 byte di dati e padding eventuale fino a 509 byte. La specifica raccomanda fino a quattro byte iniziali a zero e poi byte casuali; se restano meno di quattro byte, sono tutti zero, mentre con 498 byte di dati non c'è padding.}
+\label{fig:relay}
+\end{figure}
+
+\begin{description}
+  \item[Relay command (1 byte)] il tipo di messaggio (\cref{tab:comandi-relay}).
+  \item[Recognized (2 byte)] vale zero nel messaggio in chiaro. Serve al relay per capire rapidamente se la cella è destinata a lui: se dopo aver tolto il proprio strato il campo non è zero, la cella è sicuramente ancora cifrata e va inoltrata.
+  \item[StreamID (2 byte)] lo stream a cui si riferisce il messaggio, scelto dal client; zero per i messaggi che riguardano il circuito nel suo insieme.
+  \item[Digest (4 byte)] i primi 4 byte di un digest \emph{progressivo} di tutti i messaggi scambiati con quel salto (SHA-1 per i circuiti ordinari, SHA3-256 per quelli degli onion service). Conferma che la cella è davvero destinata al nodo e che non è stata alterata.
+  \item[Length (2 byte)] quanti byte del campo Data sono significativi.
+  \item[Data] il contenuto del messaggio.
+  \item[Padding] il resto, fino a 509 byte.
+\end{description}
+
+Con 11 byte di intestazione restano al massimo $509 - 11 = 498$ byte di dati per cella.
+
+\subsection{Recognized e Digest: un filtro a due stadi}
+
+Perché due campi? Calcolare il digest per ogni cella in transito sarebbe costoso. Il campo Recognized è un filtro economico: dopo la decifratura di una cella ancora cifrata, i suoi 2 byte sono pseudocasuali e valgono zero solo con probabilità $2^{-16}$. Solo quando Recognized è zero il relay calcola il digest; se questo coincide, la cella è \enquote{riconosciuta} e viene elaborata, altrimenti viene inoltrata. Vedremo i dettagli del calcolo, e le sue debolezze, nel \cref{cap:10-cifratura-relay}.
+
+\subsection{Il padding del messaggio relay}
+
+Il padding del messaggio relay è diverso dal riempimento a zero delle celle fisse. La specifica raccomanda 4 byte a zero seguiti da \textbf{byte casuali}~\spec{tor-spec}{Relay cells}. I byte casuali rendono imprevedibile il contenuto della cella: questo è necessario per i SENDME autenticati della \proposta{289}, che dimostrano di aver ricevuto davvero i dati includendo il digest delle celle ricevute (\cref{cap:11-stream}). I riceventi non devono fare affidamento sul contenuto del padding.
+
+\subsection{I comandi relay}
+
+La \cref{tab:comandi-relay} elenca i comandi relay definiti. La colonna Dir. indica la direzione: A (\emph{avanti}, solo dal client verso il circuito), I (\emph{indietro}, solo verso il client), A/I (entrambe); C indica un messaggio di \emph{controllo}, che deve avere StreamID zero.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}rll>{\raggedright\arraybackslash}X@{}}
+\toprule
+Val. & Comando & Dir. & Funzione \\
+\midrule
+\multicolumn{4}{l}{\emph{Protocollo di base}} \\
+1 & BEGIN & A & apre uno stream \\
+2 & DATA & A/I & dati dello stream \\
+3 & END & A/I & chiude uno stream \\
+4 & CONNECTED & I & stream aperto con successo \\
+5 & SENDME & A/I, C? & conferma di ricezione (controllo di flusso) \\
+6--7 & EXTEND/EXTENDED & A/I, C & estensione con TAP (obsoleti) \\
+8--9 & TRUNCATE/TRUNCATED & A/I, C & troncamento del circuito (non usati) \\
+10 & DROP & A/I, C & padding a lungo raggio \\
+11--12 & RESOLVE/RESOLVED & A/I & risoluzione DNS remota \\
+13 & BEGIN\_DIR & A & stream verso la directory cache \\
+14--15 & EXTEND2/EXTENDED2 & A/I, C & estensione del circuito \\
+16--18 & \emph{riservati} & & UDP su Tor (\proposta{339}) \\
+\multicolumn{4}{l}{\emph{Conflux}} \\
+19--22 & CONFLUX\_\ldots & A/I, C & LINK, LINKED, LINKED\_ACK, SWITCH: circuiti multipli (\proposta{329}) \\
+\multicolumn{4}{l}{\emph{Onion service}} \\
+32 & ESTABLISH\_INTRO & A, C & crea un punto di introduzione \\
+33 & ESTABLISH\_RENDEZVOUS & A, C & crea un punto di rendezvous \\
+34--35 & INTRODUCE1/INTRODUCE2 & A/I, C & richiesta di introduzione \\
+36--37 & RENDEZVOUS1/RENDEZVOUS2 & A/I, C & unione al rendezvous \\
+38--40 & \ldots\_ESTABLISHED, INTRODUCE\_ACK & I, C & conferme \\
+\multicolumn{4}{l}{\emph{Padding di circuito e controllo di flusso}} \\
+41--42 & PADDING\_NEGOTIATE/\ldots D & A/I, C & padding di circuito \\
+43--44 & XOFF/XON & A/I & controllo di flusso dello stream (\proposta{324}) \\
+\bottomrule
+\end{tabularx}
+\caption{Comandi relay. SENDME è controllo solo quando riguarda il circuito e non uno stream (\cref{cap:11-stream}).}
+\label{tab:comandi-relay}
+\end{table}
+
+Se una cella è riconosciuta ma il comando relay non è noto, va scartata; il suo contenuto conta comunque per il digest e per le finestre di controllo di flusso.
+
+% ---------------------------------------------------------------------------
+\section{Verso un nuovo formato: proposta 340 e CGO}\label{sec:nuovo-formato}
+
+Il formato tradizionale ha due limiti noti. Il primo è l'efficienza: un messaggio grande occupa sempre almeno una cella intera, e più messaggi piccoli non possono condividere una cella. Il secondo è la sicurezza: il digest di 4 byte e la cifratura AES-CTR senza autenticazione lasciano spazio ad attacchi di \emph{tagging}, che vedremo nel \cref{cap:10-cifratura-relay}.
+
+% Fonte primaria: https://spec.torproject.org/proposals/359-cgo-redux.html#relay-cell-format
+% Distinzione confermata dal decoder Arti tor-cell/relaycell.rs (V0/V1: no fragmentation).
+La \proposta{340} (\emph{Packed and fragmented relay messages}) prevede di separare il concetto di \emph{cella} da quello di \emph{messaggio}: in quel progetto un messaggio può occupare più celle e una cella può contenere più messaggi. La \proposta{359} (\emph{Counter Galois Onion, Updated}) introduce invece il nuovo schema di cifratura dei relay, CGO, e riprende dalla 340 \emph{la struttura dell'intestazione}. Sono però due cambiamenti distinti: nel formato CGO implementato da tor e Arti, la presenza della nuova intestazione \textbf{non abilita ancora} l'impacchettamento o la frammentazione; ogni cella contiene un solo messaggio relay. Queste funzionalità della proposta 340 restano da distinguere dal supporto già disponibile per CGO. Una cella decifrata con CGO ha questa struttura:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Campo & Byte \\
+\midrule
+tag di autenticazione & 16 \\
+corpo & $509 - 16 = 493$ \\
+\midrule
+\quad \emph{nel corpo:} comando & 1 \\
+\quad lunghezza & 2 \\
+\quad StreamID (solo per alcuni comandi) & 2 \\
+\quad dati & \emph{lunghezza} \\
+\quad padding (4 zeri, poi byte casuali) & resto \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Lo StreamID compare solo per i comandi che lo richiedono (BEGIN, DATA, END, CONNECTED, RESOLVE, RESOLVED, BEGIN\_DIR, XON, XOFF); Recognized e Digest spariscono, sostituiti dal tag. Un client usa CGO con un relay solo se entrambi lo supportano (sottoprotocollo \texttt{Relay=6}) e lo negoziano durante la creazione del circuito.
+
+\begin{approfondimento}[Quanti dati per cella con CGO?]
+Dal formato si ricava che in un messaggio DATA restano $493 - 1 - 2 - 2 = 488$ byte di dati, 10 in meno del formato tradizionale: è il prezzo dell'autenticazione a 16 byte.
+\end{approfondimento}
+
+CGO non è più soltanto una proposta: tor lo supporta dalla serie 0.4.9 (introdotto in 0.4.9.3-alpha, settembre 2025), e in Arti il supporto è sempre attivo, al punto che l'opzione di compilazione \texttt{counter-galois-onion} è rimasta solo per compatibilità. Nel repository delle specifiche le due proposte risultano ancora \enquote{Open}: lo stato di una proposta segue il processo di standardizzazione e non sempre coincide con quello del codice.
+
+% ---------------------------------------------------------------------------
+\section{Anatomia di una sessione}\label{sec:sessione}
+
+Mettiamo insieme i pezzi e seguiamo, cella per cella, che cosa invia un client al proprio guard per costruire un circuito a tre salti e scaricare una pagina web. La \cref{fig:sessione} riassume la sequenza; i dettagli di ogni passo sono nei capitoli successivi.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig08-sessione}
+\caption{Celle scambiate tra client e guard sul canale TLS per creare un circuito a tre salti e aprire uno stream. Il guard vede solo le celle del suo canale: non può leggere il contenuto delle celle RELAY destinate al middle e all'exit, cifrate con chiavi che non possiede.}
+\label{fig:sessione}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{Handshake di canale}: \cella{VERSIONS}, poi dal guard \cella{CERTS}, \cella{AUTH\_CHALLENGE}, \cella{NETINFO}; il client risponde con \cella{NETINFO}. CircID sempre 0.
+  \item \textbf{Primo salto}: \cella{CREATE2} con un CircID nuovo (MSB a 1, perché il client ha aperto la connessione); il guard risponde \cella{CREATED2}.
+  \item \textbf{Secondo e terzo salto}: due celle \cella{RELAY\_EARLY} contenenti \texttt{EXTEND2}; il guard, e poi il middle, le trasformano in \cella{CREATE2} verso il nodo successivo. Le risposte tornano come celle \cella{RELAY} contenenti \texttt{EXTENDED2}.
+  \item \textbf{Stream}: una cella con \texttt{BEGIN} per l'exit, che risponde \texttt{CONNECTED}; poi \texttt{DATA} in entrambe le direzioni, intervallate da \texttt{SENDME}.
+  \item \textbf{Chiusura}: \texttt{END} per lo stream e, alla fine della vita del circuito, \cella{DESTROY}.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: un codificatore di celle}\label{sec:lab-celle}
+
+\begin{laboratorio}[2]{Codificare e decodificare celle}
+\textbf{Obiettivo.} Scrivere il modulo \file{labs/it/codice/torlab/celle.py}, che userai in tutti i laboratori successivi.\\
+\textbf{Prerequisiti.} Python~3.10 o successivo, \cmd{pytest}. Non serve alcuna rete: il laboratorio lavora su byte costruiti a mano.\\
+\textbf{Tempo stimato.} 1--2 ore.
+\end{laboratorio}
+
+\paragraph{Passo 1: costanti e comandi.} Traduciamo le tabelle della specifica in enumerazioni Python, così i valori numerici compaiono in un solo punto:
+
+\begin{lstlisting}[language=Python]
+CELL_BODY_LEN = 509
+RELAY_HEADER_LEN = 11
+RELAY_DATA_MAX = CELL_BODY_LEN - RELAY_HEADER_LEN   # 498
+
+class Comando(IntEnum):
+    PADDING = 0
+    CREATE = 1
+    # ... tutti i valori delle tabelle 8.1 e 8.2
+    AUTHORIZE = 132
+
+def circid_len(versione):
+    return 2 if versione < 4 else 4
+
+def lunghezza_variabile(comando):
+    return comando == Comando.VERSIONS or comando >= 128
+\end{lstlisting}
+
+\paragraph{Passo 2: codifica.} Una funzione che, dati CircID, comando, corpo e versione del link protocol, produce i byte da inviare. Nota il trattamento speciale di \cella{VERSIONS} e il riempimento con zeri:
+
+\begin{lstlisting}[language=Python]
+def codifica(cella, versione):
+    if cella.comando == Comando.VERSIONS:
+        versione = 0                  # CircID sempre di 2 byte
+    n = circid_len(versione)
+    intestazione = cella.circ_id.to_bytes(n, "big") + bytes([cella.comando])
+    if lunghezza_variabile(cella.comando):
+        return (intestazione + struct.pack(">H", len(cella.corpo))
+                + cella.corpo)
+    return intestazione + cella.corpo.ljust(CELL_BODY_LEN, b"\x00")
+\end{lstlisting}
+
+\paragraph{Passo 3: decodifica da un flusso.} Poiché i byte arrivano dal socket TLS a pezzi, la decodifica restituisce \texttt{None} finché la cella non è completa, e altrimenti la cella e i byte avanzati:
+
+\begin{lstlisting}[language=Python]
+def decodifica(buffer, versione):
+    n = circid_len(versione)
+    if len(buffer) < n + 1:
+        return None
+    circ_id = int.from_bytes(buffer[:n], "big")
+    comando = buffer[n]
+    if lunghezza_variabile(comando):
+        if len(buffer) < n + 3:
+            return None
+        (lunghezza,) = struct.unpack(">H", buffer[n+1:n+3])
+        inizio, fine = n + 3, n + 3 + lunghezza
+    else:
+        inizio, fine = n + 1, n + 1 + CELL_BODY_LEN
+    if len(buffer) < fine:
+        return None
+    return Cella(circ_id, comando, buffer[inizio:fine]), buffer[fine:]
+\end{lstlisting}
+
+\paragraph{Passo 4: VERSIONS e negoziazione.}
+
+\begin{lstlisting}[language=Python]
+def negozia_versione(mie, corpo_ricevuto):
+    if len(corpo_ricevuto) % 2:
+        raise ErroreCella("VERSIONS con un numero dispari di byte")
+    sue = {v for (v,) in struct.iter_unpack(">H", corpo_ricevuto)}
+    comuni = set(mie) & sue
+    if not comuni:
+        raise ErroreCella("nessuna versione in comune")
+    return max(comuni)
+\end{lstlisting}
+
+\paragraph{Passo 5: il messaggio relay.} Infine l'intestazione di 11 byte. Il formato \texttt{">BHH4sH"} di \texttt{struct} corrisponde esattamente ai campi della \cref{fig:relay}:
+
+\begin{lstlisting}[language=Python]
+def codifica_relay(msg, casuale=os.urandom):
+    intestazione = struct.pack(">BHH4sH", msg.comando, msg.recognized,
+                               msg.stream_id, msg.digest, len(msg.dati))
+    spazio = CELL_BODY_LEN - RELAY_HEADER_LEN - len(msg.dati)
+    padding = b"\x00" * min(4, spazio) + casuale(max(0, spazio - 4))
+    return intestazione + msg.dati + padding
+\end{lstlisting}
+
+Il parametro \texttt{casuale} permette ai test di sostituire i byte casuali con valori prevedibili.
+
+I listati mostrano il percorso essenziale della codifica, omettendo per brevità
+alcuni controlli sugli input. Il modulo completo in
+\file{labs/it/codice/torlab/celle.py} verifica anche la classe del comando,
+il valore del CircID e le dimensioni massime dei corpi: 509 byte per una
+cella fissa, \num{65535} per una variabile e 498 byte di dati per un
+messaggio relay tradizionale. Per trattare dati ricevuti dalla rete
+va usata la versione completa, non uno di questi frammenti isolato.
+
+\paragraph{Verifica.} Il repository contiene i test in \file{labs/it/codice/torlab/test/test\_celle.py}. Eseguili dalla cartella \file{labs/it/codice}:
+\begin{lstlisting}[language=bash,numbers=none]
+$ python3 -m pytest -q torlab/test/test_celle.py
+........                                                  [100%]
+8 passed
+\end{lstlisting}
+(Senza il nome del file, \cmd{pytest} esegue i test di tutti i laboratori presenti nel repository.)
+Un test verifica, per esempio, che la cella \cella{VERSIONS} per le versioni 3, 4 e 5 corrisponda byte per byte all'esempio della \cref{sec:celle-formato}: \texttt{0000 07 0006 0003 0004 0005}.
+
+\paragraph{Estensioni.} Nel Laboratorio~1 (\cref{cap:07-canali}) il modulo verrà usato per parlare con un relay vero della rete privata; nel Laboratorio~4 aggiungeremo il calcolo del digest e la cifratura a strati.
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item La cella è l'unità di trasmissione di Tor sul canale. Le celle fisse misurano 514 byte (CircID 4 + comando 1 + corpo 509) dal link protocol~4, 512 byte prima.
+  \item Le celle variabili aggiungono un campo Length di 2 byte; sono variabili \cella{VERSIONS} (7) e tutti i comandi $\ge 128$.
+  \item \cella{VERSIONS} usa sempre un CircID di 2 byte; si sceglie la versione comune più alta.
+  \item Il CircID è locale al canale; chi ha aperto la connessione usa valori con MSB a 1, scelti a caso.
+  \item \cella{DESTROY} dovrebbe portare sempre il motivo NONE per non creare canali laterali; \cella{RELAY\_EARLY} limita la lunghezza dei circuiti.
+  \item Il corpo decifrato di una cella RELAY ha 11 byte di intestazione (comando, Recognized, StreamID, Digest, Length) e al massimo 498 byte di dati; il padding è di 4 zeri seguiti da byte casuali.
+  \item La proposta 359 ha portato al formato CGO con tag di autenticazione di 16 byte e StreamID facoltativo; impacchettamento e frammentazione, previsti dalla proposta 340, non sono implicati dall'adozione di CGO.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:08-lunghezze}
+Quanti byte misura una cella \cella{CREATE2} su un canale che ha negoziato il link protocol~3? E con il 5? Quanti byte misura una cella \cella{VERSIONS} con corpo \texttt{00 04 00 05}?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:08-formato}
+Per ciascuno dei comandi 0, 7, 9, 12, 129 e 200, indica se la cella è fissa o variabile. Quale di questi valori non è ammesso?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:08-circid}
+Un client apre un canale verso un guard con link protocol~5. Quale di questi CircID può usare per un nuovo circuito: \texttt{0x00000000}, \texttt{0x12345678}, \texttt{0x92345678}? Perché?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:08-hex}
+Decodifica a mano la seguente sequenza di byte ricevuta su un canale con link protocol~4, indicando CircID, comando e lunghezza del corpo di ogni cella:\\
+\texttt{00 00 00 00 81 00 03 aa bb cc 80 00 00 07 04 00 \ldots}\\
+(la seconda cella prosegue con il resto del corpo, che non riportiamo).
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:08-relay}
+Scrivi i primi 11 byte, in esadecimale, del corpo in chiaro di un messaggio relay DATA sullo stream 5, con 300 byte di dati, prima del calcolo del digest. Quanti byte di padding seguono, e quanti di essi sono sicuramente zero?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:08-recognized}
+Un relay intermedio elabora \num{1000000} di celle che non sono destinate a lui. In media, per quante di esse dovrà calcolare il digest? Perché non basta il campo Recognized a stabilire che una cella è destinata al relay?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:08-destroy}
+Descrivi uno scenario concreto in cui due relay complici potrebbero sfruttare il motivo di un \cella{DESTROY} per scoprire di trovarsi sullo stesso circuito. Perché il motivo NONE neutralizza lo scenario?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:08-efficienza}
+Un client scarica un file di \SI{1}{\mebi\byte} (\num{1048576} byte) attraverso un circuito. Quante celle DATA servono con il formato tradizionale? E con il formato CGO? Qual è, in percentuale, l'overhead delle intestazioni di cella rispetto ai dati utili nei due casi (link protocol~4, senza contare TLS)?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:08-lab-fuzz}
+Estendi il Laboratorio~2 con un test \emph{property-based} (per esempio con la libreria Hypothesis) che generi celle casuali, fisse e variabili, le codifichi, le concateni e le spezzi in frammenti di lunghezza casuale, verificando che la decodifica restituisca esattamente le celle originali.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:08-arti}
+Individua nel codice sorgente di Arti (crate \texttt{tor-cell}) le funzioni che codificano e decodificano le celle di canale. Confronta la loro gestione del caso \enquote{cella incompleta} con la funzione \texttt{decodifica} del Laboratorio~2.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification}, capitoli \enquote{Cells}, \enquote{Relay cells} e \enquote{Negotiating channels}~\cite{torspec}: la fonte primaria di tutto il capitolo.
+  \item R.~Dingledine, N.~Mathewson, P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}, sezione 4: il formato originale delle celle e le motivazioni.
+  \item N.~Evans, R.~Dingledine, C.~Grothoff, \titolo{A Practical Congestion Attack on Tor Using Long Paths}~\cite{evans2009congestion}: l'attacco che motiva \cella{RELAY\_EARLY}.
+  \item Proposte 359 (CGO, implementato) e 340 (impacchettamento e frammentazione ancora da distinguere dal formato CGO) in torspec.
+\end{itemize}

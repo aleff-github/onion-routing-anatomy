@@ -1,0 +1,45 @@
+name: "Feature or content proposal · Proposta di contenuto"
+description: "New content, a better explanation, a figure, an exercise, a laboratory, a website feature. · Nuovi contenuti, una spiegazione migliore, una figura, un esercizio, un laboratorio."
+title: "[Proposal] "
+labels: ["proposal", "status: to verify"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: "Kind · Tipo"
+      options:
+        - "New or extended content · Contenuto nuovo o esteso"
+        - "Clearer explanation · Spiegazione più chiara"
+        - "Figure · Figura"
+        - "Exercise · Esercizio"
+        - "Laboratory · Laboratorio"
+        - "Website · Sito"
+        - "Other · Altro"
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: "Where (if it applies) · Dove (se pertinente)"
+      placeholder: "e.g. chapter 13, after section 13.4"
+    validations:
+      required: false
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Proposal · Proposta"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: "Why it would help readers · Perché sarebbe utile"
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: "Sources · Fonti"
+      description: "Specifications, code, proposals or papers the new content would rely on. · Fonti su cui si baserebbe."
+    validations:
+      required: false

@@ -1,0 +1,233 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Selección de rutas, guardias y vanguards}\label{cap:13-percorso}
+\aggiornatoal{23 de septiembre de 2026}{commit de torspec \texttt{8e1f245}; tor 0.4.9.13; consenso público del 23/09/2026 a las 15:00 UTC}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item describir el orden y las restricciones con que tor selecciona repetidores para un circuito;
+  \item explicar cómo el ancho de banda del consenso y los \emph{bandwidth-weights} distribuyen la carga entre posiciones;
+  \item explicar por qué se emplean guardias y reconstruir su evolución desde tres hasta uno y luego dos;
+  \item describir el algoritmo de guardias: conjuntos muestreados, filtrados, confirmados y primarios;
+  \item explicar qué son los \emph{vanguards} y por qué los necesitan los servicios onion;
+  \item simular la selección de rutas a partir de un consenso real de la red pública (laboratorio~7).
+\end{itemize}
+\end{obiettivi}
+
+El sistema de directorios (\cref{cap:12-directory}) proporciona al cliente una lista de repetidores. Queda la pregunta que más determina la protección del usuario: \emph{¿cuáles} debe utilizar? Si un adversario controla el primer y el último repetidor del circuito, puede correlacionar el tráfico entrante y saliente y descubrir quién se comunica con quién (\cref{cap:26-attacchi}). Seleccionar la ruta consiste, en buena medida, en hacer que esto ocurra lo menos posible sin sacrificar el rendimiento.
+
+% ---------------------------------------------------------------------------
+\section{Orden y restricciones}\label{sec:percorso-vincoli}
+
+En un circuito de tres saltos, tor selecciona \textbf{primero la salida}, después el guardia y por último el intermedio~\spec{path-spec}{Path selection and constraints}. La salida se elige primero porque es el repetidor sometido a más restricciones: su política debe permitir el destino solicitado. Si el cliente solo conoce el nombre del destino, pero no su dirección, selecciona una salida que \emph{podría} aceptarlo, es decir, cuya política no rechaza el puerto solicitado antes de permitirlo.
+
+Salvo algunas excepciones, las rutas cumplen estas restricciones:
+\begin{itemize}
+  \item no se utilizan repetidores sin el indicador \texttt{Fast};
+  \item un repetidor no puede aparecer dos veces;
+  \item como máximo un repetidor por red IPv4 /16 (o IPv6 /32): dos repetidores del mismo centro de datos podrían pertenecer al mismo operador;
+  \item como máximo un repetidor por \textbf{familia}: los operadores de varios repetidores deberían declararlos como familia, y tor evita combinarlos en el mismo circuito;
+  \item el primer repetidor es un guardia (\cref{sec:guard});
+  \item no se emplean salidas marcadas como \texttt{BadExit}.
+\end{itemize}
+
+Las conexiones que se prevé mantener abiertas mucho tiempo (tor clasifica ciertos puertos así, entre ellos el 22 de SSH y el 6667 de IRC) también requieren repetidores \texttt{Stable}. Los servicios onion añaden una restricción independiente del puerto: los circuitos de introducción y de encuentro del lado del servicio se construyen como circuitos \texttt{Stable} y sus extremos no pueden ser \texttt{MiddleOnly}~\spec{path-spec}{Path selection and constraints}. Las excepciones mencionadas se refieren principalmente a circuitos onion creados con vanguards (\cref{sec:vanguards}), donde deliberadamente se relajan ciertas reglas, por ejemplo permitir un guardia en una posición intermedia. Prohibir esas combinaciones revelaría al adversario qué repetidores \emph{no} se seleccionaron y, por tanto, información sobre la selección del guardia.
+
+\begin{approfondimento}[Dos formas de declarar una familia]
+Tradicionalmente, cada operador enumera los otros repetidores de su familia en el descriptor de cada uno. Dos repetidores solo pertenecen a la misma familia si se mencionan mutuamente. Con muchos repetidores, las listas crecen demasiado y un pequeño error de configuración puede romper la asociación. Un mecanismo más reciente, \emph{happy families}, asigna una clave a la familia. Cada repetidor demuestra su pertenencia mediante un certificado firmado por esa clave (\texttt{family-cert} en el descriptor y \texttt{family-ids} en el microdescriptor). Los parámetros de consenso \texttt{use-family-lists} y \texttt{use-family-ids} determinan qué mecanismo aplican los clientes.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Ponderación por ancho de banda}\label{sec:percorso-pesi}
+
+\subsection{Por qué importa la ponderación}
+
+Si los clientes escogieran los repetidores con probabilidad uniforme, uno de 1\,MB/s recibiría tanto tráfico como uno de 1\,GB/s. El primero se saturaría y el segundo quedaría desaprovechado. En cambio, Tor selecciona cada repetidor con probabilidad \textbf{proporcional a su ancho de banda} registrado en el consenso (línea \texttt{w}, \cref{sec:dir-anatomia}), distribuyendo la carga según su capacidad.
+
+\subsection{Las posiciones del circuito no son equivalentes}
+
+Existe una complicación: los repetidores con indicador \texttt{Exit} son relativamente escasos y su capacidad de salida es el recurso más limitado de la red. Utilizar una salida como guardia o intermedio consumiría capacidad necesaria para acceder a Internet. Lo mismo sucede, aunque en menor medida, con los guardias. Por ello las autoridades calculan los \textbf{bandwidth-weights} de cada consenso: coeficientes que multiplican el ancho de banda según el \emph{tipo} de repetidor (solo guardia, solo salida, ambos o ninguno) y la \emph{posición} para la que se selecciona~\spec{path-spec}{Weighting node selection}.
+
+Cada peso se llama \texttt{W}\emph{pt}: \emph{p} indica la posición (\texttt{g} guardia, \texttt{m} intermedio, \texttt{e} salida y \texttt{b} solicitudes de directorio) y \emph{t} el tipo (\texttt{g}, \texttt{e}, \texttt{d} si es guardia y salida, \texttt{m} si no es ninguno). Los valores se expresan en diezmilésimas: \texttt{Wmg=3805} significa que al seleccionar un guardia como intermedio solo cuenta el 38,05\,\% de su ancho de banda.
+
+\subsection{Pesos de la red real}
+
+Los siguientes pesos proceden del consenso público del 23 de septiembre de 2026 a las 15:00 UTC, descargado desde CollecTor en el laboratorio~7:
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Posición $\backslash$ tipo & guardia (\texttt{g}) & intermedio (\texttt{m}) & salida (\texttt{e}) & guardia+salida (\texttt{d}) \\
+\midrule
+guardia (\texttt{Wg\,}) & 6195 & 6195 & --- & 0 \\
+intermedio (\texttt{Wm\,}) & 3805 & 10000 & 0 & 0 \\
+salida (\texttt{We\,}) & 10000 & 10000 & 10000 & 10000 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Las consecuencias son inmediatas. Las salidas y los repetidores que son a la vez guardias y salidas tienen peso \textbf{cero} en posiciones de guardia o intermedio. En esta red, el ancho de banda de salida (33\,\% del total) es tan valioso que se reserva para esa posición. Los guardias, que representan el 70\,\% del ancho de banda, son abundantes: se ponderan al 62\,\% como guardias y al 38\,\% como intermedios. Como mostrará el laboratorio, en el 60\,\% de los circuitos el intermedio también tiene el indicador \texttt{Guard}.
+
+Las fórmulas utilizadas por las autoridades para calcular estos pesos figuran en la especificación de directorios. Distinguen distintos escenarios según el tipo de ancho de banda escaso e intentan equilibrar, cuando sea posible, la capacidad disponible entre las tres posiciones.
+
+% ---------------------------------------------------------------------------
+\section{Guardias}\label{sec:guard}
+
+\subsection{El problema que resuelven}
+
+Supongamos que un adversario controla una fracción $c$ del ancho de banda de posibles primeros repetidores y salidas. Si el cliente eligiera un guardia y una salida nuevos al azar para cada circuito, la probabilidad de que ambos pertenecieran al adversario sería aproximadamente $c^2$ por circuito. Después de $C$ circuitos, la probabilidad de que al menos uno hubiera quedado comprometido sería $1-(1-c^2)^C$, que se aproxima a 1~\spec{guard-spec}{Introduction and motivation}. Quien utiliza Tor todos los días crea miles de circuitos; tarde o temprano, casi con certeza, el adversario observaría parte de su tráfico.
+
+La idea de los \textbf{guardias}, llamados \emph{helper nodes} en la literatura, consiste en seleccionar el primer repetidor \emph{una vez} y seguir utilizándolo durante mucho tiempo. Si ese guardia es honesto, ningún circuito queda comprometido por este mecanismo; si es del adversario, quedan expuestos muchos. La probabilidad de verse comprometido \emph{al menos una vez} cae desde casi 1 hasta aproximadamente $c$.
+
+\begin{center}
+\begin{tabular}{rcc}
+\toprule
+Circuitos & Sin guardias & Con guardia fijo \\
+\midrule
+1 & 0.0025 & 0.0025 \\
+100 & 0.221 & 0.050 \\
+\num{1000} & 0.918 & 0.050 \\
+\num{10000} & 1.000 & 0.050 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Calculada en el laboratorio~7 para $c=5\,\%$, la tabla ilustra el compromiso. Los guardias no hacen imposible el compromiso: transforman un evento que con el tiempo sería casi inevitable en otro infrecuente que afecta a una pequeña fracción de usuarios, en lugar de terminar afectando a casi todos. Este modelo es deliberadamente simplificado; por ejemplo, ignora que el guardia puede cambiar con el tiempo.
+
+\subsection{Tres, uno, dos}
+
+Los guardias se introdujeron en 2006, después de que Øverlier y Syverson demostraran cómo localizar un servicio onion provocando repetidamente que se conectara a repetidores controlados por el adversario~\cite{overlier2006locating}. Durante años los clientes utilizaron tres guardias, que sustituían tras dos o tres meses. Investigaciones posteriores mostraron que tres guardias y una rotación frecuente aumentaban la exposición. La \proposta{236} (2014) propuso un único guardia, conservado nueve o diez meses. Sin embargo, uno solo hace más frágil la conectividad y facilita que un adversario fuerce su sustitución. La \proposta{291} (2018) pasó a \textbf{dos} guardias. El valor predeterminado incorporado en \texttt{tor} sigue siendo uno (\file{DFLT\_N\_PRIMARY\_GUARDS\_TO\_USE} en \file{src/feature/client/entrynodes.h}), pero el consenso público contiene \texttt{guard-n-primary-guards-to-use=2}, que lo sustituye para todos los clientes. Es un ejemplo de cómo las autoridades regulan la red mediante el consenso.
+
+\subsection{El algoritmo}
+
+El algoritmo actual, definido en la \proposta{271} y la especificación de guardias, administra diversos conjuntos~\spec{guard-spec}{The algorithm}:
+\begin{description}
+  \item[Guardias muestreados] Conjunto de guardias elegidos aleatoriamente con ponderación por ancho de banda y conservados en disco. Crece solo cuando es necesario, hasta 60 repetidores o el 20\,\% de los guardias del consenso. El límite impide que un adversario obligue al cliente a probar uno tras otro todos los guardias de la red hasta alcanzar uno malicioso.
+  \item[Guardias filtrados] Guardias de la muestra que siguen apareciendo en el consenso y pueden utilizarse con la configuración actual, por ejemplo detrás de un cortafuegos que solo permite ciertos puertos.
+  \item[Guardias confirmados] Guardias realmente utilizados para tráfico del usuario, ordenados por preferencia.
+  \item[Guardias primarios] Normalmente tres guardias tomados de los filtrados: primero los confirmados que también están filtrados, según prioridad; si no bastan, se añaden otros filtrados aún no confirmados. El cliente usa el primer primario accesible (o los dos primeros con el parámetro de consenso indicado). Si ninguno responde, prueba otros, pero vuelve a los primarios cuanto antes.
+\end{description}
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig13-guardias}
+\caption{Relaciones entre las listas de guardias Tor: la muestra persistente procede de guardias del consenso, mientras que FILTERED y CONFIRMED son subconjuntos distintos que pueden solaparse. Los primarios solo se eligen de FILTERED, priorizando los confirmados y completando con otros filtrados cuando sea necesario. Limitar la muestra reduce la exposición a guardias nuevos.}
+\label{fig:guard}
+\end{figure}
+
+La permanencia de un guardia en la muestra depende de su estado. Un guardia \textbf{nunca confirmado} (sin \texttt{CONFIRMED\_ON\_DATE}) se elimina después de \texttt{GUARD\_LIFETIME}, es decir, 120 días desde la selección. Un guardia \textbf{confirmado}, utilizado por el cliente, se elimina a los \texttt{GUARD\_CONFIRMED\_MIN\_LIFETIME} = 60 días desde su confirmación. También se elimina si permanece ausente del consenso durante 20 días. Las marcas temporales guardadas (\texttt{ADDED\_ON\_DATE} y \texttt{CONFIRMED\_ON\_DATE}) se retrotraen aleatoriamente hasta \texttt{GUARD\_LIFETIME}/10 = 12 días. Así, el archivo de estado no revela exactamente cuándo empezó el cliente a utilizar Tor, y la vida efectiva de un guardia confirmado es de 48--60 días. Por tanto, el guardia \emph{confirmado} rota aproximadamente cada dos meses, no cada cuatro. Este detalle importa para la simulación del \cref{cap:29-ricerca}.
+
+\begin{attenzione}[Un guardia nuevo constituye una pista]
+Tor distingue cuidadosamente entre un guardia \emph{inaccesible} y un circuito que \emph{ha fallado}. Si el cliente cambiara de guardia cada vez que fallara un circuito, un adversario podría provocar deliberadamente fallos a través de guardias honestos hasta conseguir que seleccionara uno malicioso. Esto es precisamente lo que corrigió la versión de seguridad tor 0.4.9.13, publicada el 23 de septiembre de 2026: ahora el cliente atribuye el fallo al guardia solo cuando no puede establecer la conexión, y no cuando fallan circuitos, flujos o solicitudes de directorio.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Vanguards}\label{sec:vanguards}
+
+Los guardias protegen el \emph{primer} salto. Los servicios onion (\cref{cap:14-onion-services}) afrontan otro problema: un cliente malicioso puede inducir al servicio a construir tantos circuitos como desee hasta puntos de encuentro elegidos por el atacante. Si el intermedio de cada circuito se eligiera al azar de nuevo, tarde o temprano pertenecería al adversario, que observaría entonces el guardia del servicio. El siguiente paso podría consistir en atacar ese guardia u obtener sus datos. Los \textbf{vanguards} extienden la idea de los guardias a saltos posteriores, manteniendo fijos también los repetidores de la segunda capa y, con ciertas configuraciones, de la tercera.
+
+\begin{description}
+  \item[Vanguards-lite] (\proposta{333}, tor 0.4.7.1-alpha) Activados por defecto en clientes y servicios onion. Utilizan cuatro repetidores de segunda capa, no guardados en disco, cada uno con una vida aleatoria. Aquí el código y la especificación difieren. tor 0.4.9.13 utiliza un intervalo de 1 a 12 días (aproximadamente una semana de media), definido por \file{MIN\_SECOND\_GUARD\_LIFETIME} y \file{MAX\_SECOND\_GUARD\_LIFETIME} en \file{src/feature/client/entrynodes.c}. Los parámetros de consenso \texttt{guard-hs-l2-lifetime-min} y \texttt{-max} pueden modificarlo, pero ninguno aparecía en el consenso del 23 de septiembre de 2026. La especificación de vanguards, en cambio, todavía indica 1--22 días (dos semanas de media). Este modo está pensado para servicios y usuarios que permanecen activos durante un máximo de unas pocas semanas.
+  \item[Vanguards completos] Repetidores fijos en dos capas (segundo y tercer salto), con mayor duración, para servicios onion de larga vida y alto riesgo. En \texttt{tor} se implementan mediante el complemento \emph{vanguards}, que establece \opt{HSLayer2Nodes} y \opt{HSLayer3Nodes}. Arti los implementa directamente con un modo \texttt{Full} junto al \texttt{Lite}.
+\end{description}
+
+En la red de laboratorio (\cref{sec:rp-stem}) observamos circuitos con propósito \file{HS\_VANGUARDS}: circuitos preparados con vanguards y listos para extenderse hasta un punto de introducción o encuentro.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: examinar la red pública}\label{sec:lab-percorso}
+
+\begin{laboratorio}[7]{Selección de rutas ponderada por ancho de banda}
+\textbf{Objetivo.} Implementar \file{labs/es/codigo/torlab/path\_selection.py} y utilizarlo para analizar un consenso real de la red pública.\\
+\textbf{Requisitos previos.} Laboratorio~6 (\file{directory.py}). Consenso público descargado de CollecTor, archivo público del Tor Project (\url{https://collector.torproject.org/}). Estos datos se publican específicamente para investigación y descargarlos no implica interactuar con usuarios de la red.\\
+\textbf{Tiempo estimado.} 2 horas.
+\end{laboratorio}
+
+\paragraph{Paso 1: ponderar un repetidor.}
+\begin{lstlisting}[language=Python]
+def _relay_type(r):  # g = solo guardia, e = solo salida, d = ambos, m = ninguno
+    g, e = "Guard" in r.flag, "Exit" in r.flag and "BadExit" not in r.flag
+    return {(1, 1): "d", (1, 0): "g", (0, 1): "e", (0, 0): "m"}[(g, e)]
+
+def weight(r, position, weights):
+    key = f"W{position[0]}{_relay_type(r)}"          # por ejemplo "Wmg"
+    return (r.bandwidth or 0) * weights.get(key, 10000) / 10000
+\end{lstlisting}
+
+\paragraph{Paso 2: seleccionar una ruta.} La clase \texttt{Selector} calcula los pesos una vez por posición. Aplica las restricciones \emph{mediante rechazo}: selecciona un repetidor y, si incumple una restricción (el mismo repetidor o una misma red /16), selecciona otro.
+\begin{lstlisting}[language=Python]
+def path(self, rng, guard=None):
+    e = self.choose("exit", [], rng)
+    g = guard or self.choose("guard", [e], rng)
+    m = self.choose("middle", [e, g], rng)
+    return g, m, e
+\end{lstlisting}
+
+Una primera versión que filtraba más de nueve mil repetidores y recalculaba pesos y redes en cada selección tardaba 310 segundos en construir \num{2000} rutas. La versión optimizada construye \num{20000} en 7 segundos. En una simulación estadística, el rendimiento no es un detalle menor.
+
+\paragraph{Paso 3: la red pública en cifras.} Para el consenso del 23 de septiembre de 2026 a las 15:00 UTC:
+\begin{lstlisting}[numbers=none]
+repetidores: 9358
+ancho de banda con Guard: 70.1%    con Exit: 33.1%
+guard : aptos 5306; 10 primeros = 1.7%; 100 primeros = 12.6%
+middle: aptos 8961; 10 primeros = 2.8%; 100 primeros = 13.7%
+exit  : aptos 3126; 10 primeros = 2.3%; 100 primeros = 13.7%
+20000 rutas: gge 30.9%  ggd 29.4%  gme 20.4%  gmd 19.3%
+\end{lstlisting}
+
+El número de repetidores \emph{elegibles} es menor que el de aquellos que poseen el indicador correspondiente (\cref{cap:06-architettura} indica 3177 repetidores \texttt{Exit}, frente a 3126 aquí). La función \texttt{eligible} también exige \texttt{Running}, \texttt{Valid} y \texttt{Fast}, y excluye \texttt{BadExit} y \texttt{MiddleOnly}. La diferencia comprende 48 salidas sin \texttt{Fast} y 3 marcadas como \texttt{BadExit}.
+
+La última línea representa una muestra obtenida con semilla aleatoria 7. Sin una semilla fija, los valores varían unas décimas de punto porcentual en cada ejecución y no pueden compararse directamente dos experimentos. Las letras identifican los tipos de guardia, intermedio y salida de cada ruta: \texttt{gme}, por ejemplo, es guardia, intermedio sin ninguno de los dos indicadores y salida pura. Tal como predicen los pesos, ninguna ruta utiliza una salida en primera o segunda posición; en el 60\,\% de los casos, el intermedio tiene indicador \texttt{Guard}. La concentración es baja: las diez salidas seleccionadas con mayor frecuencia concentran conjuntamente el 2,3\,\% de las selecciones y las cien primeras el 13,7\,\%.
+
+\paragraph{Paso 4: guardias y adversarios.} La clase \texttt{Adversary} calcula la tabla de \cref{sec:guard}. Prueba a modificar la cuota del adversario: ¿el efecto protector de los guardias sigue siendo evidente para $c=1\,\%$ o $c=20\,\%$?
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item tor selecciona primero la salida, después el guardia y el intermedio, y evita repetidores duplicados o pertenecientes a la misma red /16 o familia.
+  \item La probabilidad de selección de un repetidor es proporcional al ancho de banda multiplicado por un peso que depende de su tipo y de la posición del circuito; en la red estudiada, las salidas solo se emplean como salidas.
+  \item Los guardias convierten el compromiso, casi inevitable a largo plazo con primeros saltos elegidos al azar en cada circuito, en un evento infrecuente; los clientes utilizan actualmente dos.
+  \item El algoritmo de guardias conserva una muestra limitada, guardias confirmados y primarios, y atribuye cuidadosamente los fallos.
+  \item Los vanguards también mantienen fija la segunda capa de los servicios onion; vanguards-lite viene activado por defecto.
+  \item Los parámetros de consenso pueden sustituir los valores predeterminados del programa.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:13-ordine}
+¿Por qué selecciona tor primero la salida? ¿Qué problemas surgirían si eligiera el guardia antes?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:13-peso}
+Un repetidor tiene indicadores \texttt{Guard} y \texttt{Exit} y ancho de banda de consenso 20000. Según los pesos de la red real descritos en este capítulo, ¿qué peso tiene en cada una de las tres posiciones?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:13-guard}
+Repite el cálculo de la tabla de guardias para $c=1\,\%$ y $c=20\,\%$. ¿Tras cuántos circuitos supera el 50\,\% la probabilidad de compromiso sin guardias en cada caso?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:13-sybil}
+Un adversario quiere aumentar la probabilidad de que los clientes seleccionen sus repetidores como salidas. ¿En qué recursos debe invertir y qué mecanismos (mediciones de ancho de banda, familias, límites por dirección y pesos) se lo dificultan?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:13-campione}
+¿Por qué se limita la muestra de guardias a 60 repetidores o al 20\,\% de todos los guardias? Describe el ataque que evita este límite.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:13-famiglie}
+Amplía \texttt{Selector} para aplicar la restricción de familia utilizando las líneas \texttt{family} y \texttt{family-ids} de los microdescriptores. Descarga desde CollecTor los microdescriptores correspondientes al consenso y mide cuántas selecciones se rechazan por pertenecer a la misma familia.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:13-operatori}
+Agrupa los repetidores del consenso público por familia declarada y calcula la cuota de probabilidad de selección de salida correspondiente a las diez familias mayores. Compárala con la cuota de las diez salidas individuales más seleccionadas. ¿Qué concluyes sobre el riesgo de los operadores que administran muchos repetidores?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item \titolo{Tor Path Specification} y \titolo{Tor Guard Specification}~\cite{torspec}.
+  \item L.~Øverlier y P.~Syverson, \titolo{Locating Hidden Servers}~\cite{overlier2006locating}: el ataque que motivó los guardias.
+  \item Propuestas 236, 271, 291 y 333: del guardia único a dos, el algoritmo actual y vanguards-lite.
+  \item La especificación vanguards-spec, con tablas de plazos para los ataques Sybil.
+\end{itemize}

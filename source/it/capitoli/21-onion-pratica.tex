@@ -1,0 +1,214 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Pubblicare onion service}\label{cap:21-onion-pratica}
+\aggiornatoal{23 settembre 2026}{tor 0.4.9.13; documentazione di Onionbalance}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item configurare un onion service e proteggerne le chiavi;
+  \item evitare gli errori di configurazione che rivelano il server;
+  \item offrire a chi visita un sito normale la sua versione \texttt{.onion} con Onion-Location;
+  \item limitare l'accesso ai soli client autorizzati con la scoperta ristretta (Laboratorio~13);
+  \item valutare indirizzi vanity, servizi a un salto e bilanciamento del carico con Onionbalance.
+\end{itemize}
+\end{obiettivi}
+
+Il \cref{cap:14-onion-services} ha spiegato come funzionano gli onion service. Questo capitolo è la loro controparte pratica: come pubblicarne uno, come non comprometterne l'anonimato con un errore banale e quali strumenti esistono per le esigenze più comuni.
+
+% ---------------------------------------------------------------------------
+\section{Il primo onion service}\label{sec:onionp-primo}
+
+Bastano due righe nel \file{torrc}:
+\begin{lstlisting}[language=torrc]
+HiddenServiceDir /var/lib/tor/mio_servizio/
+HiddenServicePort 80 127.0.0.1:8080
+\end{lstlisting}
+La directory indicata da \opt{HiddenServiceDir} deve essere accessibile in lettura e scrittura al processo tor; nel laboratorio è un percorso \emph{interno al container} Chutney. Questo primo esempio configura un servizio \emph{pubblico}: non richiede alcun file \file{alice.auth}. L'autorizzazione dei client, compresi i file \file{authorized\_clients/*.auth}, è trattata più avanti in questo capitolo.
+La prima indica la cartella in cui tor conserva le chiavi del servizio; la seconda dice che la porta \emph{virtuale} 80 dell'indirizzo \texttt{.onion} va inoltrata al server locale sulla porta 8080. Al riavvio, tor crea nella cartella:
+\begin{description}
+  \item[\file{hostname}] l'indirizzo \texttt{.onion} (\cref{sec:os-indirizzo});
+  \item[\file{hs\_ed25519\_public\_key}, \file{hs\_ed25519\_secret\_key}] la coppia di chiavi di identità del servizio. \textbf{Chi possiede la chiave segreta possiede l'indirizzo}: può pubblicare descrittori e impersonare il servizio. Va protetta come la chiave privata di un certificato, e salvata in un backup sicuro, perché se si perde l'indirizzo è perso per sempre.
+\end{description}
+La cartella deve essere accessibile solo all'utente che esegue tor; tor rifiuta di usarla altrimenti. Si possono configurare più servizi, ciascuno con la propria cartella, nello stesso processo: nel laboratorio abbiamo aggiunto un secondo servizio al nodo \texttt{test009h} con altre due righe.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig21-servizio}
+\caption{Dalle due direttive \opt{HiddenServiceDir} e \opt{HiddenServicePort} al servizio onion v3 pubblico. Tor genera nella directory \texttt{hostname} e le chiavi di identità Ed25519; l'indirizzo contiene 56 caratteri base32 derivati dalla chiave pubblica, da un checksum e dalla versione (il nome nella figura è un segnaposto). La porta virtuale 80 viene inoltrata al server locale \texttt{127.0.0.1:8080}. La chiave segreta permette di impersonare il servizio e va protetta; in questo esempio non serve \texttt{alice.auth}.}
+\label{fig:servizio}
+\end{figure}
+
+\subsection{Non tradire il server}
+
+Il protocollo nasconde l'indirizzo del server; la configurazione può rivelarlo. Gli errori più comuni:
+\begin{itemize}
+  \item \textbf{servizio raggiungibile anche dall'esterno}: se il server web ascolta su tutte le interfacce e non solo su 127.0.0.1, chi scansiona Internet può trovarlo e confrontarne il contenuto con quello dell'onion service. Il server deve ascoltare solo su localhost, o meglio su un socket Unix (\texttt{HiddenServicePort 80 unix:/percorso/socket});
+  \item \textbf{informazioni nelle risposte}: pagine di errore con il nome del server, intestazioni HTTP con indirizzi interni, certificati TLS emessi per un dominio pubblico, pagine di stato del server web lasciate accessibili;
+  \item \textbf{risorse esterne}: una pagina che carica immagini o script da siti normali fa sì che quel traffico, invece di restare dentro il servizio onion, esca da un exit (in Tor Browser passa comunque per Tor, quindi non svela l'IP del visitatore, ma non beneficia più dell'autenticazione e della protezione end-to-end proprie del servizio onion: l'exit può osservare i metadati della connessione e, se è HTTP non cifrato, anche il contenuto (HTTPS continua a proteggere il contenuto applicativo)); e un'applicazione lato server che contatta servizi esterni (aggiornamenti, statistiche) può rivelare l'indirizzo del server;
+  \item \textbf{orologio e tempi}: un server che risponde con l'ora locale sbagliata di un fuso preciso, o che è irraggiungibile ogni volta che un certo server pubblico è in manutenzione, lascia tracce correlabili.
+\end{itemize}
+Nel \cref{cap:28-opsec} vedremo casi reali in cui errori di questo tipo hanno fatto localizzare dei servizi.
+
+% ---------------------------------------------------------------------------
+\section{Onion-Location}\label{sec:onionp-location}
+
+Molti siti pubblici offrono anche una versione \texttt{.onion}: grandi testate giornalistiche, social network, il Tor Project stesso. Per segnalarla ai visitatori che usano Tor Browser, il sito normale invia l'intestazione HTTP
+\begin{lstlisting}[numbers=none]
+Onion-Location: http://<indirizzo>.onion/percorso
+\end{lstlisting}
+(o l'equivalente elemento \texttt{meta} nella pagina), e Tor Browser mostra nella barra degli indirizzi un pulsante per passare alla versione onion. Per chi visita, il vantaggio è evitare l'exit e ottenere un collegamento autenticato dall'indirizzo stesso; per il sito, ricevere il traffico di Tor senza che passi dagli exit, che spesso vengono bloccati o trattati con sospetto.
+
+% ---------------------------------------------------------------------------
+\section{Scoperta ristretta}\label{sec:onionp-ristretta}
+
+Un servizio personale, per esempio l'accesso SSH a un server di casa o un pannello di amministrazione, non deve essere raggiungibile da chiunque ne conosca l'indirizzo. La scoperta ristretta (\cref{sec:os-ristretta}) cifra il secondo strato del descrittore per i soli client autorizzati. La configurazione usa coppie di chiavi X25519~\cite{torspec}:
+\begin{description}
+  \item[Lato servizio] nella cartella \file{authorized\_clients/} del servizio, un file \file{.auth} per ogni client, con una riga
+  \texttt{descriptor:\allowbreak x25519:}\emph{chiave pubblica del client in base32};
+  \item[Lato client] l'opzione \opt{ClientOnionAuthDir} indica una cartella con un file \file{.auth\_private} per ogni servizio, con la riga
+  \emph{indirizzo senza .onion}\texttt{:\allowbreak descriptor:\allowbreak x25519:}\emph{chiave privata del client in base32}.
+\end{description}
+Tor Browser permette di inserire la chiave privata quando visita un servizio che la richiede.
+
+\textbf{Avvertenza per il laboratorio:} lo script
+\file{labs/it/laboratorio/scoperta\_ristretta.py} ora riconosce
+le proprie cartelle temporanee tramite un file marcatore e
+\textbf{rifiuta di cancellare cartelle preesistenti non riconosciute}
+\file{hs\_ristretto/} o \file{onion\_auth/}. Conserva comunque
+altrove i dati importanti e usalo solo nella rete Chutney
+dedicata; non su un servizio reale. La chiave privata X25519 viene
+scritta con permessi \texttt{0600} e senza sovrascrivere file
+esistenti. I passi manuali richiedono la creazione corretta delle
+chiavi e la rilettura della configurazione dei nodi interessati;
+per \emph{revocare} una credenziale su un servizio effettivo,
+segui invece la procedura di \textbf{riavvio} documentata dal
+Tor Project, senza considerare \texttt{HUP} una revoca sicura.
+
+\begin{laboratorio}[13]{Un onion service con scoperta ristretta}
+\textbf{Obiettivo.} Configurare sul nodo \texttt{test009h} un secondo onion service accessibile solo a un client autorizzato, e verificarlo con e senza la chiave.\\
+\textbf{Prerequisiti.} La rete di laboratorio avviata; un server web locale sulla porta 8080.\\
+\textbf{Tempo stimato.} 1 ora.
+\end{laboratorio}
+
+\paragraph{Passo 1: la coppia di chiavi del client.} Con la libreria \texttt{cryptography}:
+Il frammento seguente è un programma Python autonomo che stampa la riga di autorizzazione pubblica. Occorre conservare separatamente \texttt{priv}, senza divulgarla, per creare successivamente il file \file{.auth\_private}.
+\begin{lstlisting}[language=Python]
+import base64
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives.serialization import (
+    Encoding, PrivateFormat, PublicFormat, NoEncryption
+)
+
+sk = X25519PrivateKey.generate()
+priv = sk.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
+pub = sk.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+b32 = lambda b: base64.b32encode(b).decode().rstrip("=")
+print("descriptor:x25519:" + b32(pub))
+\end{lstlisting}
+La base32 va scritta senza i caratteri \texttt{=} di riempimento.
+Il frammento stampa soltanto la riga pubblica e \emph{non salva} la chiave privata: se lo esegui come script separato, \texttt{priv} andrà persa alla sua terminazione. Per completare manualmente la procedura, conserva la chiave con permessi restrittivi prima che il processo termini oppure usa il laboratorio automatizzato, che crea il file client e rimuove le chiavi temporanee alla fine. I passi manuali e quelli automatici sono alternative, non vanno sovrapposti.
+
+\paragraph{Passo 2: il servizio.} Creiamo \file{hs\_ristretto/authorized\_clients/alice.auth} con la chiave pubblica, aggiungiamo al \file{torrc} di \texttt{test009h}
+\begin{lstlisting}[language=torrc,numbers=none]
+HiddenServiceDir /lab/net/nodes/009h/hs_ristretto
+HiddenServicePort 80 127.0.0.1:8080
+\end{lstlisting}
+e inviamo il segnale \texttt{HUP}. tor crea l'indirizzo e pubblica i descrittori.
+
+Il comando seguente legge il vero indirizzo di questa istanza dal file \file{hostname} che tor crea insieme al servizio: ogni rete ha il proprio indirizzo. Il messaggio SOCKS e i log sotto riportati provengono da una precedente sessione di riferimento e possono variare.
+
+\paragraph{Passo 3: senza chiave.} Dal client della rete:
+\begin{lstlisting}[numbers=none]
+$ ONION_ADDR=$(cat labs/it/laboratorio/net/nodes/009h/hs_ristretto/hostname)
+$ curl --noproxy "" --socks5-hostname 127.0.0.1:9008 \
+    "http://${ONION_ADDR}/index.html"
+(curl: errore 97 dal proxy SOCKS)
+\end{lstlisting}
+e nel log del client:
+\begin{lstlisting}[numbers=none]
+[notice] Fail to decrypt descriptor for requested onion address.
+         It is likely requiring client authorization.
+\end{lstlisting}
+Il client ha trovato e scaricato il descrittore, ma non riesce a decifrarne il secondo strato: non conosce nemmeno i punti di introduzione, e non può tentare alcuna connessione.
+
+\begin{attenzione}[Cartella vuota: rischio di rendere pubblico il servizio]
+In tor 0.4.9.13, \textbf{la sola presenza} di
+\file{authorized\_clients/} \textbf{non abilita l'autorizzazione}:
+la funzione \texttt{is\_client\_auth\_enabled} in
+\file{src/feature/hs/hs\_service.c} restituisce vero soltanto
+se è stata caricata \emph{almeno una} chiave pubblica valida.
+Se la cartella è vuota o tutti i file \file{.auth} sono illeggibili o
+non validi, il servizio viene configurato \textbf{senza scoperta
+ristretta}: chi conosce l'indirizzo può raggiungerlo. Tor genera
+comunque le voci \texttt{auth-client} fittizie richieste dal formato
+del descrittore; non è corretto dedurre che l'HSDir rifiuti
+necessariamente il descrittore per assenza di chiavi autorizzate.
+Il codice è stato confrontato con Tor 0.4.9.13; la documentazione
+Tor conferma che l'autorizzazione si attiva solo caricando un file
+valido. Una risposta HTTP~400 storicamente osservata nel laboratorio
+non prova, da sola, quale fosse la causa del rifiuto del descrittore.
+
+\textbf{Non revocare l'ultimo client lasciando la cartella vuota} su
+un servizio sensibile: la scoperta ristretta potrebbe disattivarsi.
+Per mantenere l'accesso ristretto, configura prima almeno un altro
+client autorizzato, verifica l'effettivo caricamento delle chiavi,
+poi rimuovi la credenziale da revocare e riavvia tor secondo la
+procedura documentata. Considera ancora utilizzabili le connessioni
+già stabilite e i descrittori precedentemente recuperati finché
+non scadono o non vengono invalidati; per revoche urgenti è necessaria
+anche una strategia applicativa.
+\end{attenzione}
+
+\paragraph{Passo 4: con la chiave.} Scriviamo il file \file{.auth\_private} in una cartella indicata da \opt{ClientOnionAuthDir}, facciamo rileggere la configurazione al client e ripetiamo la richiesta: questa volta la pagina arriva. Lo script \file{labs/it/laboratorio/scoperta\_ristretta.py} automatizza l'esperimento, esegue la pulizia e ripristina i file \file{torrc} al termine; fa parte di \texttt{make verifica-lab}.
+
+% ---------------------------------------------------------------------------
+\section{Altre esigenze}\label{sec:onionp-altre}
+
+\subsection{Indirizzi vanity}
+
+Un indirizzo che inizia con una parola riconoscibile aiuta gli utenti a riconoscerlo. Si ottiene generando chiavi a caso finché l'indirizzo non inizia con il prefisso voluto, con programmi specializzati come \emph{mkp224o}. Ogni carattere in più del prefisso moltiplica per 32 il numero medio di tentativi: sei o sette caratteri si trovano in tempi ragionevoli su un computer normale, ogni carattere successivo richiede decine di volte più tempo. Il limite, già visto nella \cref{sec:os-indirizzo}, è che anche un avversario può generare un indirizzo con lo stesso prefisso: il prefisso aiuta a riconoscere, non autentica. Una chiave generata da un programma di terzi va inoltre considerata sensibile quanto qualsiasi altra.
+
+\subsection{Servizi a un salto}
+
+Un sito che non ha bisogno di nascondere la propria posizione, come la versione onion di un giornale noto, può rinunciare all'anonimato del server per guadagnare velocità: con \opt{HiddenServiceSingleHopMode} e \opt{HiddenServiceNonAnonymousMode}, il servizio costruisce circuiti di un solo salto verso i punti di introduzione e di rendezvous. Il client resta anonimo come sempre. I descrittori, invece, vengono pubblicati ancora con circuiti di tre salti: come abbiamo scoperto nella \cref{sec:lab-onion}, gli HSDir rifiutano le richieste che arrivano direttamente, e il manuale di tor lo cita proprio come motivo. Il nome dell'opzione, che include \enquote{NonAnonymous}, è voluto: un'istanza di tor configurata così non può essere usata anche come client anonimo. E la scelta è difficile da annullare: una volta che il servizio ha operato in modo non anonimo, il suo indirizzo IP è collegabile all'indirizzo \texttt{.onion}; per tornare a un servizio anonimo non basta togliere l'opzione, servono un nuovo indirizzo (nuove chiavi, nuova \opt{HiddenServiceDir}) e un'istanza pulita.
+
+\subsection{Onionbalance}
+
+Un solo processo tor è un punto di fallimento e ha un limite di prestazioni. Onionbalance~\cite{onionbalance} permette di servire lo stesso indirizzo da più server: ciascun server gestisce un proprio onion service, con i propri punti di introduzione, e Onionbalance, che possiede la chiave dell'indirizzo principale, pubblica un descrittore che raccoglie i punti di introduzione di tutti. I client si distribuiscono così tra i server senza saperlo. Il Tor Project lo usa per i propri siti.
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item Un onion service richiede due righe di configurazione; la chiave segreta nella sua cartella \emph{è} l'indirizzo, e va protetta e salvata.
+  \item Il server deve ascoltare solo su localhost o su un socket Unix e non deve rivelare informazioni su di sé nelle risposte o nei collegamenti esterni.
+  \item Onion-Location segnala ai visitatori di Tor Browser la versione onion di un sito.
+  \item La scoperta ristretta usa chiavi X25519: senza la chiave, il client non riesce nemmeno a decifrare il descrittore.
+  \item Indirizzi vanity, servizi a un salto e Onionbalance rispondono a esigenze di riconoscibilità, velocità e scalabilità.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:21-vanity}
+Quanti tentativi servono in media per un prefisso di 6 caratteri base32? E di 8? Se un computer ne prova 10 milioni al secondo, quanto tempo serve nei due casi?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:21-fuga}
+Un onion service mostra, nelle pagine di errore, la riga \texttt{Apache/2.4.62 (Debian) Server at 192.0.2.10 Port 80}. Che cosa rivela? Come si evita?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:21-revoca}
+Nel Laboratorio~13, come revochi l'accesso ad Alice? Che cosa succede ai client che hanno già scaricato il descrittore?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:21-socket}
+Modifica il servizio del laboratorio perché inoltri a un socket Unix invece che a una porta TCP locale. Quali vantaggi offre questa scelta, oltre a non esporre una porta?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item Il manuale di tor, alle voci \opt{HiddenServiceDir}, \opt{HiddenServicePort} e alla sezione sull'autorizzazione dei client.
+  \item La documentazione del Tor Project sugli onion service e su Onionbalance~\cite{onionbalance}.
+\end{itemize}

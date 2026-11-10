@@ -1,0 +1,420 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Una red Tor privada: Chutney y Shadow}\label{cap:19-rete-privata}
+\aggiornatoal{23 de septiembre de 2026}{tor 0.4.9.13; commit de Chutney \texttt{6cc1588}; Shadow 3.3.0}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item explicar por qué los experimentos con Tor deben ejecutarse en una red privada y no en la pública;
+  \item construir e iniciar, mediante dos órdenes distintas, la red de laboratorio utilizada a lo largo del libro;
+  \item identificar las opciones de configuración que distinguen una red de prueba de la red real;
+  \item explorar los archivos de estado de un nodo, incluidas claves, documentos de consenso y registros;
+  \item inspeccionar circuitos del cliente mediante Stem y enviar tráfico web y de servicios onion por la red;
+  \item comprender cuándo conviene emplear un simulador como Shadow en vez de una red emulada como Chutney.
+\end{itemize}
+\end{obiettivi}
+
+Este capítulo aparece en la parte~III, pero conviene leerlo pronto: todos los laboratorios del libro, comenzando por el laboratorio~1 en \cref{cap:07-canali}, funcionan en la red que crearemos aquí. Quien siga la parte~II puede leer primero \cref{sec:rp-perche,sec:rp-avvio} y volver más tarde a los restantes apartados.
+
+% ---------------------------------------------------------------------------
+\section{¿Por qué una red privada?}\label{sec:rp-perche}
+
+La red Tor pública está formada por miles de repetidores administrados por voluntarios y la utilizan a diario millones de personas, muchas de las cuales dependen de ella para su seguridad. Experimentar en esta red plantea dos problemas: uno ético y otro práctico.
+
+\paragraph{El problema ético.} Cualquier experimento que mida, modifique o simplemente observe tráfico de la red real implica a usuarios que no han dado su consentimiento y podrían sufrir daños. Incluso algo aparentemente inocuo, como un repetidor que almacene más información de la necesaria, puede generar datos que permitan desanonimizar a alguien si llegan a divulgarse. Por ello, el Tor Project mantiene un \emph{Tor Research Safety Board} que revisa los planes experimentales de investigadores y recomienda un principio general: cuando una pregunta de investigación pueda resolverse sin involucrar a usuarios reales, así debe hacerse. Retomaremos estas pautas en \cref{cap:29-ricerca}.
+
+\paragraph{El problema práctico.} Tenemos poco control sobre la red pública: no podemos predecir qué repetidores se seleccionarán, los circuitos cambian, el consenso se actualiza cada hora y un experimento no puede repetirse en condiciones idénticas. En una red privada, en cambio, podemos elegir la cantidad de nodos, leer registros detallados, detener y reiniciar toda la red en minutos y repetir las pruebas hasta comprender los resultados.
+
+\begin{attenzione}[Regla del laboratorio]
+Todos los ejercicios prácticos del libro que envíen celdas construidas manualmente, modifiquen el comportamiento de los nodos o capturen tráfico deben ejecutarse \textbf{exclusivamente} en la red privada. El código educativo \file{torlab} no protege el anonimato y nunca debe utilizarse contra la red pública.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{¿Emulación o simulación?}\label{sec:rp-strumenti}
+
+Existen dos maneras de construir una red Tor de laboratorio; ambas son utilizadas por el Tor Project.
+
+\begin{description}
+  \item[Emulación] Muchos procesos \texttt{tor} reales se ejecutan en un mismo ordenador y se comunican por la interfaz de bucle local. El tiempo es real, el código es real y el sistema operativo proporciona la red. Es el enfoque de \textbf{Chutney}, herramienta del Tor Project creada para pruebas de integración de tor y Arti.
+  \item[Simulación] Los programas reales se ejecutan dentro de un simulador de eventos discretos, que intercepta llamadas al sistema y proporciona una red y un reloj virtuales. Es el enfoque de \textbf{Shadow}~\cite{jansen2012shadow}, desarrollado para estudiar Tor a gran escala.
+\end{description}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+ & Chutney (emulación) & Shadow (simulación) \\
+\midrule
+Escala habitual & Unos pocos nodos o varias decenas & Cientos o miles de nodos \\
+Tiempo & Real & Virtual y determinista \\
+Red & Bucle local, sin latencia ni pérdidas & Topología con latencia y ancho de banda configurables \\
+Reproducibilidad & Limitada por la planificación del sistema operativo & Completa con la misma semilla aleatoria \\
+Uso habitual & Desarrollo, pruebas y enseñanza & Investigación sobre rendimiento y ataques \\
+En este libro & Todos los laboratorios & \cref{sec:rp-shadow} y parte~V \\
+\bottomrule
+\end{tabularx}
+\caption{Comparación de Chutney y Shadow.}
+\label{tab:chutney-shadow}
+\end{table}
+
+Chutney es la opción natural para aprender el protocolo. Es ligero, se inicia en pocos minutos y permite interactuar con nodos activos. Por eso nos centraremos aquí en Chutney y presentaremos Shadow al final.
+
+% ---------------------------------------------------------------------------
+\section{El laboratorio del libro}\label{sec:rp-avvio}
+
+Para evitar diferencias entre sistemas operativos, todo el laboratorio se distribuye como una imagen Docker descrita por el archivo \file{labs/es/laboratorio/Dockerfile}. La imagen:
+\begin{itemize}
+  \item compila tor \textbf{desde el código fuente oficial} en la versión de referencia del libro, 0.4.9.13, con \texttt{--enable-gpl} para incluir el módulo de prueba de trabajo de los servicios onion (\cref{cap:15-dos});
+  \item instala Chutney en una revisión fijada, Stem y las herramientas de captura (\cmd{tcpdump} y \cmd{tshark}) utilizadas en \cref{cap:20-traffico}.
+\end{itemize}
+
+Fijar las versiones importa: un libro que describe los mensajes de protocolo byte por byte debe procurar que los lectores observen los mismos bytes.
+
+\begin{approfondimento}[Cuando aparece otra versión de tor]
+Las salidas que se muestran en este capítulo y en la parte~II proceden de la red de laboratorio con tor 0.4.9.13, la versión de referencia del libro. Algunas se registraron con su predecesora 0.4.9.12, publicada pocos días antes, y después se reprodujeron: el script \file{scripts/verify\_labs.py}, que vuelve a ejecutar en vivo todos los laboratorios y comprueba sus resultados, obtiene los mismos resultados con ambas versiones (actualmente 53 comprobaciones, más 14 del laboratorio del puente). El script ejecuta los laboratorios de la edición original italiana, en \file{labs/it}, de cuyo código se ha traducido el de esta edición; en los listados, los nombres y los mensajes siguen el código de esta edición. Solo cambian los elementos que dependen de cada ejecución: claves, huellas, direcciones \texttt{.onion}, marcas temporales y tamaños de los certificados, que varían incluso de un repetidor a otro. El mismo script te permite comprobar, con la versión que utilices, que lo descrito en el libro sigue siendo cierto.
+\end{approfondimento}
+
+\subsection{Requisitos}
+
+Se necesita Linux con Docker y aproximadamente \SI{1}{\giga\byte} de espacio libre en disco. Docker Desktop funciona en macOS y Windows, pero el modo de red del anfitrión utilizado aquí se comporta de otra manera; en ese caso ejecuta los experimentos dentro del contenedor (\cref{sec:rp-shell}). La red utiliza puertos del anfitrión a partir de 5100, 7100, 8000 y 9000. Comprueba que estén libres.
+
+\subsection{Construir la imagen e iniciar la red}
+
+Desde la raíz del repositorio:
+\begin{lstlisting}[language=bash,numbers=none]
+$ make -C labs/es/laboratorio image        # compilar tor y preparar Chutney (solo la primera vez)
+$ make -C labs/es/laboratorio start        # configurar e iniciar la red, esperar al arranque
+\end{lstlisting}
+Estos comandos están definidos en \file{labs/es/laboratorio/Makefile}. La red utiliza puertos compartidos con el anfitrión: no inicies a la vez las redes de dos ediciones.
+
+La construcción de la imagen lleva unos minutos. En el equipo utilizado para redactar el capítulo, iniciar la red tardó unos dos minutos y medio y terminó con el siguiente resumen abreviado:
+\begin{lstlisting}[numbers=none]
+  test006e:
+    bootstrap progress: 100 (SUCCESS), done, Done
+    desc publishing: 100 (SUCCESS), all nodes, DESC MD MD_CONS NS_CONS
+  test008c:
+    bootstrap progress: 100 (SUCCESS), done, Done
+  test009h:
+    bootstrap progress: 100 (SUCCESS), done, Done
+    oniondesc publishing: 200 (ONIONDESC_PUBLISHED), hidden service v3
+\end{lstlisting}
+
+Todos los nodos completaron el arranque, todos los repetidores vieron sus descriptores publicados en el consenso y el servicio onion publicó su descriptor. La orden \cmd{make -C labs/es/laboratorio verify} ejecuta entonces la prueba de Chutney: transmite datos a través de una salida y un servicio onion y comprueba que lleguen intactos:
+\begin{lstlisting}[numbers=none]
+  not-done:0 successes:4 failures:0
+Transmission: Success
+\end{lstlisting}
+
+\cmd{make -C labs/es/laboratorio status} muestra el estado de los nodos. \cmd{make -C labs/es/laboratorio shell} abre una consola dentro del contenedor, \cmd{make -C labs/es/laboratorio stop} detiene la red y \cmd{make -C labs/es/laboratorio clean} elimina también los datos generados.
+
+% ---------------------------------------------------------------------------
+\section{Topología de red}\label{sec:rp-topologia}
+
+La red está descrita en un breve archivo Python, \file{labs/es/laboratorio/chutney/networks/book}, escrito en el lenguaje de configuración de Chutney:
+\begin{lstlisting}[language=Python]
+Authority = Node(tag="a", authority=1, relay=1)
+Middle    = Node(tag="r", relay=1)
+Exit      = Node(tag="e", relay=1, exit=1)
+Client    = Node(tag="c", client=1, launch_phase=2)
+Onion     = Node(tag="h", hs=1, launch_phase=2)
+
+NODES = (Authority.getN(3) + Middle.getN(3) + Exit.getN(2)
+         + Client.getN(1) + Onion.getN(1))
+ConfigureNodes(NODES)
+\end{lstlisting}
+
+Cada \texttt{Node} es una plantilla y \texttt{getN} crea múltiples instancias. El cliente y el servicio onion se inician en una segunda fase (\file{launch\_phase=2}), una vez que las autoridades han producido un consenso. Chutney numera los nodos por orden y los nombra combinando número y etiqueta: \texttt{test000a}, \ldots, \texttt{test009h}. Los números también determinan los puertos, como muestra \cref{fig:rete-privata}.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig19-red}
+\caption{Topología del laboratorio Chutney ligada a \texttt{127.0.0.1}: tres autoridades de directorio/repetidores, tres repetidores intermedios, dos salidas, un cliente y un servicio onion. ORPort $5100+n$ solo se utiliza en autoridades y repetidores, incluidas las salidas; todos los nodos disponen de ControlPort $8000+n$. Las autoridades tienen DirPort $7100+n$, el cliente SocksPort $9008$, y el servicio onion el puerto virtual $5858$ hacia \texttt{127.0.0.1:4747}. El circuito HTTP de ejemplo a través de una salida es independiente del servicio onion, que no usa salidas. El loopback no constituye una red de contenedor aislada.}
+\label{fig:rete-privata}
+\end{figure}
+
+\begin{center}\small
+\begin{tabular}{lllll}
+\toprule
+Nodo & Función & ORPort & ControlPort & Otros \\
+\midrule
+\texttt{test000a}--\texttt{002a} & autoridad de directorio & 5100--5102 & 8000--8002 & DirPort 7100--7102 \\
+\texttt{test003r}--\texttt{005r} & repetidor intermedio & 5103--5105 & 8003--8005 & \\
+\texttt{test006e}--\texttt{007e} & salida & 5106--5107 & 8006--8007 & \\
+\texttt{test008c} & cliente & --- & 8008 & SocksPort 9008 \\
+\texttt{test009h} & servicio onion & --- & 8009 & puerto virtual 5858 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{approfondimento}[¿Por qué tres autoridades?]
+Un consenso requiere firmas de la mayoría de las autoridades (\cref{cap:12-directory}). Con una sola, no podríamos observar votaciones; con tres podemos ver el proceso y estudiar en un ejercicio qué sucede cuando una se detiene. La red pública tiene nueve, además de una autoridad de puentes independiente. Su lista está incorporada al propio tor (\file{src/app/config/auth\_dirs.inc}).
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Una red de prueba no es la red real}\label{sec:rp-opzioni}
+
+Chutney genera un \file{torrc} para cada nodo. Estos archivos revelan exactamente qué es necesario modificar para que funcione una red Tor en miniatura y, por tanto, qué supuestos de la red pública no se cumplen. Estas son las opciones más importantes del torrc de una autoridad (\file{net/nodes/000a/torrc}):
+\begin{lstlisting}[language=torrc,numbers=none]
+TestingTorNetwork 1
+AuthoritativeDirectory 1
+V3AuthoritativeDirectory 1
+AssumeReachable 1
+V3AuthVotingInterval 20 seconds
+V3AuthVoteDelay 4
+V3AuthDistDelay 4
+TestingDirAuthVoteGuard *
+TestingDirAuthVoteHSDir *
+\end{lstlisting}
+
+\begin{description}
+  \item[\opt{TestingTorNetwork}] Activa el modo de prueba. Solo puede utilizarse junto con una lista explícita de autoridades (\opt{DirAuthority}), evitando que los nodos de prueba se incorporen accidentalmente a la red pública. También cambia numerosos valores predeterminados para acelerar las operaciones.
+  \item[\opt{V3AuthVotingInterval}] En la red real, las autoridades votan cada hora un consenso nuevo. Aquí lo hacen cada veinte segundos, como muestra el propio consenso:
+\begin{lstlisting}[numbers=none]
+valid-after 2026-09-23 14:37:40
+fresh-until 2026-09-23 14:38:00
+valid-until 2026-09-23 14:38:20
+\end{lstlisting}
+  \item[\opt{AssumeReachable}] Un repetidor normalmente verifica su accesibilidad externa antes de anunciarse. Esa prueba carece de sentido en la interfaz de bucle local y se omite.
+  \item[\opt{TestingDirAuthVoteGuard} \texttt{*}] En la red real, los repetidores obtienen el indicador Guard tras semanas de estabilidad y suficiente ancho de banda. Aquí las autoridades lo asignan a todos, de modo que \textbf{cada repetidor del consenso es un guardia potencial}, a diferencia de la red pública.
+\end{description}
+
+Los \file{torrc} de las salidas también contienen:
+\begin{lstlisting}[language=torrc,numbers=none]
+ExitPolicyRejectPrivate 0
+ExitPolicy accept private:*
+\end{lstlisting}
+
+Por defecto, las salidas rechazan conexiones a direcciones privadas y de bucle local para no exponer sus redes locales. En este laboratorio, \texttt{127.0.0.1} es el único \enquote{Internet} disponible, por lo que debe invertirse esa política.
+
+\begin{attenzione}[No copies estas opciones fuera del laboratorio]
+Las opciones \texttt{Testing\ldots}, \opt{AssumeReachable} y, especialmente, \texttt{ExitPolicy accept private:*} son exclusivas de redes de prueba. Utilizarlas en un repetidor público sería incorrecto o peligroso para la red del anfitrión.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Dentro del directorio de un nodo}\label{sec:rp-file}
+
+Cada nodo dispone de un directorio de datos propio en \file{labs/es/laboratorio/net/nodes/NNNx/}. El directorio de una autoridad contiene, entre otros, los siguientes archivos:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+Archivo o directorio & Contenido \\
+\midrule
+\file{torrc} & configuración generada por Chutney \\
+\file{keys/} & claves de identidad y onion del nodo (\cref{cap:05-crittografia,cap:06-architettura}) \\
+\file{fingerprint}, \file{fingerprint-ed25519} & huellas RSA y Ed25519 de identidad \\
+\file{cached-consensus}, \file{cached-microdesc-consensus} & las dos variantes de consenso (\cref{cap:12-directory}) \\
+\file{cached-microdescs.new} & microdescriptores descargados \\
+\file{v3-status-votes} & votos de autoridades (solo autoridades) \\
+\file{sr-state} & estado del protocolo de aleatoriedad compartida (solo autoridades) \\
+\file{notice.log}, \file{info.log} & registros de nivel \emph{notice} e \emph{info} \\
+\file{control\_auth\_cookie} & cookie de autenticación del puerto de control \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+El directorio del servicio onion también contiene \file{hidden\_service/}, con sus claves y un archivo \file{hostname} que guarda su dirección \texttt{.onion}, por ejemplo:
+\begin{lstlisting}[numbers=none]
+rpns2r36zn5u46wctlgnvtwjotxaf7iflsc3k5eas3lqoxeesv4zwyad.onion
+\end{lstlisting}
+
+La dirección cambia al configurar la red desde cero, porque se genera una clave nueva (\cref{cap:14-onion-services}).
+
+Un consenso es un archivo de texto legible. Al extraer las líneas \texttt{r}, que identifican repetidores y direcciones, y las \texttt{s}, con los indicadores, obtenemos estas dos entradas:
+\begin{lstlisting}[numbers=none]
+r test000a H+9DDHx4rEo6I6Jdn8gIyKyi3jk ... 127.0.0.1 5100 7100
+s Authority Fast Guard HSDir Running Stable V2Dir Valid
+r test006e dEPHoFFHamQyy6pRzlsLB9/ilzU ... 127.0.0.1 5106 0
+s Exit Fast Guard HSDir Running Stable V2Dir Valid
+\end{lstlisting}
+
+Observa que todos los repetidores llevan \texttt{Guard}, como esperábamos, pero únicamente las dos salidas llevan \texttt{Exit}. Los campos se explican en \cref{cap:12-directory}.
+
+% ---------------------------------------------------------------------------
+\section{Utilizar la red}\label{sec:rp-uso}
+
+\subsection{Navegar a través de la red privada}
+
+Ejecuta los dos ejemplos HTTP \emph{dentro del contenedor del laboratorio}, en \file{/lab}, entrando desde otra terminal del anfitrión con \cmd{make -C labs/es/laboratorio shell}. El parámetro \texttt{--noproxy} con una cadena vacía obliga a curl a usar SOCKS incluso para \texttt{127.0.0.1} si existe \texttt{NO\_PROXY}. El servidor del puerto 4747 ofrece el mismo \file{index.html} creado en el primer ejemplo.
+
+El cliente \texttt{test008c} ofrece SOCKS en el puerto 9008. Cualquier programa compatible con SOCKS5 puede utilizarlo. Inicia un servidor web local pequeño y accede por Tor:
+\begin{lstlisting}[language=bash,numbers=none]
+$ echo "Hola desde la red privada" > index.html
+$ python3 -m http.server 8080 --bind 127.0.0.1 &
+$ curl --noproxy "" --socks5-hostname 127.0.0.1:9008 http://127.0.0.1:8080/index.html
+Hola desde la red privada
+\end{lstlisting}
+
+La solicitud atraviesa un circuito de tres repetidores antes de que una salida conecte con el servidor. Utilizar \texttt{--socks5-hostname} en lugar de \texttt{--socks5} hace que la salida resuelva los nombres de destino en vez del propio sistema. En la red real es esencial para evitar que el DNS local conozca los sitios visitados (\cref{cap:11-stream}).
+
+\subsection{Acceder al servicio onion}
+
+Chutney configura el servicio onion con:
+\begin{lstlisting}[language=torrc,numbers=none]
+HiddenServicePort 5858 127.0.0.1:4747
+\end{lstlisting}
+
+Esto asocia el puerto virtual 5858 de la dirección \texttt{.onion} con el puerto local 4747. Solo necesitamos un servidor que escuche allí:
+\begin{lstlisting}[language=bash,numbers=none]
+$ python3 -m http.server 4747 --bind 127.0.0.1 &
+$ curl --noproxy "" --socks5-hostname 127.0.0.1:9008 \
+    http://$(cat net/nodes/009h/hidden_service/hostname):5858/index.html
+Hola desde la red privada
+\end{lstlisting}
+
+Esta vez no participa ninguna salida. Cliente y servicio se encuentran en un punto de encuentro dentro de la red (\cref{cap:14-onion-services}).
+
+\subsection{Observar los circuitos con Stem}\label{sec:rp-stem}
+
+El puerto de control permite inspeccionar un nodo activo. Con Stem (\cref{cap:18-stem}), incluido en la imagen, podemos enumerar los circuitos del cliente:
+\begin{lstlisting}[language=Python]
+from stem.control import Controller
+
+with Controller.from_port(port=8008) as c:
+    c.authenticate()                    # usa automáticamente la cookie
+    print(c.get_version())
+    for circ in c.get_circuits():
+        print(circ.id, circ.status, circ.purpose,
+              [name for _, name in circ.path])
+\end{lstlisting}
+
+Un extracto de la salida, tras ejecutar \cmd{make -C labs/es/laboratorio verify}:
+\begin{lstlisting}[numbers=none]
+0.4.9.13 (git-3c575400909efe65)
+10 BUILT GENERAL ['test004r', 'test005r', 'test007e']
+124 BUILT CONFLUX_LINKED ['test006e', 'test004r', 'test007e']
+114 BUILT CONFLUX_UNLINKED ['test007e', 'test004r', 'test006e']
+128 BUILT CIRCUIT_PADDING ['test004r', 'test001a', 'test007e', 'test006e']
+163 BUILT HS_CLIENT_REND ['test004r', 'test001a', 'test006e']
+166 BUILT HS_CLIENT_HSDIR ['test004r', 'test006e', 'test007e', 'test003r']
+181 BUILT HS_VANGUARDS ['test004r', 'test007e', 'test006e']
+\end{lstlisting}
+
+Incluso en una red tan pequeña, la lista anticipa buena parte del libro:
+\begin{itemize}
+  \item Casi todos los circuitos comienzan en \texttt{test004r}: el \textbf{guardia} del cliente, elegido una vez y reutilizado (\cref{cap:13-percorso}). Las excepciones son las ramas de túneles Conflux que comienzan en el segundo guardia (\cref{cap:18-stem}).
+  \item Los circuitos \texttt{GENERAL} de tres saltos transportan tráfico ordinario; los de un salto, omitidos aquí, descargan información de directorio.
+  \item Los circuitos \file{CONFLUX\_LINKED} se agrupan en parejas utilizadas conjuntamente para el mismo tráfico: Conflux (\proposta{329}, \cref{cap:31-futuro}).
+  \item \file{HS\_VANGUARDS}, \file{HS\_CLIENT\_HSDIR} y \file{HS\_CLIENT\_REND} identifican circuitos empleados para acceder a servicios onion (\cref{cap:14-onion-services}).
+  \item Según la especificación de control, \file{CIRCUIT\_PADDING} identifica un circuito mantenido para ocultar cuándo dejó realmente de utilizarse. Por ello su cierre no revela necesariamente cuándo terminó la actividad del usuario.
+\end{itemize}
+
+\subsection{Trabajar dentro del contenedor}\label{sec:rp-shell}
+
+El contenedor utiliza la red del anfitrión, por lo que todos los puertos son accesibles directamente desde el equipo anfitrión. Si esto no funciona, por ejemplo con Docker Desktop, \cmd{make -C labs/es/laboratorio shell} abre una consola en el contenedor, con tor, Chutney, Stem, Python y las herramientas de captura instaladas; los archivos del laboratorio están disponibles en \file{/lab}.
+
+% ---------------------------------------------------------------------------
+\section{Primer contacto con un repetidor}\label{sec:rp-contatto}
+
+El siguiente fragmento Python importa el paquete didáctico \file{torlab} desde \file{labs/es/codigo/}; el contenedor Chutney solo monta \file{labs/es/laboratorio/} como \file{/lab}, por lo que \emph{no importa automáticamente el paquete}. En Linux con red del anfitrión, guarda el fragmento en un archivo y ejecútalo desde la raíz del repositorio mediante \texttt{PYTHONPATH=labs/es/codigo python3 script.py}; también puedes facilitar expresamente ese paquete al contenedor. Este ejemplo es solo para la red privada.
+
+Volvamos a \cref{cap:08-celle}. Con \file{labs/es/codigo/torlab/cells.py} del laboratorio~2, que ya está presente en el repositorio, podemos abrir una conexión TLS hacia el ORPort de un repetidor del laboratorio, enviar una celda \cella{VERSIONS} y descodificar la respuesta. El laboratorio~1 de \cref{cap:07-canali} proporciona el código completo con verificación de certificados. Aquí observamos únicamente el intercambio inicial:
+\begin{lstlisting}[language=Python]
+import socket, ssl
+from torlab.cells import *
+
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE   # solo red privada; certificados TLS SIN verificar
+s = ctx.wrap_socket(socket.create_connection(("127.0.0.1", 5103)))
+s.sendall(encode(versions_cell([3, 4, 5]), 0))
+
+buf, version, received = b"", 0, 0
+while received < 4:
+    chunk = s.recv(4096)
+    if not chunk:
+        raise ConnectionError("TLS channel closed early")
+    buf += chunk
+    while (r := decode(buf, version)) is not None:
+        cell, buf = r
+        received += 1
+        print(describe(cell, version))
+        if cell.command == CellCommand.VERSIONS:
+            version = negotiate_version([3, 4, 5], cell.body)
+s.close()
+\end{lstlisting}
+
+\textbf{Atención:} esta demostración breve desactiva expresamente la validación de certificados TLS con \texttt{ssl.CERT\_NONE} y \emph{no} verifica la identidad del repetidor a partir de la celda CERTS. No la uses contra repetidores públicos. El laboratorio~1 muestra la validación completa.
+
+El siguiente resultado procede de una sesión anterior de referencia: identificadores de circuito, huellas, direcciones onion, marcas temporales y tamaños de certificados pueden variar.
+
+El repetidor \texttt{test003r} respondió en la red de referencia:
+\begin{lstlisting}[numbers=none]
+CircID=0x0000 VERSIONS cuerpo=6 bytes
+CircID=0x00000000 CERTS cuerpo=1451 bytes
+CircID=0x00000000 AUTH_CHALLENGE cuerpo=36 bytes
+CircID=0x00000000 NETINFO cuerpo=509 bytes
+\end{lstlisting}
+
+Es exactamente la secuencia descrita en \cref{sec:sessione}: primero \cella{VERSIONS} con un CircID de dos bytes; después de negociar la versión 5, las demás celdas utilizan CircID de cuatro bytes. \cella{CERTS} y \cella{AUTH\_CHALLENGE} son de longitud variable y conservan exactamente los cuerpos de sus mensajes; \cella{NETINFO} es de longitud fija, con sus 509 bytes. Observa que se asigna \texttt{version = ...} justo después de \cella{VERSIONS}: la descodificación de las celdas siguientes depende de la versión recién negociada.
+
+% ---------------------------------------------------------------------------
+\section{Shadow: una red dentro de un simulador}\label{sec:rp-shadow}
+
+Chutney no basta para responder preguntas sobre el comportamiento de la red \emph{en su conjunto}. ¿Cómo afectaría otro algoritmo de control de congestión a la latencia? ¿Cuánto tráfico necesitaría un adversario para un ataque concreto? Son preguntas que requieren miles de nodos, latencias realistas entre continentes y, sobre todo, experimentos reproducibles.
+
+Shadow, desarrollado originalmente por Rob Jansen y Nicholas Hopper~\cite{jansen2012shadow}, responde a estas necesidades. Las versiones actuales ejecutan programas reales, incluido tor, como procesos Linux normales, interceptando las llamadas al sistema relacionadas con red y tiempo. Un grafo virtual suministra la latencia y el ancho de banda configurados por el usuario, y el tiempo avanza solo cuando el simulador decide. Así, una hora simulada puede tardar más o menos de una hora real según la potencia de cálculo, y repetir un experimento con la misma semilla aleatoria produce el mismo resultado.
+
+Para crear redes Tor realistas con Shadow, los investigadores utilizan \textbf{tornettools}. A partir de los datos públicos de Tor Metrics (\cref{cap:24-metrics}), genera una red reducida con distribuciones de anchos de banda, indicadores y funciones semejantes a las de la red real.
+
+Utilizaremos Shadow en un experimento guiado de \cref{cap:29-ricerca}. Por ahora basta saber cuándo es la herramienta adecuada.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item Ejecuta experimentos de Tor en redes privadas. En la pública podrían implicar a usuarios sin consentimiento y no serían reproducibles.
+  \item Chutney emula una red Tor con procesos \texttt{tor} reales mediante bucle local. Shadow ejecuta el software real dentro de un simulador de eventos discretos, adecuado para redes grandes y experimentos repetibles.
+  \item El laboratorio español (\file{labs/es/laboratorio/}) compila tor 0.4.9.13 desde las fuentes. El objetivo \cmd{make -C labs/es/laboratorio start} inicia una red de diez nodos: tres autoridades, tres intermedios, dos salidas, un cliente y un servicio onion.
+  \item El nodo $n$ utiliza ORPort $5100+n$, ControlPort $8000+n$ y SocksPort $9000+n$.
+  \item Las opciones de prueba (\opt{TestingTorNetwork}, voto cada veinte segundos, asignación de Guard a todos y permiso para conexiones de salida a direcciones privadas) permiten funcionar a la red en miniatura, pero la diferencian de la real. Debemos tener precaución antes de extrapolar mediciones.
+  \item SocksPort 9008 transporta tráfico de aplicación por la red; Stem observa circuitos y \file{torlab} habla directamente con repetidores.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:19-porte}
+Sin leer el torrc, indica ORPort y ControlPort de \texttt{test006e}. ¿Tiene ORPort \texttt{test009h}? ¿Por qué?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:19-guard}
+Todos los repetidores de la red privada tienen indicador Guard. ¿Qué opción lo provoca y por qué no sucede en la red real? ¿Qué efecto tiene sobre las mediciones de selección de rutas?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:19-socks}
+Repite la solicitud \texttt{curl} de \cref{sec:rp-uso} utilizando \texttt{--socks5} en lugar de \texttt{--socks5-hostname} y \texttt{localhost} en lugar de \texttt{127.0.0.1}. ¿Qué cambia en lo que recibe la salida? ¿Por qué importa esto en la red pública?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-consenso}
+Observa durante varios minutos el campo \texttt{valid-after} del consenso del cliente (\cmd{grep valid-after net/nodes/008c/cached-microdesc-consensus}). ¿Cada cuánto cambia? Calcula cuántos consensos se producen al día en la red de laboratorio y en la real.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-autorita}
+Detén una de las tres autoridades (\cmd{make -C labs/es/laboratorio shell} y después \cmd{kill} al proceso correspondiente según su archivo \file{pid}). ¿Sigue produciendo consensos la red? ¿Qué pasa si detienes dos? Explica el resultado según \cref{cap:12-directory}.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-stem}
+Modifica el script Stem de \cref{sec:rp-stem} para mostrar los ORPort de todos los repetidores de cada circuito de tres saltos, obteniéndolos del consenso mediante \file{get\_network\_status}.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-rete}
+Crea \file{labs/es/laboratorio/chutney/networks/book-large} con cinco autoridades, diez repetidores intermedios y cuatro salidas; después iníciala estableciendo \texttt{NETWORK=book-large} en la orden \texttt{make}. ¿Cómo se compara el tiempo de arranque con el de la red original?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:19-log}
+Busca en el archivo \file{info.log} del cliente los mensajes relativos a la construcción de circuitos, desde la selección de nodos hasta el final. Relaciona cada mensaje con una celda de \cref{fig:sessione}.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:19-cattura}
+Dentro del contenedor, captura el tráfico hacia el puerto 5103 mediante \cmd{tcpdump -i lo} mientras ejecutas el script de \cref{sec:rp-contatto}. ¿Puedes ver las celdas? ¿Por qué no? ¿Qué sigue siendo observable: tamaños, tiempos? En \cref{cap:20-traffico} veremos cómo profundizar.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item Chutney, \url{https://gitlab.torproject.org/tpo/core/chutney}: su README y el directorio \file{networks/} contienen ejemplos de redes, también con puentes y Arti.
+  \item R.~Jansen y N.~Hopper, \titolo{Shadow: Running Tor in a Box for Accurate and Efficient Experimentation}~\cite{jansen2012shadow}.
+  \item Documentación de Shadow y tornettools, \url{https://shadow.github.io/}.
+  \item Tor Research Safety Board, \url{https://research.torproject.org/safetyboard/}: recomendaciones para investigar Tor éticamente.
+\end{itemize}

@@ -1,0 +1,771 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Soluzioni degli esercizi}\label[appendice]{cap:D-soluzioni}
+
+\section*{Capitolo \ref{cap:01-anonimato}: Anonimato, sorveglianza e metadati}
+
+\begin{soluzione}{es:01-metadati}
+Con HTTPS il fornitore vede l'indirizzo IP del sito, il nome del sito (dalla risoluzione DNS e, spesso, dal campo SNI di TLS), gli orari, la durata e i volumi del traffico. Con una VPN vede solo la connessione verso il server della VPN, che però vede tutto ciò che prima vedeva il fornitore. Con Tor vede solo una connessione verso un relay Tor (o un bridge), con i suoi volumi e tempi; nessun singolo punto della rete Tor vede insieme l'utente e il sito.
+\end{soluzione}
+
+\begin{soluzione}{es:01-termini}
+Account con nome di fantasia: pseudonimia. Messaggio non firmato in una bacheca: anonimato (se nient'altro identifica l'autore). Lettera firmata con le iniziali: pseudonimia debole, spesso identificazione. Donazione in contanti: anonimato.
+\end{soluzione}
+
+\begin{soluzione}{es:01-insieme}
+L'insieme di anonimato si restringe: dai 50 utenti Tor a quelli che parlano italiano e sono svegli alle 3 di notte, forse pochissimi. Tor nasconde l'indirizzo IP, ma non il comportamento: lingua, orari, stile di scrittura e informazioni personali possono identificare l'utente anche quando la rete non lo fa.
+\end{soluzione}
+
+\begin{soluzione}{es:01-vpn}
+Il gestore di una VPN può associare l'utente alle destinazioni raggiunte, pur senza leggere il contenuto protetto da HTTPS. Con Tor la conoscenza è distribuita: normalmente il guard conosce l'origine e l'exit la destinazione, mentre nessun singolo relay conosce entrambe. La selezione del percorso evita, di norma, relay della stessa famiglia riconosciuta e applica vincoli di diversità degli indirizzi di rete, ma non può garantire che gli operatori siano davvero indipendenti. Un osservatore presente a entrambi gli estremi può tentare la correlazione dei flussi~\spec{path-spec}{Path selection and constraints}.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:02-radici}: Le radici}
+
+\begin{soluzione}{es:02-mix}
+A caso, 1 su 100. Se 99 messaggi del lotto sono dell'osservatore, questi sa riconoscere i propri in uscita, e l'unico rimanente è quello della vittima: l'anonimato scompare. È l'attacco detto \emph{$n-1$}, che le mix reali contrastano con lotti più complessi, messaggi fittizi e controlli sugli ingressi.
+\end{soluzione}
+
+\begin{soluzione}{es:02-penet}
+Serve un \emph{indirizzo di ritorno anonimo} alla Chaum: l'utente prepara in anticipo una \enquote{cipolla di ritorno} cifrata a strati per una catena di mix, che contiene il proprio indirizzo nello strato più interno e una chiave per cifrare la risposta. Chi risponde allega il messaggio alla cipolla; ogni mix toglie uno strato, e nessuna, da sola, conosce l'indirizzo finale. Non serve alcuna tabella centrale.
+\end{soluzione}
+
+\begin{soluzione}{es:02-crowds}
+A ogni passo la richiesta prosegue verso un altro membro con probabilità $3/4$ e va al sito con probabilità $1/4$: il numero di membri attraversati segue una distribuzione geometrica con media $1/(1/4) = 4$ (contando il primo inoltro). Un membro non può sapere se chi gli passa la richiesta ne è l'autore, perché con la stessa regola anche un inoltro intermedio arriva da un membro qualsiasi della folla.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:03-nascita-tor}: Dall'onion routing del NRL al Tor Project}
+
+\begin{soluzione}{es:03-cinque}
+Con tre salti, un nodo centrale ostile conosceva subito le due reti agli estremi, perché i nodi di ingresso e di uscita erano nelle reti delle organizzazioni; con quattro, chi comprometteva il nodo vicino a un estremo sapeva quale altro nodo attaccare per ricostruire il circuito. Con cinque serviva un attacco in più. Tor si accontenta di tre salti perché i relay non stanno nelle reti degli utenti, e perché ogni salto in più aumenta la latenza senza ridurre molto il rischio principale, la correlazione tra primo e ultimo salto, contro cui agiscono invece i guard.
+\end{soluzione}
+
+\begin{soluzione}{es:03-cipolla}
+Con un'unica cipolla, cifrata con le chiavi pubbliche a lungo termine dei nodi, chi ottiene in futuro quelle chiavi può decifrare le cipolle registrate: niente forward secrecy. Con la costruzione telescopica ogni salto usa uno scambio effimero, cancellato dopo l'uso. Inoltre il client costruisce il circuito un salto alla volta e sa subito quale nodo non risponde, potendo sceglierne un altro, mentre con la cipolla unica il fallimento si scopre solo alla fine.
+\end{soluzione}
+
+\begin{soluzione}{es:03-fiducia}
+Esercizio di argomentazione. Elementi verificabili: codice e specifiche pubbliche, compilazioni riproducibili, analisi indipendenti della letteratura scientifica, rete gestita da operatori indipendenti. Elementi che richiedono fiducia: che le versioni distribuite corrispondano al codice (in parte verificabile), che le directory authority non colludano, che non esistano vulnerabilità sconosciute. La sicurezza non dipende dalle intenzioni di chi finanzia, ma dalla verificabilità e dalla distribuzione della fiducia.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:04-modello-minaccia}: Il modello di minaccia}
+
+\begin{soluzione}{es:04-casi}
+(a) Sì: il gestore vede solo una connessione verso un relay Tor. (b) Sì: il sito vede l'indirizzo dell'exit. (c) No, per l'identità: l'utente si identifica da sé con l'account; Tor nasconde solo da dove si collega. (d) Probabilmente no: un avversario che osserva entrambi gli estremi, utente e giornale, può tentare la correlazione dei tempi, ed è proprio il caso escluso dal modello.
+\end{soluzione}
+
+\begin{soluzione}{es:04-usabilita}
+Se un sistema è difficile, lo usano solo poche persone molto motivate, spesso proprio quelle con più bisogno di protezione: il solo fatto di usarlo le distingue, e l'insieme di anonimato è piccolo. Un sistema facile, usato da milioni di persone per ragioni ordinarie, nasconde anche chi ne ha un bisogno particolare.
+\end{soluzione}
+
+\begin{soluzione}{es:04-modello}
+Esercizio aperto. Avversari possibili: il governo o il datore di lavoro della fonte, che osserva la rete locale; il servizio di posta o di messaggistica usato; chi controlla le reti di uno dei due paesi. Tor protegge dal fatto che la rete locale veda con chi comunica la giornalista, e dal servizio che veda il suo indirizzo IP; restano fuori il contenuto dei messaggi (serve cifratura da estremo a estremo), i metadati visibili al servizio (account, orari), la compromissione dei dispositivi e la correlazione da parte di chi osserva entrambi gli estremi. Un onion service, come SecureDrop, riduce molti di questi rischi.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:05-crittografia}: Crittografia essenziale}
+
+\begin{soluzione}{es:05-xor}
+$C_1 \oplus C_2 = P_1 \oplus P_2$, perché il flusso di chiavi si cancella. Conoscendo $P_1$: $P_2 = C_1 \oplus C_2 \oplus P_1$.
+\end{soluzione}
+
+\begin{soluzione}{es:05-shake}
+L'uscita di 16 byte coincide con i primi 16 byte di quella di 32: SHAKE produce un unico flusso che si legge per la lunghezza desiderata. Come KDF si può quindi chiedere un flusso lungo e ritagliarlo; ma chiedere lunghezze diverse per scopi diversi \emph{non} separa gli usi, per cui servono etichette di dominio distinte.
+\end{soluzione}
+
+\begin{soluzione}{es:05-dh}
+I due segreti coincidono. Con una chiave pubblica di soli zeri, che rappresenta un punto di ordine piccolo, il risultato dello scambio è zero qualunque sia la chiave privata: un segreto noto a tutti. La libreria \texttt{cryptography} rifiuta di restituirlo; ntor chiede esplicitamente di controllare questo caso (\cref{sec:ntor}), altrimenti un avversario potrebbe forzare un segreto prevedibile.
+\end{soluzione}
+
+\begin{soluzione}{es:05-etichette}
+Senza separazione, un valore calcolato in un contesto potrebbe essere accettato in un altro: per esempio un MAC calcolato per autenticare un messaggio di handshake potrebbe essere presentato come chiave o come prova in una fase diversa, o in un protocollo diverso che usa la stessa funzione e le stesse chiavi. Le etichette rendono gli input dei vari usi disgiunti per costruzione.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:06-architettura}: Architettura della rete}
+
+\begin{soluzione}{es:06-vista}
+Guard: l'indirizzo IP dell'utente e i tempi e i volumi del traffico, non la destinazione. Middle: né l'utente né la destinazione. Exit: la destinazione e il contenuto non cifrato dall'applicazione, non l'utente. HSDir: nulla di un utente che visita un sito web normale. Directory authority: normalmente nulla della visita. Può vedere l'indirizzo IP di un client che le chieda documenti di directory \emph{direttamente}, cosa che capita soprattutto in avvio; se invece il client li scarica da una fallback directory o da una cache, è quel server a vedere la richiesta, non l'autorità.
+\end{soluzione}
+
+\begin{soluzione}{es:06-pr}
+\texttt{Link=3-5}: canali con link protocol fino al 5 (\cref{cap:07-canali}); \texttt{Relay=2-6}: ntor, ntor-v3 (\texttt{Relay=4}) e CGO (\texttt{Relay=6}); \texttt{FlowCtrl=1-2}: SENDME autenticati e controllo della congestione. Come exit con CGO sì, purché abbia anche il flag \texttt{Exit} e si negozi insieme il controllo della congestione (\cref{sec:ntor3}).
+\end{soluzione}
+
+\begin{soluzione}{es:06-livelli}
+100\,KB di dati richiedono circa $102400/498 \approx 206$ celle DATA, cioè circa $206 \times 514 \approx 106$\,KB sul collegamento, più poche celle per la richiesta, l'apertura dello stream e i SENDME (circa sette, uno ogni 31 celle), e l'intestazione dei record TLS: nell'insieme un 5--7\,\% oltre ai dati utili, esclusi gli handshake iniziali.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:07-canali}: Canali e link protocol}
+
+\begin{soluzione}{es:07-ruoli}
+Un client apre sempre lui le connessioni: verso il guard, verso i relay da cui scarica informazioni di directory. Nessuno ha motivo di contattarlo, e una porta in ascolto lo renderebbe anzi individuabile. Un relay apre canali come iniziatore soprattutto quando riceve un \texttt{EXTEND2} e deve raggiungere il salto successivo del circuito, e quando, come qualsiasi nodo, crea circuiti propri, per esempio per scaricare documenti di directory o per verificare la propria raggiungibilità.
+\end{soluzione}
+
+\begin{soluzione}{es:07-scadenza}
+$\texttt{0x000772F7} = 488183$ ore, cioè 9 settembre 2025, ore 23:00 UTC. Con i secondi, 4 byte senza segno si esaurirebbero nel 2106; con le ore il campo non si esaurisce prima di centinaia di migliaia di anni, e per certificati che durano giorni o settimane la precisione dell'ora è più che sufficiente. Attenzione a una nota della specifica: \texttt{cert-spec} afferma che \enquote{4 byte bastano fino al 10136}, ma è un errore che la \proposta{338} segnala espressamente, nato dall'aver trattato il contatore come se contasse i \emph{minuti} ($2^{32}$ minuti sono infatti circa 8166 anni).
+\end{soluzione}
+
+\begin{soluzione}{es:07-authchallenge}
+$38 = 32 + 2 + 2 \times 2$: due metodi. Con N\_Methods uguale a 2 servono $32 + 2 + 4 = 38$ byte: una cella di 36 byte dichiara più metodi di quanti ne contenga, è malformata e va rifiutata. (La specifica chiede di ignorare i byte \emph{in più}, non di tollerare quelli mancanti.)
+\end{soluzione}
+
+\begin{soluzione}{es:07-impostore}
+Fallisce il confronto tra la chiave certificata dal tipo 5 e l'impronta SHA-256 del certificato TLS presentato dal server dell'avversario, che è diverso da quello del relay vero. Se l'avversario presentasse lo stesso certificato TLS, non riuscirebbe a completare l'handshake TLS, che richiede la chiave privata corrispondente al certificato.
+\end{soluzione}
+
+\begin{soluzione}{es:07-netinfo}
+\texttt{695661c0} (1\textsuperscript{o} gennaio 2026, 12:00:00 UTC) · \texttt{04 04 c6336407} (l'indirizzo del client, 198.51.100.7) · \texttt{01} · \texttt{04 04 cb007105} (l'indirizzo del relay, 203.0.113.5), seguiti da zeri fino a 509 byte.
+\end{soluzione}
+
+\begin{soluzione}{es:07-client-auth}
+Primo: il guard vedrebbe la stessa identità anche quando l'utente cambia rete (casa, lavoro, telefono), e potrebbe collegare tra loro tutte le sue sessioni e i suoi indirizzi IP. Secondo: l'identità verrebbe presentata anche ai relay da cui il client scarica informazioni di directory, e relay complici, o un avversario che li osserva, potrebbero collegare le attività dello stesso utente su relay diversi. In entrambi i casi un identificatore persistente distrugge la non collegabilità che Tor vuole garantire.
+\end{soluzione}
+
+\begin{soluzione}{es:07-rsa}
+Traccia: si decodifica il tipo 2 con una libreria X.509 (per esempio \texttt{cryptography.x509}), se ne estrae la chiave pubblica e si verifica che il certificato sia autofirmato e che l'esponente sia 65537; poi si interpreta il tipo 7 secondo il formato del cross-certificato, si controlla che la chiave Ed25519 certificata coincida con l'identità già verificata e si verifica la firma RSA (PKCS\#1 v1.5 senza OID dell'hash) sul SHA-256 del prefisso più i campi. L'impronta del relay è lo SHA-1 della codifica DER (PKCS\#1) della chiave pubblica RSA.
+\end{soluzione}
+
+\begin{soluzione}{es:07-padding}
+No. Il traffico del client \texttt{test008c} viaggia sui \emph{suoi} canali verso il suo guard, non sul nostro. Il nostro canale non è mai stato usato per un circuito, quindi \file{channelpadding\_decide\_to\_pad\_channel} restituisce \enquote{non aggiungere padding}. Per osservare il padding bisogna far transitare sul proprio canale un circuito di più salti, come faremo nel \cref{cap:10-cifratura-relay}.
+\end{soluzione}
+
+\begin{soluzione}{es:07-mitm}
+Il valore di TLSSECRETS è derivato dai segreti della sessione TLS tra $A$ e l'intermediario, e la firma di $A$ lo copre. $B$ lo ricalcola dai segreti della \emph{sua} sessione con l'intermediario, che sono diversi: la verifica fallisce anche se tutte le celle sono state inoltrate fedelmente, e con esse SLOG e CLOG coincidono. Senza TLSSECRETS (e SCERT) l'intermediario potrebbe presentarsi a $B$ come $A$, inoltrando la firma di $A$, e $B$ crederebbe di avere un canale autenticato con $A$.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:08-celle}: Le celle}
+
+\begin{soluzione}{es:08-lunghezze}
+\cella{CREATE2} è una cella fissa: 512 byte con il link protocol~3 (CircID di 2 byte) e 514 con il 5 (CircID di 4 byte). La cella \cella{VERSIONS} usa sempre un CircID di 2 byte: $2 + 1 + 2 + 4 = 9$ byte.
+\end{soluzione}
+
+\begin{soluzione}{es:08-formato}
+0 (\cella{PADDING}): fissa. 7 (\cella{VERSIONS}): variabile. 9 (\cella{RELAY\_EARLY}): fissa. 12 (\cella{PADDING\_NEGOTIATE}): fissa. 129 (\cella{CERTS}): variabile. 200: sarebbe variabile per la regola $\ge 128$, ma non è un comando definito e quindi non è ammesso; chi lo riceve può scartare la cella e chiudere il canale.
+\end{soluzione}
+
+\begin{soluzione}{es:08-circid}
+Solo \texttt{0x92345678}. Il valore 0 è riservato alle celle che non appartengono a un circuito; con il link protocol $\ge 4$ chi ha aperto la connessione, qui il client, deve usare CircID con il bit più significativo a 1, e \texttt{0x12345678} ha MSB a 0.
+\end{soluzione}
+
+\begin{soluzione}{es:08-hex}
+Prima cella: CircID \texttt{00000000}, comando \texttt{0x81} = 129 (\cella{CERTS}), quindi variabile; Length \texttt{0003}, corpo \texttt{aa bb cc}. Seconda cella: CircID \texttt{0x80000007}, comando \texttt{0x04} (\cella{DESTROY}), fissa, quindi con 509 byte di corpo; il primo byte del corpo, \texttt{00}, indica il motivo NONE. (Il corpo \texttt{aabbcc} non è un CERTS valido: l'esercizio riguarda solo l'incorniciamento delle celle.)
+\end{soluzione}
+
+\begin{soluzione}{es:08-relay}
+\texttt{02 0000 0005 00000000 012c}: comando DATA (2), Recognized 0, StreamID 5, Digest provvisoriamente a zero, Length $300 = \texttt{0x012c}$. Seguono $509 - 11 - 300 = 198$ byte di padding, di cui i primi 4 a zero e i restanti 194 casuali.
+\end{soluzione}
+
+\begin{soluzione}{es:08-recognized}
+Per una cella ancora cifrata il campo Recognized vale zero con probabilità $2^{-16}$: in media $10^6 / 65536 \approx 15$ celle. Recognized da solo non basta perché questi falsi positivi esistono; solo il confronto con il digest progressivo, che un nodo non destinatario non può far coincidere se non per caso ($2^{-32}$ ulteriori), stabilisce che la cella è destinata al relay.
+\end{soluzione}
+
+\begin{soluzione}{es:08-destroy}
+Un avversario controlla un guard e un exit. Quando l'exit vuole marcare un circuito, lo chiude con un motivo raro, per esempio \texttt{NOSUCHSERVICE}; se il middle e il guard propagassero il motivo verso il client, il guard vedrebbe arrivare quel valore insolito su uno dei suoi circuiti nello stesso istante, collegando così il client (noto al guard) alla destinazione (nota all'exit). Se tutti inviano e propagano solo NONE, il byte non trasporta informazione. Resta comunque la correlazione temporale della chiusura, che è un canale molto più rumoroso.
+\end{soluzione}
+
+\begin{soluzione}{es:08-efficienza}
+Formato tradizionale: $\lceil 1048576/498 \rceil = 2106$ celle, cioè $2106 \times 514 = \num{1082484}$ byte sul canale, con un overhead del 3,2\,\%. CGO: $\lceil 1048576/488 \rceil = 2149$ celle, \num{1104586} byte, overhead del 5,3\,\%. Nel conto non entrano i SENDME né i messaggi di apertura dello stream.
+\end{soluzione}
+
+\begin{soluzione}{es:08-lab-fuzz}
+Traccia: con Hypothesis si genera una lista di tuple (CircID, comando, corpo) scegliendo il comando tra i valori di \texttt{Comando} e limitando il corpo a 509 byte per le celle fisse; si concatena l'output di \texttt{codifica}, si divide in frammenti di lunghezza casuale e li si passa uno alla volta a un buffer da cui si estrae con \texttt{decodifica} finché restituisce una cella. Le celle fisse vanno confrontate con il corpo esteso con zeri fino a 509 byte.
+\end{soluzione}
+
+\begin{soluzione}{es:08-arti}
+In Arti 2.6.0 il codec di canale è la struttura \texttt{ChannelCodec} nel file \file{crates/tor-cell/src/chancell/codec.rs}, creata con la versione del link protocol (\texttt{ChannelCodec::new}). Le due funzioni sono \file{write\_cell}, che serializza una cella in un buffer, e \file{decode\_cell}, che la estrae. Come la nostra \texttt{decodifica}, \file{decode\_cell} gestisce la cella incompleta senza errore: restituisce \texttt{Ok(None)} finché i byte non bastano, e consuma dal buffer solo i byte di una cella completa. La differenza principale è che Arti lavora su un buffer mutabile (\texttt{BytesMut}) invece di restituire i byte avanzati, ed è generico sul tipo dei messaggi di canale (\texttt{M: ChanMsg}), il che permette di restringere l'insieme dei messaggi accettati. Un'altra differenza interessante: \file{decode\_cell} legge il comando sempre all'offset 4 e assume celle fisse di 514 byte, cioè presuppone un CircID di 4 byte. Arti infatti offre solo i link protocol 4 e 5 (costante \file{LINK\_PROTOCOLS} in \file{crates/tor-proto/src/channel/handshake.rs}), e la cella \cella{VERSIONS} iniziale, con il suo CircID di 2 byte, viene gestita a parte durante l'handshake.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:09-circuiti}: Costruzione dei circuiti}
+
+\begin{soluzione}{es:09-dimensioni}
+ntor: $20 + 32 + 32 = 84$ byte. ntor-v3 con 3 byte di messaggio: $32 + 32 + 32 + 3 + 32 = 131$ byte. HDATA può occupare al massimo $509 - 4 = 505$ byte, quindi $CM$ al massimo $505 - 128 = 377$ byte.
+\end{soluzione}
+
+\begin{soluzione}{es:09-fast}
+Il segreto di \cella{CREATE\_FAST} è $X \| Y$, trasmesso in chiaro dentro il canale. Per il secondo salto $X$ e $Y$ transiterebbero nel circuito attraverso il primo relay, che conosce le chiavi del proprio strato e potrebbe leggerli: ricaverebbe le chiavi del secondo salto e potrebbe decifrare tutto ciò che il client scambia con esso e, per estensione, rompere la separazione tra i salti.
+\end{soluzione}
+
+\begin{soluzione}{es:09-direzioni}
+Con AES-CTR la cifratura è lo XOR con un flusso di chiavi che dipende solo da chiave e contatore. Con la stessa chiave nei due versi, la cella $n$ inviata dal client e la cella $n$ inviata dal relay sarebbero cifrate con lo stesso flusso: lo XOR dei due testi cifrati, osservabile da un relay intermedio, sarebbe uguale allo XOR dei due testi in chiaro, da cui è spesso possibile ricavare entrambi.
+\end{soluzione}
+
+\begin{soluzione}{es:09-extend2}
+\texttt{test004r} ha ORPort 5104 = \texttt{0x13f0}: \texttt{03} (tre specificatori) · \texttt{00 06 7f000001 13f0}. Il messaggio completo è: $1 + (2+6) + (2+20) + (2+32) = 65$ byte di specificatori, più $2 + 2 = 4$ di HTYPE e HLEN, più $32 \cdot 3 + 1 + 32 = 129$ di HDATA, in tutto 198 byte, ben entro i 498 disponibili in un messaggio relay.
+\end{soluzione}
+
+\begin{soluzione}{es:09-ds}
+Senza $\mathrm{EXP}(B, x)$ il relay non è autenticato: il relay intermedio che inoltra l'handshake potrebbe rispondere lui stesso con un proprio $Y$ e un $\mathit{AUTH}$ calcolato con il proprio $y$, fingendosi il salto successivo e leggendo poi tutto il traffico destinato ad esso (attacco \emph{man-in-the-middle}). Senza $\mathrm{EXP}(Y, x)$ si perde la forward secrecy: chi ottenesse in futuro la chiave onion $b$ potrebbe ricalcolare $\mathrm{EXP}(X, b)$ dagli handshake registrati e quindi tutte le chiavi di sessione.
+\end{soluzione}
+
+\begin{soluzione}{es:09-ver}
+\texttt{VER} lega l'handshake al suo contesto (per tor, \texttt{"circuit extend"}): entra in tutte le derivazioni, quindi un handshake calcolato per un contesto non produce chiavi né $\mathit{AUTH}$ validi in un altro. Senza \texttt{VER}, un avversario potrebbe prendere un messaggio di handshake scambiato nel protocollo estraneo e riproporlo a un relay Tor (o viceversa), sfruttando il fatto che le due parti accetterebbero gli stessi calcoli; si parla di attacchi \emph{cross-protocol}.
+\end{soluzione}
+
+\begin{soluzione}{es:09-cc}
+Nella rete di laboratorio il relay \texttt{test003r} (sottoprotocolli \texttt{Relay=2-6}) rifiuta con \cella{DESTROY}, motivo \texttt{PROTOCOL}, la sola richiesta \texttt{[02 06]}, e accetta la richiesta combinata con \file{CC\_FIELD\_REQUEST}, rispondendo con \file{CC\_FIELD\_RESPONSE}. Nel codice di tor un salto può usare CGO solo se usa anche il controllo della congestione (\file{enable\_cgo = supports\_cgo \&\& use\_congestion\_control} in \file{src/core/or/extendinfo.c}). La \proposta{359} spiega che il nuovo formato dei messaggi, con lo StreamID solo per alcuni comandi, non è compatibile con i SENDME a livello di stream del controllo di flusso precedente: serve il controllo di flusso della \proposta{324} (\texttt{FlowCtrl=2}).
+\end{soluzione}
+
+\begin{soluzione}{es:09-ntor-ref}
+Esercizio di laboratorio: \file{ntor\_ref.py} contiene le funzioni di client e server; fissando le chiavi (invece di generarle a caso) si ottengono valori riproducibili da confrontare con \file{ntor.py}.
+\end{soluzione}
+
+\begin{soluzione}{es:09-relay}
+Traccia: \file{server\_part1} riceve HDATA, controlla \texttt{ID} e $B$, calcola $X_b = \mathrm{EXP}(X, b)$, deriva le chiavi di fase 1, verifica il MAC e decifra $CM$; \file{server\_part2} genera $(y, Y)$, calcola $\mathit{key\_seed}$, $\mathit{verify}$, la chiave per $SM$ e $\mathit{AUTH}$. Con $y$ fissato ai valori della proposta, la risposta deve coincidere con il vettore \file{server\_handshake}.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:10-cifratura-relay}: La cipolla}
+
+\begin{soluzione}{es:10-ordine}
+Il client aggiorna il digest in avanti del secondo salto, poi cifra con Kf$_2$ e infine con Kf$_1$. Il terzo salto non vede nulla: la cella viene riconosciuta dal secondo e non prosegue.
+\end{soluzione}
+
+\begin{soluzione}{es:10-contatore}
+Ogni cella consuma 509 byte del flusso: dopo 1000 celle il contatore è alla posizione $509 \times 1000 = \num{509000}$ byte, cioè oltre il blocco AES numero \num{31812} (blocchi di 16 byte). Riusare la chiave per un altro circuito, con il contatore che riparte da zero, farebbe riusare lo stesso flusso di chiavi: lo XOR di due celle cifrate con lo stesso flusso rivelerebbe lo XOR dei testi in chiaro. Per questo ogni circuito ha chiavi nuove, derivate da un handshake con valori effimeri.
+\end{soluzione}
+
+\begin{soluzione}{es:10-falso}
+Il digest del relay includerebbe una cella che il client non ha contato per quel salto: da quel momento gli stati del digest di client e relay sarebbero diversi e nessuna cella successiva verrebbe più riconosciuta, quindi il circuito verrebbe distrutto. Il problema si presenta con probabilità $2^{-16}$ per ogni cella in transito non destinata al relay: in media dopo \num{65536} celle di questo tipo, circa 33\,MB di traffico.
+\end{soluzione}
+
+\begin{soluzione}{es:10-tag}
+Conviene alterare byte il cui contenuto in chiaro è noto o prevedibile, così che l'exit possa riconoscere un'alterazione precisa: per esempio il comando relay (\texttt{02} per \texttt{DATA}), lo StreamID o i 4 byte a zero all'inizio del padding. L'exit complice, prima del controllo del digest, verifica se quei byte hanno il valore alterato atteso. Un exit onesto vede soltanto una cella con digest errato e distrugge il circuito.
+\end{soluzione}
+
+\begin{soluzione}{es:10-cgo-tag}
+Con CGO la cella alterata, una volta tolto lo strato dell'exit, produce un tag e un contenuto pseudocasuali: non c'è alcun marchio da leggere, perché la modifica si propaga in modo imprevedibile a tutta la cella. Poiché il tag entra nell'elaborazione della cella successiva, anche tutte le celle seguenti del circuito diventano indecifrabili e il circuito è da buttare. L'avversario può solo distruggere circuiti, cosa che può fare in ogni caso.
+\end{soluzione}
+
+\begin{soluzione}{es:10-padding}
+Intervalli: 4,1; 3,0; 5,7; 8,7; 6,8 secondi (media 5,7). Per il massimo di due uniformi su $[a, b]$ il valore atteso è $a + \tfrac{2}{3}(b - a) = 1{,}5 + \tfrac{2}{3} \cdot 8 \approx 6{,}8$ secondi. Con soli cinque campioni lo scarto è del tutto compatibile. Si noti anche che il timer riparte ogni volta che sul canale passa qualsiasi cella, non solo il padding.
+\end{soluzione}
+
+\begin{soluzione}{es:10-drop}
+Nella rete di laboratorio il middle non risponde a \texttt{DROP}: il messaggio viene riconosciuto e scartato in silenzio. La prova indiretta è che il circuito resta utilizzabile: dopo due \texttt{DROP} il client riesce ancora a estenderlo verso l'exit. Se il middle non avesse riconosciuto le celle, essendo l'ultimo salto avrebbe distrutto il circuito; se client e middle avessero contato le celle in modo diverso, i digest progressivi si sarebbero desincronizzati e l'estensione successiva sarebbe fallita.
+\end{soluzione}
+
+\begin{soluzione}{es:10-alterazione}
+Nella prova sulla rete di laboratorio, un bit alterato in una cella con \texttt{EXTEND2} diretta al guard (unico salto del circuito) fa fallire il controllo del digest: il guard, che è l'estremo del circuito, risponde con \cella{DESTROY}, motivo 1 (\texttt{PROTOCOL}). Con un circuito più lungo, un'alterazione applicata dal client a una cella destinata al terzo salto verrebbe inoltrata dai primi due e rilevata solo dal terzo.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:11-stream}: Stream, SENDME e controllo della congestione}
+
+\begin{soluzione}{es:11-begin}
+Il nome va in minuscolo: \texttt{example.com:443} seguito da uno zero, cioè \texttt{6578616d706c652e636f6d3a343433 00}, poi FLAGS con il bit 1 (IPv6 accettato): \texttt{00000001}.
+\end{soluzione}
+
+\begin{soluzione}{es:11-connected}
+Indirizzo IPv4 \texttt{c0000201} = 192.0.2.1, TTL \texttt{0000012c} = 300 secondi. Il client può ignorarlo; se lo conserva, non deve riusarlo su altri circuiti, perché l'exit potrebbe aver mentito o aver restituito un indirizzo unico per riconoscerlo.
+\end{soluzione}
+
+\begin{soluzione}{es:11-optimistic}
+Senza optimistic data il client attende \texttt{CONNECTED} prima di inviare la richiesta: un RTT in più, circa 600\,ms, su un tempo totale di almeno due RTT. Se la connessione fallisce i dati in coda vanno scartati perché non esiste una destinazione a cui consegnarli, e non devono finire su un'altra connessione.
+\end{soluzione}
+
+\begin{soluzione}{es:11-velocita}
+Uno stream può avere in volo al massimo 500 celle, cioè circa $500 \times 498 \approx 249$\,KB per RTT: con 400\,ms, circa 620\,KB/s. Un circuito, anche con molti stream, è limitato a 1000 celle per RTT, circa 1,2\,MB/s. Con il controllo della congestione la finestra parte da sole 124 celle (circa 62\,KB), ma cresce finché l'RTT non indica congestione, senza un limite fisso.
+\end{soluzione}
+
+\begin{soluzione}{es:11-sendme-falso}
+Un client apre molti stream verso un sito che invia molti dati (o un proprio server), legge pochissimo e invia a ripetizione \texttt{SENDME} falsi: l'exit continua a inviare, ma le celle si accumulano nelle code del guard, del middle e del client stesso, consumando memoria nei relay. Con i \texttt{SENDME} autenticati il client deve dimostrare di aver ricevuto la cella che fa scattare il \texttt{SENDME}. Se il contenuto delle celle fosse prevedibile (un file noto scaricato dall'avversario stesso), il client potrebbe provare a calcolare il digest senza ricevere nulla. Per questo la specifica raccomanda di introdurre byte casuali in almeno una cella \texttt{DATA} per incremento della finestra: il padding casuale lo rende possibile \emph{quando resta spazio} nel corpo, mentre una cella con tutti i 498 byte occupati da dati non ha padding. Non basta quindi presumere che ogni cella contenga byte imprevedibili.
+\end{soluzione}
+
+\begin{soluzione}{es:11-resolve}
+Traccia: si invia \texttt{RESOLVE} con uno StreamID nuovo e il nome seguito da zero; si interpreta \texttt{RESOLVED} come sequenza di (tipo, lunghezza, valore, TTL). Per un nome inesistente l'exit risponde con una voce di tipo errore (\texttt{0xF0} o \texttt{0xF1}), il cui contenuto va ignorato.
+\end{soluzione}
+
+\begin{soluzione}{es:11-policy}
+L'exit risponde con \texttt{END} di motivo 4 (\texttt{EXITPOLICY}), seguito dall'indirizzo di destinazione (4 byte per IPv4) e da un TTL di 4 byte. Il client usa l'informazione per non riprovare con lo stesso exit per quella destinazione.
+\end{soluzione}
+
+\begin{soluzione}{es:11-rtt}
+Si misura il tempo che il \texttt{SENDME} impiega per arrivare all'exit, più il tempo necessario perché l'exit, sbloccato, invii nuove celle e queste arrivino al client: un'approssimazione dell'RTT del circuito vista dal client, quando l'exit sta aspettando il \texttt{SENDME}. Con un secondo download in parallelo le code si allungano e i valori crescono: è proprio il segnale che il controllo della congestione usa per ridurre la finestra.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:12-directory}: Il sistema delle directory}
+
+\begin{soluzione}{es:12-validita}
+L'intervallo di voto è di un'ora (da \texttt{valid-after} a \texttt{fresh-until}). Il client sceglie un istante a caso tra le $11{:}00 + \tfrac34 \cdot 60' = 11{:}45$ e $11{:}45 + \tfrac78 \cdot 75' \approx 12{:}50$. Se alle 13:00 non ha ancora un consenso nuovo, quello che possiede scade formalmente, ma il client continua a usarlo come \emph{reasonably live} (scaduto da meno di 24 ore, \file{REASONABLY\_LIVE\_TIME} in \file{networkstatus.c}) e riesce ancora a costruire circuiti, mentre insiste per scaricarne uno più recente. Solo circa 24 ore dopo la scadenza smette di usarlo.
+\end{soluzione}
+
+\begin{soluzione}{es:12-flag}
+Probabilmente \texttt{Running} e \texttt{Valid}; \texttt{Fast} (500\,KB/s supera i 100\,KB/s); forse \texttt{V2Dir} se fa da directory cache. Non \texttt{Stable}, \texttt{Guard} né \texttt{HSDir}, che richiedono giorni o settimane di attività. Non \texttt{Exit}, perché la policy permette solo la porta 443 e il flag richiede l'uscita sia sulla 80 sia sulla 443.
+\end{soluzione}
+
+\begin{soluzione}{es:12-partizione}
+La cache invia al client bersaglio un consenso di due ore prima, ancora valido, in cui mancano i relay aggiunti di recente: il client sceglierà percorsi tra un insieme leggermente diverso da quello degli altri, e il suo traffico potrà essere riconosciuto. L'attacco è limitato dalla validità di tre ore del consenso, dal fatto che il consenso deve comunque essere firmato dalle autorità (la cache non può inventarne uno) e dal fatto che i client scelgono le cache a caso. Chiedere i microdescrittori per impronta, anziché per identità del relay, impedisce alla cache di inviare al singolo client una versione diversa della chiave di un relay: l'impronta è fissata nel consenso firmato.
+\end{soluzione}
+
+\begin{soluzione}{es:12-mediana}
+Con tre misure si usa la mediana: 5200. Una sola misura esagerata non sposta il risultato. Se la terza autorità fosse l'unica a misurare il relay, non ci sarebbero tre misure: il consenso userebbe la banda dichiarata o votata, con \texttt{Unmeasured=1} e un limite superiore, quindi la misura gonfiata non avrebbe effetto.
+\end{soluzione}
+
+\begin{soluzione}{es:12-voti}
+Il voto contiene righe che il consenso non ha o ha in forma diversa: per esempio le misure \texttt{Measured} delle autorità di banda, le righe \texttt{m} con i metodi di consenso supportati, i flag assegnati da quella sola autorità, le soglie usate (\texttt{flag-thresholds}) e gli impegni per la casualità condivisa. Nel consenso restano solo i valori combinati.
+\end{soluzione}
+
+\begin{soluzione}{es:12-md}
+Il testo va dalla riga \texttt{onion-key} che apre il microdescrittore fino al ritorno a capo che precede il microdescrittore successivo (o la fine del documento), comprese le righe della chiave RSA in formato PEM. L'impronta SHA-256, in base64 senza \texttt{=} finali, deve coincidere con la riga \texttt{m}.
+\end{soluzione}
+
+\begin{soluzione}{es:12-autorita}
+Con un'autorità ferma, le altre due continuano a votare e il consenso ha due firme: bastano, perché ne servono $\lfloor 3/2 \rfloor + 1 = 2$. Con due autorità ferme la sola rimasta non raggiunge la maggioranza: non viene prodotto un consenso nuovo. Il client, però, continua a usare l'ultimo come \emph{reasonably live} — fino a circa 24 ore dopo la scadenza — e per un bel po' costruisce ancora circuiti: nella rete di laboratorio il consenso vale 40 secondi, ma la finestra \emph{reasonably-live} resta di 24 ore, quindi l'interruzione non si osserva subito.
+\end{soluzione}
+
+\begin{soluzione}{es:12-ns}
+Il consenso \texttt{ns} contiene di norma firme SHA-1 (la specifica ammette solo quelle per questa variante). La riga \texttt{r} contiene in più l'impronta del descrittore completo del relay, e ogni voce ha anche la riga \texttt{p} con il riassunto della exit policy.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:13-percorso}: Selezione del percorso}
+
+\begin{soluzione}{es:13-ordine}
+L'exit è il relay più vincolato: deve accettare la destinazione richiesta. Scegliendolo per primo si garantisce che esista; scegliendo prima il guard si potrebbe escludere, per i vincoli di famiglia o di rete, proprio l'unico exit adatto, o costringere a ripetere la scelta. C'è anche una ragione statistica: le esclusioni si applicano alle posizioni scelte dopo, e conviene che ricadano su quelle con più candidati.
+\end{soluzione}
+
+\begin{soluzione}{es:13-peso}
+Come guard: $20000 \times 0/10000 = 0$ (\texttt{Wgd=0}). Come middle: $20000 \times 0 = 0$ (\texttt{Wmd=0}). Come exit: $20000 \times 10000/10000 = 20000$ (\texttt{Wed=10000}). Con i pesi di quel consenso il relay viene usato solo come exit.
+\end{soluzione}
+
+\begin{soluzione}{es:13-guard}
+Senza guard la probabilità supera il 50\,\% quando $1 - (1 - c^2)^C > 0{,}5$, cioè $C > \ln 0{,}5 / \ln(1 - c^2)$: circa \num{6932} circuiti per $c = 1\,\%$ e 17 circuiti per $c = 20\,\%$. Con il guard fisso la probabilità resta intorno a $c$: 1\,\% e 20\,\%. Con un avversario molto forte i guard non bastano, ma la differenza resta enorme.
+\end{soluzione}
+
+\begin{soluzione}{es:13-sybil}
+Deve fornire banda reale: la probabilità dipende dalla banda misurata dalle autorità, non da quella dichiarata, e l'uscita è la posizione che attira più controlli (\texttt{BadExit}). Il limite di due relay per indirizzo lo costringe a usare molti indirizzi; se dichiara la famiglia, i suoi relay non compaiono mai due volte nello stesso circuito; se non la dichiara e viene scoperto, le autorità possono escluderli. I pesi, infine, distribuiscono l'uso degli exit solo in uscita, dove la sua banda conta davvero.
+\end{soluzione}
+
+\begin{soluzione}{es:13-campione}
+Senza limite, un avversario che controlla la rete locale del client potrebbe bloccare la connessione a ogni guard onesto: il client continuerebbe ad aggiungere guard al campione finché non ne trova uno raggiungibile, cioè, prima o poi, uno dell'avversario. Con un campione limitato il client esaurisce i tentativi e smette di aggiungere guard, restando senza connessione piuttosto che finire su un guard ostile.
+\end{soluzione}
+
+\begin{soluzione}{es:13-famiglie}
+Esercizio di laboratorio. I microdescrittori si trovano su CollecTor nella stessa area dei consensi; conviene costruire, per ogni relay, l'insieme delle famiglie (identificativi \texttt{family-ids} o liste reciproche \texttt{family}) e rifiutare un'estrazione se interseca quello di un relay già scelto.
+\end{soluzione}
+
+\begin{soluzione}{es:13-operatori}
+Esercizio di ricerca. In genere le famiglie più grandi concentrano una quota di probabilità di uscita molto maggiore dei singoli relay più grandi: il rischio reale dipende dagli operatori, non dai relay. È una delle ragioni dell'attenzione della comunità per la diversità degli operatori e per le famiglie non dichiarate (\cref{cap:27-casi-rete}).
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:14-onion-services}: Onion services v3}
+
+\begin{soluzione}{es:14-indirizzo}
+$32 + 2 + 1 = 35$ byte, cioè 280 bit; il base32 codifica 5 bit per carattere: $280/5 = 56$ caratteri, senza caratteri di riempimento. Un errore casuale produce, con probabilità circa $2^{-16}$, un checksum che per caso coincide; inoltre il byte di versione deve restare \texttt{0x03}, il che rende ancora più improbabile che un errore passi inosservato.
+\end{soluzione}
+
+\begin{soluzione}{es:14-periodo}
+Alle 09:00 del 1° gennaio 2026 sono trascorsi \num{29454300} minuti dall'epoca Unix; tolti i 720 minuti di sfasamento restano \num{29453580}, e $\lfloor 29453580 / 1440 \rfloor = 20453$. Il periodo \num{20453} è iniziato alle 12:00 UTC del 31 dicembre 2025, perché alle 09:00 non è ancora mezzogiorno.
+\end{soluzione}
+
+\begin{soluzione}{es:14-hsdir}
+Deve conoscere la chiave accecata del periodo (quindi l'indirizzo del servizio), l'SRV del periodo e le posizioni sull'anello dei relay che controlla, per generare identità di relay che cadano subito dopo gli indici del servizio. L'SRV si conosce solo quando le autorità lo pubblicano, circa mezza giornata prima dell'inizio del periodo in cui viene usato: l'avversario non può preparare i relay giusti con giorni di anticipo, e i nuovi relay devono comunque ottenere il flag \texttt{HSDir}, che richiede almeno 96 ore di attività.
+\end{soluzione}
+
+\begin{soluzione}{es:14-ruoli}
+L'HSDir vede una chiave accecata, non l'indirizzo, e riceve richieste da circuiti anonimi. Il punto di introduzione vede una chiave di autenticazione e un circuito che arriva dal servizio, e conta le richieste di introduzione. Il punto di rendezvous vede un cookie, due circuiti e il traffico cifrato che scorre tra loro. Il punto di introduzione è il più interessante per stimare la popolarità: vede ogni tentativo di connessione, anche se non sa a quale indirizzo corrisponda (lo potrebbe scoprire, però, chi conosce già l'indirizzo e scarica il descrittore).
+\end{soluzione}
+
+\begin{soluzione}{es:14-anonimo}
+Su un circuito di un salto l'HSDir è il primo relay, e vede l'indirizzo IP del client: potrebbe collegare \emph{chi} cerca \emph{quale} servizio (almeno a livello di chiave accecata, e quindi dell'indirizzo, se lo conosce). Rifiutando le richieste non anonime, l'HSDir riceve solo richieste che passano da altri relay.
+\end{soluzione}
+
+\begin{soluzione}{es:14-anello}
+Esercizio di laboratorio: con più HSDir di $2 \times 4$ il servizio non carica più il descrittore ovunque; scaricandolo da ogni HSDir con un circuito di tre salti, lo si deve trovare esattamente sugli HSDir calcolati per il periodo corrente o per quello successivo, dato che il servizio pubblica entrambi.
+\end{soluzione}
+
+\begin{soluzione}{es:14-ipt}
+Il valore base64 contiene un numero di specificatori seguito dagli specificatori nel formato di \texttt{EXTEND2} (\cref{sec:extend2}): per esempio il tipo \texttt{00} con indirizzo e ORPort, il tipo \texttt{02} con l'impronta RSA e il tipo \texttt{03} con l'identità Ed25519. Dall'ORPort (5100 + numero del nodo) si risale al relay. La riga \texttt{auth-key} contiene un certificato di tipo 9, firmato dalla chiave di firma del descrittore, che certifica la chiave di autenticazione del servizio presso quel punto di introduzione.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:15-dos}: Difese contro DoS}
+
+\begin{soluzione}{es:15-bucket}
+Nel primo minuto: i 60 gettoni del secchio pieno più $2 \times 60 = 120$ ricaricati, circa 180 circuiti (qualcuno in meno, perché il client viene marcato quando il secchio arriva a zero). In un'ora, a regime: circa $60 + 2 \times 3600 = 7260$. Un client normale ne crea poche decine.
+\end{soluzione}
+
+\begin{soluzione}{es:15-guard}
+Solo il primo relay vede l'indirizzo IP reale del client: più avanti, l'\enquote{indirizzo} del canale è quello del relay precedente. Un middle che limitasse i circuiti per indirizzo limiterebbe in realtà i circuiti di un guard, che trasporta il traffico di migliaia di utenti: colpirebbe tutti, non l'attaccante. Per questo i limiti riguardano solo le connessioni dei client, non autenticate.
+\end{soluzione}
+
+\begin{soluzione}{es:15-amplificazione}
+Il client invia un messaggio \texttt{INTRODUCE1} su un circuito che può riusare. Il servizio deve decifrarlo, eseguire l'handshake hs-ntor e costruire un nuovo circuito di almeno tre salti verso il punto di rendezvous, con altrettanti handshake ntor per i relay coinvolti, più le celle di creazione ed estensione in ogni salto. Una sola cella del client genera così diverse operazioni a chiave pubblica e decine di celle nella rete: l'amplificazione è di uno o due ordini di grandezza.
+\end{soluzione}
+
+\begin{soluzione}{es:15-bit}
+Con $k$ bit a zero si possono chiedere solo sforzi che sono potenze di due (1, 2, 4, \ldots): tra uno sforzo e il successivo il costo raddoppia. Con il test lineare si può chiedere qualsiasi intero $E$. Un controllo a retroazione che aggiusta lo sforzo per piccoli passi, come quello del servizio, ha bisogno di una scala fine: con i raddoppi oscillerebbe tra valori troppo bassi e troppo alti.
+\end{soluzione}
+
+\begin{soluzione}{es:15-sforzo}
+No. Lo sforzo $E$ fa parte della sfida su cui si calcolano sia la soluzione Equi-X sia l'hash $R$: dichiarando $E = 5000$ la sfida cambia, e la soluzione trovata per $E = 50$ non è più valida. Il client avrebbe dovuto scegliere $E = 5000$ prima di cercare.
+\end{soluzione}
+
+\begin{soluzione}{es:15-oom}
+Esercizio di laboratorio. Le celle si accumulano nella coda del circuito sul relay intermedio finché il totale supera \opt{MaxMemInQueues}; a quel punto il gestore della memoria chiude i circuiti con i dati in coda più vecchi, tra cui il nostro, e registra nel log quanta memoria ha liberato.
+\end{soluzione}
+
+\begin{soluzione}{es:15-coda}
+Esercizio di programmazione. Ci si aspetta che le richieste a sforzo alto abbiano tempi di attesa brevi e stabili, e che quelle a sforzo zero vengano servite solo quando la coda è quasi vuota, o scartate durante gli svuotamenti: è l'effetto voluto, che protegge gli utenti disposti a pagare con un po' di calcolo.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:16-censura}: Censura, bridge e pluggable transports}
+
+\begin{soluzione}{es:16-guard}
+Un bridge svolge il ruolo del guard, primo salto del circuito, ma non compare nel consenso e il client ne conosce l'indirizzo da una bridge line ottenuta in privato. Un client con \opt{UseBridges} usa i bridge al posto dei guard: aggiungere un guard pubblico significherebbe collegarsi direttamente a un indirizzo pubblicato, cioè proprio ciò che il censore blocca o sorveglia.
+\end{soluzione}
+
+\begin{soluzione}{es:16-strategie}
+\enquote{Non assomigliare a niente}: obfs4 (il censore dovrebbe bloccare tutto il traffico non riconoscibile). \enquote{Assomigliare a qualcosa di permesso}: meek (bloccare un grande servizio di distribuzione di contenuti), Snowflake (bloccare WebRTC e il broker, e molti proxy di volontari), WebTunnel (bloccare HTTPS verso siti sconosciuti o i siti che ospitano i bridge), Conjure (bloccare ampi intervalli di indirizzi presso i fornitori che collaborano).
+\end{soluzione}
+
+\begin{soluzione}{es:16-sondaggio}
+Un censore potrebbe notare connessioni lunghe verso indirizzi senza un nome di dominio associato, con byte ad alta entropia fin dal primo pacchetto, dimensioni e tempi dei pacchetti con distribuzioni tipiche (per esempio raffiche legate alle celle di Tor), e rapporti tra traffico in ingresso e in uscita simili alla navigazione web. \texttt{iat-mode} aggiunge ritardi e frammentazioni casuali che rendono meno riconoscibili dimensioni e tempi, a costo di prestazioni.
+\end{soluzione}
+
+\begin{soluzione}{es:16-lox}
+Il censore blocca i bridge che riceve, e un bridge bloccato impedisce di salire di livello: le sue credenziali restano ai livelli bassi, senza possibilità di invitare. Per aggirare il meccanismo potrebbe astenersi dal bloccare i bridge ricevuti finché non ha raggiunto livelli alti, e poi bloccarli tutti insieme: ma dovrebbe mantenere per mesi molte identità pazienti, e intanto quei bridge servirebbero gli utenti; inoltre ogni credenziale di livello alto dà accesso a pochi bridge.
+\end{soluzione}
+
+\begin{soluzione}{es:16-entropia}
+Entrambe hanno entropia vicina a 8 bit per byte, perché anche TLS, dopo l'handshake, trasporta dati cifrati. La differenza sta in pochi byte: le intestazioni dei record TLS (\texttt{16 03 01}, \texttt{17 03 03} seguiti dalla lunghezza) e l'handshake in chiaro all'inizio della connessione, che un DPI riconosce senza bisogno di misure statistiche.
+\end{soluzione}
+
+\begin{soluzione}{es:16-sondaggio-lab}
+Nella cattura di riferimento il Laboratorio~1 scade dopo il tempo massimo (\texttt{TimeoutError}): nessun handshake Tor viene stabilito e non arriva una risposta utile prima della scadenza. Con un \texttt{cert} sbagliato, \cmd{obfs4proxy} lato client non completa l'handshake e il bridge può chiudere la connessione dopo un ritardo; nei log compaiono al più messaggi di errore, secondo il livello di registrazione. \textbf{Il timeout di un singolo client non garantisce silenzio perpetuo, né rende impossibile il rilevamento statistico o il blocco di un bridge già noto.}
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:17-torrc}: Installazione e torrc}
+
+\begin{soluzione}{es:17-verifica}
+tor segnala l'opzione sconosciuta con un messaggio del tipo \texttt{Unknown option '...'. Failing.} e termina senza avviarsi. \texttt{--dump-config short} sul \file{torrc} del client mostra solo le opzioni diverse dai valori predefiniti: per la rete di laboratorio, tra le altre, \opt{TestingTorNetwork}, le \opt{DirAuthority} e le porte.
+\end{soluzione}
+
+\begin{soluzione}{es:17-isolamento}
+Se posta e forum condividono un circuito, l'exit vede nello stesso intervallo di tempo, dallo stesso circuito, il collegamento al server di posta dell'utente (spesso con il suo nome) e quello al forum pseudonimo, e può collegare lo pseudonimo alla persona. Soluzioni: due porte SOCKS distinte, una per applicazione (le porte diverse sono isolate per impostazione predefinita, salvo assegnare loro lo stesso \opt{SessionGroup}), oppure credenziali SOCKS diverse per le due applicazioni con \texttt{IsolateSOCKSAuth}, o ancora \texttt{IsolateDestAddr} sulla porta usata da entrambe. \textbf{Isolare i circuiti non garantisce exit differenti}: due circuiti indipendenti possono selezionare lo stesso relay d'uscita. Se la posta identifica l'utente a livello applicativo, anche l'isolamento dei circuiti non nasconde quell'identità al server di posta; occorre separare anche gli account e il comportamento.
+\end{soluzione}
+
+\begin{soluzione}{es:17-exitnodes}
+Un avversario che osserva le reti italiane vedrebbe sia l'utente entrare nella rete Tor sia l'exit italiano collegarsi al sito italiano: entrambi gli estremi nello stesso territorio, cioè proprio il caso di correlazione escluso dal modello di minaccia. Inoltre gli exit italiani sono pochi, e restringere la scelta rende l'utente riconoscibile e più facile da colpire con relay malevoli.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:18-stem}: Control port e Stem}
+
+\begin{soluzione}{es:18-codici}
+\texttt{552} è un errore permanente in risposta a un comando: la chiave \texttt{pippo} non esiste. Un \texttt{650} non risponde a un comando: è un evento asincrono, inviato perché il client lo ha chiesto con \texttt{SETEVENTS}, e può arrivare in qualsiasi momento, anche mentre si attende la risposta a un altro comando.
+\end{soluzione}
+
+\begin{soluzione}{es:18-onion}
+Traccia: il metodo \file{create\_ephemeral\_hidden\_service} del controllore, con la corrispondenza tra la porta virtuale 80 e la porta locale 8080 e l'opzione \file{await\_publication}, restituisce l'indirizzo del servizio; con \texttt{curl --socks5-hostname 127.0.0.1:9008 http://<indirizzo>.onion/} lo si raggiunge. Le chiavi di un servizio effimero sono tenute in memoria da tor e, per impostazione predefinita, la chiave privata può essere restituita al controllore, che deve proteggerla come un segreto e può salvarla solo se intende riusare quell'identità. Alla chiusura della connessione di controllo il servizio scompare, salvo che sia stato creato con l'opzione \texttt{detach} (o proprietà equivalente). Un onion service temporaneo non rende automaticamente temporanei i log o gli account dell'applicazione che vi risponde.
+\end{soluzione}
+
+\begin{soluzione}{es:18-banda}
+Traccia: registrare una funzione per \texttt{EventType.BW}, che riceve ogni secondo i byte letti e scritti (\texttt{evento.read}, \texttt{evento.written}), e stamparli; durante il download il valore letto cresce fino al limite imposto dal controllo della congestione e dalle risorse della macchina.
+\end{soluzione}
+
+\begin{soluzione}{es:18-percorso}
+Con \file{\_\_LeaveStreamsUnattached} tor non assegna automaticamente i nuovi stream ai circuiti; \texttt{EXTENDCIRCUIT 0 test004r,test005r,test006e} richiede il circuito e restituisce il relativo identificativo, ma bisogna \textbf{attenderne lo stato \texttt{BUILT}} prima di usarlo. All'arrivo dell'evento \texttt{STREAM} con stato \texttt{NEW} si chiama \texttt{ATTACHSTREAM} con lo stream e il circuito; se il controller non gestisce lo stream, la connessione può restare sospesa. È un esercizio confinato alla rete privata: scegliere manualmente i relay aggira le protezioni della selezione pesata e dei guard, e può rendere l'utente riconoscibile o favorire relay controllati da un avversario.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:19-rete-privata}: Una rete Tor privata}
+
+\begin{soluzione}{es:19-porte}
+\texttt{test006e} è il nodo numero 6: ORPort 5106, ControlPort 8006. \texttt{test009h} non ha ORPort: un onion service non è un relay e non accetta connessioni da altri nodi; si collega lui stesso ai punti di introduzione e di rendezvous tramite circuiti in uscita.
+\end{soluzione}
+
+\begin{soluzione}{es:19-guard}
+L'opzione \opt{TestingDirAuthVoteGuard}~\texttt{*} nel torrc delle autorità. Nella rete reale il flag Guard richiede stabilità e banda misurate nel tempo (\cref{cap:12-directory}). In laboratorio, quindi, qualsiasi relay può essere scelto come guard: le statistiche sulla scelta del primo salto non rappresentano la rete reale.
+\end{soluzione}
+
+\begin{soluzione}{es:19-socks}
+Con \texttt{--socks5} è \texttt{curl} a risolvere \texttt{localhost} localmente e a comunicare a Tor un indirizzo IP; con \texttt{--socks5-hostname} passa il nome, che Tor fa risolvere sul lato d'uscita (quando la destinazione e la policy lo permettono). \textbf{Questo specifico test con \texttt{localhost} non dimostra di per sé una fuga DNS}: il nome è normalmente risolto dal file \texttt{/etc/hosts}, senza interrogare un resolver esterno, e il risultato può cambiare tra IPv4 e IPv6. Il rischio reale riguarda invece \emph{domini non locali} risolti preventivamente dall'applicazione mediante il DNS del sistema: tali interrogazioni possono rivelare le destinazioni fuori da Tor.
+\end{soluzione}
+
+\begin{soluzione}{es:19-consenso}
+Ogni 20 secondi, come stabilito da \opt{V3AuthVotingInterval}. In un giorno: $86400/20 = 4320$ consensi in laboratorio contro 24 nella rete reale, dove l'intervallo è di un'ora.
+\end{soluzione}
+
+\begin{soluzione}{es:19-autorita}
+In una rete di test che richiede una maggioranza di tre autorità, fermarne una lascia la possibilità di ottenere due firme, ma \textbf{non garantisce} che tutti i voti e le pubblicazioni si completino immediatamente: dipendono dal calendario dei voti e dalla disponibilità delle autorità. Fermandone due, la sola rimasta non raggiunge la maggioranza e non si può formare un nuovo consenso accettabile. I client, però, continuano a usare l'ultimo come \emph{reasonably live} fino a circa 24 ore dopo la scadenza (\cref{cap:12-directory}), quindi costruiscono ancora circuiti a lungo: nella rete di laboratorio il consenso vale 40 secondi, ma la finestra \emph{reasonably-live} resta di 24 ore.
+\end{soluzione}
+
+\begin{soluzione}{es:19-stem}
+Traccia: \file{c.get\_network\_status(impronta)} restituisce una voce del consenso con i campi \texttt{address} e \file{or\_port}; basta chiamarla per ogni impronta in \texttt{circ.path} (il primo elemento di ogni coppia).
+\end{soluzione}
+
+\begin{soluzione}{es:19-rete}
+Il file ha la stessa struttura di quello della rete del libro, con \texttt{getN(5)}, \texttt{getN(10)} e \texttt{getN(4)}. Il tempo di bootstrap dipende dalla macchina; con più nodi cresce soprattutto la fase in cui i relay devono comparire nel consenso e i client scaricare i microdescrittori.
+\end{soluzione}
+
+\begin{soluzione}{es:19-log}
+Esercizio di esplorazione: i messaggi da cercare riguardano la scelta del percorso, l'invio di \cella{CREATE2}/\texttt{EXTEND2} e la ricezione delle risposte, fino al completamento del circuito. Il livello \emph{info} non mostra ogni cella; per un dettaglio maggiore si può attivare il log \emph{debug} nel torrc del client.
+\end{soluzione}
+
+\begin{soluzione}{es:19-cattura}
+No: dopo l'handshake TLS le celle viaggiano cifrate e \cmd{tcpdump} vede solo record TLS. Restano osservabili gli indirizzi, le porte, le dimensioni dei record e i tempi: proprio le informazioni su cui si basano gli attacchi di analisi del traffico del \cref{cap:26-attacchi}.
+\end{soluzione}
+\section*{Capitolo \ref{cap:20-traffico}: Osservare il traffico}
+
+\begin{soluzione}{es:20-dimensioni}
+TLS non allinea i record ai confini delle celle: tor scrive le celle in un buffer e la libreria TLS può raggrupparle in record il cui testo in chiaro ha un massimo ordinario di $2^{14}$ byte, a cui TLS aggiunge intestazioni e protezione crittografica. TCP può inoltre spezzare o riunire i dati dei record in segmenti diversi. La dimensione fissa di 514 byte riguarda \emph{una cella Tor dopo il protocollo di collegamento v4}, non la dimensione dei record TLS né quella dei segmenti TCP; il parametro \texttt{sendme\_inc} del controllo della congestione non va dedotto dalle dimensioni dei record.
+\end{soluzione}
+
+\begin{soluzione}{es:20-relay}
+Traccia: dopo \cella{CREATED2}, le celle \cella{RELAY\_EARLY} e \cella{RELAY} del circuito si decifrano togliendo, nell'ordine, gli strati con le chiavi dei salti di \file{circuito.py} (attenzione: i flussi AES-CTR vanno fatti avanzare nello stesso ordine in cui sono stati usati). Durante la costruzione si vedono \texttt{EXTEND2} ed \texttt{EXTENDED2}, poi eventuali \texttt{BEGIN}, \texttt{CONNECTED}, \texttt{DATA}, \texttt{SENDME}.
+\end{soluzione}
+
+\begin{soluzione}{es:20-padding}
+Su una connessione client--guard \emph{abilitata al padding di collegamento} possono apparire record anche nei periodi di inattività: Tor campiona un timer di padding tipicamente compreso fra 1,5 e 9,5 secondi, secondo i parametri del consenso; il traffico effettivo reimposta il timer. Non tutti i canali ricevono padding: il protocollo riguarda soprattutto il collegamento applicativo del client al guard o bridge, e il client può negoziare una riduzione o la disattivazione. Inoltre keepalive e attività di directory possono produrre traffico indipendente dal padding. Non è quindi garantito né un numero fisso di record né il silenzio su ogni canale senza circuiti applicativi~\spec{padding-spec}{Connection-level padding}.
+\end{soluzione}
+
+\begin{soluzione}{es:20-dissector}
+Esercizio di programmazione: un analizzatore Lua registrato come \emph{heuristic dissector} sui dati TLS decifrati può leggere i primi 2 byte (prima di \cella{VERSIONS}) o 4 byte di CircID, il byte di comando e, per le celle variabili, la lunghezza; va tenuto uno stato per connessione e per verso, come in \file{traffico.py}.
+\end{soluzione}
+
+
+\section*{Capitolo \ref{cap:21-onion-pratica}: Pubblicare onion service}
+
+\begin{soluzione}{es:21-vanity}
+$32^6 \approx 1{,}07 \times 10^9$ tentativi, circa 107 secondi a 10 milioni al secondo; $32^8 \approx 1{,}1 \times 10^{12}$, circa $1{,}1 \times 10^5$ secondi, cioè poco più di 30 ore. Ogni carattere in più moltiplica il tempo per 32.
+\end{soluzione}
+
+\begin{soluzione}{es:21-fuga}
+Rivela il software e la versione del server (informazioni utili per cercare vulnerabilità) e un indirizzo che potrebbe svelare l'origine dell'onion service \emph{se fosse realmente associato al server}. Nell'esercizio \texttt{192.0.2.10} è però \textbf{solo un indirizzo di documentazione} della rete IANA \texttt{192.0.2.0/24} (TEST-NET-1): non identifica un server pubblico reale. Il rischio illustrato riguarda l'eventuale divulgazione di un vero indirizzo dell'host. Si riduce eliminando dalle risposte le informazioni superflue e vincolando il server a localhost o a un socket Unix, con controlli applicativi e di rete.
+\end{soluzione}
+
+\begin{soluzione}{es:21-revoca}
+Si rimuove la credenziale di Alice dal servizio e si riavvia il processo tor, seguendo le istruzioni ufficiali sulla revoca: \textbf{non dare per scontato che il solo segnale HUP basti}. La nuova configurazione deve caricare almeno una chiave valida di un \emph{altro} client, altrimenti l'autorizzazione alla scoperta risulta \textbf{disattivata} e chi conosce l'indirizzo può accedere al servizio (\cref{sec:onionp-ristretta}). Tor 0.4.9.13 considera abilitata l'autorizzazione solo quando la lista dei client contiene almeno una chiave valida. Se Alice era l'unica autorizzata, prima di eliminarla occorre predisporre e verificare un'altra credenziale oppure sospendere il servizio; \textbf{lasciare vuota la cartella non costituisce una revoca sicura}. I descrittori già scaricati e le connessioni già stabilite possono conservare validità per un periodo: per una revoca tempestiva è necessaria una difesa anche a livello applicativo.
+\end{soluzione}
+
+\begin{soluzione}{es:21-socket}
+Si usa \texttt{HiddenServicePort 80 unix:/percorso/socket} e si configura il server web per ascoltare su quel socket. Oltre a non aprire porte TCP, il socket si protegge con i permessi del file system, non è raggiungibile da altri processi di rete e rende impossibile, anche per errore, esporre il servizio su un'interfaccia pubblica.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:22-relay}: Gestire un relay o un bridge}
+
+\begin{soluzione}{es:22-ordine}
+Sì: la prima regola che corrisponde è \texttt{accept *:80}, e la successiva non viene mai considerata. Basta invertire l'ordine: \texttt{reject 192.0.2.0/24:*}, \texttt{accept *:80}, \texttt{reject *:*}.
+\end{soluzione}
+
+\begin{soluzione}{es:22-riassunto}
+Il riassunto contiene solo porte, non indirizzi, ed è un'approssimazione: una porta è elencata come accettata se l'exit la accetta per la \enquote{maggior parte} degli indirizzi, che nella dir-spec è un criterio tecnico preciso, non un semplice ${>}50\,\%$: la porta è accettata se l'exit non ne blocca più di $2^{25}$ indirizzi IPv4 (un /7) o $2^{112}$ IPv6 (un /16), ignorando gli indirizzi non pubblici. Ricevuta \texttt{END} con motivo \texttt{EXITPOLICY}, il client annota, per il TTL indicato, che quell'exit rifiuta quell'indirizzo e porta, e ritenta lo stream su un altro circuito con un altro exit.
+\end{soluzione}
+
+\begin{soluzione}{es:22-famiglia}
+Con \opt{MyFamily} la famiglia vale solo per le dichiarazioni reciproche: i cinque relay vecchi restano una famiglia tra loro, ma il sesto no, perché nessuno lo elenca; i client possono quindi usarlo nello stesso circuito di uno degli altri. Con la chiave di famiglia basta installare la chiave sul nuovo relay: il certificato che firma lo lega alla famiglia senza toccare gli altri.
+\end{soluzione}
+
+\begin{soluzione}{es:22-refused}
+Nei log compaiono in sequenza \enquote{in-progress connect failed \ldots (Connection refused)} e \enquote{Didn't recognize errno 115}. Se il motivo fosse calcolato sull'errore restituito da \texttt{getsockopt(SO\_ERROR)}, il client riceverebbe \texttt{CONNECTREFUSED}; allo stesso modo sarebbero riportati correttamente \texttt{TIMEOUT} (\texttt{ETIMEDOUT}), \texttt{NOROUTE} (\texttt{ENETUNREACH}, \texttt{EHOSTUNREACH}) e \texttt{CONNRESET}, che oggi, per le connessioni che falliscono dopo \texttt{EINPROGRESS}, diventano tutti \texttt{MISC}. Per il client la conseguenza è modesta: cambia il messaggio d'errore, non il comportamento.
+\end{soluzione}
+
+\begin{soluzione}{es:22-accounting}
+A 10\,MB/s il relay trasferisce circa 864\,GB al giorno, contati come il massimo tra traffico inviato e ricevuto: 1\,TB si esaurisce in poco più di un giorno. Un relay che resta spento per gran parte del mese perde i flag \texttt{Stable} e \texttt{Guard} e fa cadere i circuiti in corso quando si spegne; uno che funziona tutto il mese con banda minore è molto più utile, e per questo conviene regolare \opt{RelayBandwidthRate} in modo che il tetto basti per l'intero periodo.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:23-browser}: Tor Browser, Tails e Whonix}
+
+\begin{soluzione}{es:23-identita}
+Il nuovo circuito cambia soltanto il circuito del sito della scheda attiva, senza toccare cookie, cronologia o gli altri siti: il sito può ancora riconoscere l'utente dallo stato che ha salvato. La nuova identità chiude tutto, cancella ogni stato e fa usare circuiti nuovi ovunque. Il guard non cambia perché cambiarlo spesso aumenterebbe la probabilità di sceglierne prima o poi uno ostile (\cref{sec:guard}); il guard, d'altra parte, non vede i siti visitati.
+\end{soluzione}
+
+\begin{soluzione}{es:23-estensioni}
+Guadagna meno tracciatori caricati, ma Tor Browser già isola i tracciatori per sito e ne limita gli identificatori. Perde uniformità: la presenza dell'estensione e le sue liste possono essere rilevate dai siti, e distinguono l'utente dalla massa degli utenti di Tor Browser; inoltre l'estensione è codice in più con accesso a tutte le pagine.
+\end{soluzione}
+
+\begin{soluzione}{es:23-isolamento}
+Con credenziali uguali per le due schede dello stesso sito, tor assegna i loro stream allo stesso circuito; la terza scheda, con credenziali diverse, ottiene un circuito diverso. Con il comando \texttt{GETINFO stream-status} si vede l'identificativo del circuito di ciascuno stream.
+\end{soluzione}
+
+\begin{soluzione}{es:23-scelta}
+(a) Tor Browser basta, eventualmente con un bridge. (b) Tails: si avvia da chiavetta, non lascia tracce sul computer di terzi e conserva solo ciò che si mette nella memoria persistente cifrata, fermo restando il rischio di hardware manomesso. (c) Whonix: tutte le applicazioni della Workstation passano per tor per costruzione, e il lavoro dura nel tempo senza bisogno di amnesia.
+\end{soluzione}
+
+\begin{soluzione}{es:23-impronta}
+Esercizio aperto. Esempi: dimensioni dello schermo e della finestra, fuso orario, lingua, caratteri disponibili, rendering di un'immagine su canvas. In un browser comune alcune di queste portano da pochi bit (fuso orario) a molti (caratteri, canvas). Tor Browser arrotonda le dimensioni con il letterboxing, dichiara UTC e una lingua comune, limita i caratteri e uniforma o blocca le interfacce più rivelatrici; restano differenze legate al sistema operativo, al livello di sicurezza e alla dimensione dello schermo arrotondata.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:24-metrics}: Misurare la rete}
+
+\begin{soluzione}{es:24-dieci}
+Le richieste si dimezzerebbero e, con il divisore fisso a 10, anche la stima: i grafici mostrerebbero un calo improvviso e simultaneo in tutti i paesi, in coincidenza con la diffusione della nuova versione di tor. Un calo globale e graduale che segue l'adozione di una versione è il segno di un cambiamento del software, non degli utenti; il metodo andrebbe corretto cambiando il divisore.
+\end{soluzione}
+
+\begin{soluzione}{es:24-frazione}
+$20\,000\,000 / (0{,}6 \cdot 10) \approx 3\,333\,333$ utenti. Con una frazione dell'8\% la stima viene scartata, perché inferiore al 10\%.
+\end{soluzione}
+
+\begin{soluzione}{es:24-flag}
+Traccia: la quota si ottiene filtrando i relay con entrambi i flag e dividendo la loro banda per il totale; per la probabilità si usano le probabilità di \texttt{probabilita(consenso, "exit")} del Laboratorio~7, sommando quelle dei relay le cui reti /16 sono tra le cinque più frequenti.
+\end{soluzione}
+
+\begin{soluzione}{es:24-censura}
+Esercizio aperto. In genere gli utenti diretti crollano nel giorno del blocco, mentre quelli dei bridge, e in particolare di Snowflake o WebTunnel, crescono nei giorni successivi, man mano che gli utenti passano ai transport; l'indicatore di Metrics segnala il giorno del calo.
+\end{soluzione}
+
+\begin{soluzione}{es:24-privacy}
+Senza arrotondamento, un avversario che sa di essere l'unico utente di un certo paese su un relay (o che conosce il numero esatto di altri utenti) potrebbe confermare dall'extra-info se un'altra persona di quel paese si è collegata: una differenza di uno nei conteggi. L'arrotondamento nasconde le piccole differenze. Un avversario che controlla molti relay, invece, non ha bisogno delle statistiche pubblicate: vede direttamente le connessioni che arrivano ai propri relay.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:25-legale}: Aspetti legali ed etici}
+
+\begin{soluzione}{es:25-condizioni}
+(a) Un exit che generasse di propria iniziativa richieste verso siti, per esempio per \enquote{mescolare} il traffico, darebbe origine a trasmissioni. (b) Un exit che dirottasse le connessioni verso un indirizzo diverso da quello chiesto nella cella \texttt{BEGIN} selezionerebbe il destinatario. (c) Un exit che inserisse contenuti nelle pagine HTTP, o filtrasse contenuti in base al loro significato, selezionerebbe o modificherebbe le informazioni. Sono, non a caso, comportamenti per cui le autorità assegnano il flag \texttt{BadExit}.
+\end{soluzione}
+
+\begin{soluzione}{es:25-strumento}
+Un coltello da cucina è lecito, un'aggressione no. Un utente che legge un giornale censurato con Tor usa lecitamente uno strumento lecito; lo stesso utente che accede abusivamente a un sistema commette un reato, con o senza Tor. L'operatore di relay offre capacità di trasmissione senza scegliere i contenuti: la sua posizione è quella del trasportatore, non dell'autore, finché non partecipa alle attività illecite.
+\end{soluzione}
+
+\begin{soluzione}{es:25-segnalazione}
+Si spiega che l'indirizzo è un exit della rete Tor, verificabile con gli strumenti pubblici del Tor Project; che l'operatore non conosce né registra gli utenti e non può identificarli; che il sito può, se lo ritiene, trattare in modo diverso le connessioni dagli exit, il cui elenco è pubblico. In concreto l'operatore può aggiungere alla politica di uscita un rifiuto per l'indirizzo del sito che si lamenta, se ritiene che il beneficio superi il costo.
+\end{soluzione}
+
+\begin{soluzione}{es:25-esperimento}
+La proposta osserva il traffico di utenti reali senza il loro consenso, raccoglie dati non pubblicabili (domini visitati) e ha un beneficio modesto: viola più linee guida e, in Italia, può porre problemi penali e di protezione dei dati. Alternative: usare dati aggregati già pubblici (Metrics), misurare con un proprio client quali siti di notizie sono raggiungibili da Tor, o proporre al Board uno schema di conteggio con aggregazione e rumore, come quelli usati per le statistiche dei relay.
+\end{soluzione}
+
+\begin{soluzione}{es:25-ricerca}
+Esercizio di ricerca: vanno cercate le decisioni nelle banche dati ufficiali (per l'Italia, le raccolte della Cassazione e dei tribunali; per l'Unione, il sito della Corte di giustizia), non su riassunti di terzi. Per ciascuna si indicano il giudice, la data, la norma discussa e l'esito, distinguendo le decisioni su relay da quelle su utenti di Tor.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:26-attacchi}: Correlazione, fingerprinting, Sybil}
+
+\begin{soluzione}{es:26-posizione}
+Correlazione: entrambi gli estremi (relay o reti); difese: guard, vincoli sui percorsi, pesi misurati. Website fingerprinting: il solo collegamento client--guard; difese: padding (limitato), ricerca in corso. Scoperta del guard: un relay intermedio e la possibilità di far costruire circuiti; difese: guard e vanguard. Sybil: molti relay; difese: banda misurata, famiglie e /16, sorveglianza. Attacchi di instradamento: un AS o un IXP; difese: esterne a Tor (monitoraggio BGP).
+\end{soluzione}
+
+\begin{soluzione}{es:26-base}
+Su 100\,000 visite, circa 0,95 allarmi corretti e circa $0{,}001 \cdot 99\,999 \approx 100$ falsi: la frazione corretta è $0{,}95/(0{,}95+100) \approx 0{,}9\%$. Quasi tutti gli allarmi sono sbagliati.
+\end{soluzione}
+
+\begin{soluzione}{es:26-bin}
+Con intervalli di 2 secondi e durata di 5 restano due o tre punti per serie, e la correlazione diventa casuale; con lo stesso ritmo per tutti i client (stesso seme) le serie diventano quasi identiche e l'abbinamento è indistinguibile. La modifica più dannosa è l'uniformità dei ritmi: è il principio del traffico a velocità costante di PipeNet (\cref{sec:radici-bassa}).
+\end{soluzione}
+
+\begin{soluzione}{es:26-difesa}
+A ritmo costante le serie d'ingresso non variano più, e la correlazione di Pearson non è nemmeno definita (varianza nulla) o è dominata dal rumore della rete: l'attacco fallisce. Il costo è inviare sempre la banda massima, anche in silenzio: nel laboratorio, da poche decine a centinaia di KB/s per client, cioè molte volte il traffico utile.
+\end{soluzione}
+
+\begin{soluzione}{es:26-probabilita}
+Con un guard fisso, l'avversario vince solo se quel guard è suo (probabilità circa 5\%), e allora vede circa il 5\% dei circuiti come exit: dopo sei mesi di uso intenso la probabilità di almeno una compromissione tende al 5\% (nessuna altrimenti). Con un guard casuale per circuito, ogni circuito ha probabilità circa $0{,}05 \cdot 0{,}05 = 0{,}0025$, e dopo qualche migliaio di circuiti la compromissione è quasi certa. È l'argomento a favore dei guard; la classe \texttt{Avversario} di \file{percorso.py} permette di verificarlo per simulazione.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:27-casi-rete}: Casi reali contro la rete}
+
+\begin{soluzione}{es:27-campo}
+Il contenuto di una cella che va verso il client viene cifrato con uno strato in più da ogni relay che attraversa (\cref{cap:10-cifratura-relay}): il guard vede un contenuto cifrato con le chiavi dell'intermedio e del proprio salto, e non può leggere ciò che l'HSDir vi ha scritto. Il comando della cella, invece, sta nell'intestazione che ogni relay legge e riscrive uguale.
+\end{soluzione}
+
+\begin{soluzione}{es:27-uno}
+Con tre guard, la probabilità che almeno uno sia ostile è circa tre volte più alta, e ogni guard ostile vede una parte del traffico del client. Con un guard solo la probabilità è minore e, se il guard è onesto, il client è protetto a lungo. Lo svantaggio: se il guard unico è ostile, vede tutto il traffico del client; e se il guard è lento o irraggiungibile le prestazioni ne risentono.
+\end{soluzione}
+
+\begin{soluzione}{es:27-verso}
+Il laboratorio usa già celle \texttt{DROP}, non richieste di estensione: il conteggio in \file{command.c} riguarda il comando della cella, prima della decifratura, e quindi non dipende dal contenuto. Per la direzione opposta, il codice registra un avviso e chiude il circuito con motivo \texttt{PROTOCOL}, sia che il circuito sia del client sia che sia di un relay.
+\end{soluzione}
+
+\begin{soluzione}{es:27-segnali}
+Esempi: relay che entrano nel consenso nello stesso minuto; stessa versione di tor insolita e stesso sistema operativo nei descrittori; indirizzi nella stessa rete o presso lo stesso fornitore, con porte e nomi simili, contatto vuoto. Falsi positivi: grandi operatori onesti che aggiornano tutti i relay insieme, fornitori molto usati, installazioni automatiche con la stessa configurazione. Nessun criterio basta da solo: servono più segnali e, se possibile, un contatto con l'operatore.
+\end{soluzione}
+
+\begin{soluzione}{es:27-canali}
+In chiaro, per un relay intermedio: CircID (cambia a ogni salto, quindi non passa), comando della cella (\cella{RELAY} o \cella{RELAY\_EARLY}: il canale del 2014, oggi chiuso nella direzione verso il client e limitato a 8 in quella opposta), la cella \cella{DESTROY} e il suo motivo, i tempi e il numero delle celle (sempre disponibili: canale di conferma passiva, nessuna difesa completa). Il contenuto è cifrato a strati, ma con tor1 un relay può modificarlo in modo che un altro relay riconosca la modifica (marcatura, \cref{sec:tor1-debolezze}); CGO (\cref{sec:cgo}) rende le modifiche irrecuperabili per tutti.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:28-opsec}: Errori operativi}
+
+\begin{soluzione}{es:28-livello}
+Traffico fuori da Tor, documenti aperti in rete, fuga DNS: applicazione (Tor Browser, Tails o Whonix, \opt{SafeSocks}, apertura dei file senza rete). Metadati, accesso ad account, identità mescolate: contenuto (strumenti di pulizia, sessioni separate). Stile, orari, uso di Tor in un insieme piccolo: comportamento (abitudini, bridge, attesa prima di pubblicare).
+\end{soluzione}
+
+\begin{soluzione}{es:28-dns}
+Se l'applicazione interroga un resolver esterno prima di usare Tor, il resolver può conoscere il dominio cercato e associarlo all'indirizzo di rete dell'utente, anche se la successiva connessione al sito attraversa il circuito. Se la query DNS viaggia in chiaro, anche il fornitore di connettività e chi osserva quel collegamento possono leggerne il nome; con DNS cifrato, invece, un osservatore del solo collegamento non può normalmente leggerlo, pur vedendo il contatto con il resolver. Un nome già in cache o un indirizzo IP inserito direttamente non implica alcuna query DNS e non dimostra una fuga: il Laboratorio 18 osserva il comportamento SOCKS, non tutto il traffico dell'applicazione.
+\end{soluzione}
+
+\begin{soluzione}{es:28-evento}
+Con Stem ci si iscrive a \texttt{EventType.STATUS\_CLIENT}; la richiesta con il solo indirizzo produce un evento di gravità \texttt{WARN} con azione \texttt{DANGEROUS\_SOCKS} e argomenti \texttt{PROTOCOL} e \texttt{ADDRESS}. Un'interfaccia grafica potrebbe mostrare un avviso che nomina l'applicazione e la destinazione, invitando a correggerne la configurazione.
+\end{soluzione}
+
+\begin{soluzione}{es:28-insieme}
+Con obfs4 l'osservatore avrebbe visto una connessione cifrata senza struttura riconoscibile verso un indirizzo qualunque, e non avrebbe potuto dire con certezza che si trattava di Tor. Restano però altri indizi: il volume e i tempi di quella connessione, la sua durata insolita, la presenza di altre connessioni simili, e naturalmente il contenuto dei messaggi e il movente, che restringevano l'insieme a chi doveva sostenere quell'esame.
+\end{soluzione}
+
+\begin{soluzione}{es:28-modello}
+Esercizio aperto. Una buona risposta segue la struttura del \cref{cap:04-modello-minaccia}: avversari e loro capacità, ciò che ciascuno può osservare a ogni livello della \cref{fig:livelli}, strumenti scelti e motivazioni, e un elenco esplicito dei rischi non coperti (per esempio la correlazione da parte di un avversario che controlla entrambi gli estremi, o il sequestro dei dispositivi).
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:29-ricerca}: La ricerca accademica su Tor}
+
+\begin{soluzione}{es:29-entropia}
+$H = \tfrac12 \cdot 1 + \tfrac14 \cdot 2 + 2 \cdot \tfrac18 \cdot 3 = 1{,}75$ bit; $H_M = \log_2 4 = 2$ bit; $d = 0{,}875$. Il numero equivalente di utenti è $2^{1{,}75} \approx 3{,}4$.
+\end{soluzione}
+
+\begin{soluzione}{es:29-metodo}
+(a) Simulazione della rete con Shadow o, in piccolo, emulazione con Chutney: serve il comportamento vero di tor, e nessun utente deve essere coinvolto. (b) Misura della rete reale con dati aggregati e pubblici, come fa Tor Metrics (\cref{sec:metrics-utenti}). (c) Simulazione del comportamento, alla TorPS, su consensi reali di un lungo periodo, eventualmente seguita da un'analisi teorica.
+\end{soluzione}
+
+\begin{soluzione}{es:29-durata}
+Con \texttt{vita\_guard} di 30 giorni (durata effettiva 18--30 per la retrodatazione) ci sono circa sette o otto estrazioni del guard in 180 giorni, e la simulazione dà 32,8\%; con i 60 giorni predefiniti (durata 48--60), circa tre estrazioni e 18,2\%; con 180 giorni, una o due estrazioni e 8,6\%. In prima approssimazione, con $k$ estrazioni la frazione compromessa tende a $1-(1-q)^k$ con $q = 5\%$: $k\approx 7,5$ dà circa il 32\%, coerente con il caso a 30 giorni. Più il guard dura, meno estrazioni, meno client esposti; ma chi ha un guard ostile resta esposto più a lungo.
+\end{soluzione}
+
+\begin{soluzione}{es:29-asimmetria}
+Nessuno dei due compromette alcun client secondo il criterio del laboratorio, che richiede entrambi gli estremi. Ciascuno però ottiene qualcosa di diverso: l'exit vede destinazioni e traffico non cifrato senza sapere chi sono i client; il guard vede gli indirizzi dei client che lo hanno scelto, senza sapere dove vanno, e può tentare il website fingerprinting (\cref{sec:att-wf}).
+\end{soluzione}
+
+\begin{soluzione}{es:29-torps}
+Esercizio di ricerca. Il riuso dei circuiti riduce il numero di estrazioni per giorno e rallenta la curva senza guard; il vincolo /16 ha un effetto piccolo, salvo avversari concentrati in una rete; un avversario a livello di sistema autonomo cambia il modello, perché osserva il traffico senza gestire relay, e richiede dati sulla topologia di Internet come in \cite{johnson2013users}.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:30-arti}: Arti}
+
+\begin{soluzione}{es:30-crate}
+Cap.~5: \texttt{tor-llcrypto}; cap.~7: \texttt{tor-proto} (canali) e \texttt{tor-chanmgr}; cap.~8: \texttt{tor-cell}; capp.~9--11: \texttt{tor-proto} (circuiti, cifratura, stream e controllo di flusso); cap.~12: \texttt{tor-netdoc}, \texttt{tor-dirmgr}, \texttt{tor-dirclient}; cap.~13: \texttt{tor-circmgr}, \texttt{tor-guardmgr}, \texttt{tor-relay-selection}; cap.~14: \texttt{tor-hsclient}, \texttt{tor-hsservice}, \texttt{tor-hscrypto}; cap.~15: \texttt{equix} e \texttt{hashx} per la prova di lavoro; cap.~16: \texttt{tor-ptmgr}.
+\end{soluzione}
+
+\begin{soluzione}{es:30-obsoleto}
+Vantaggi: meno codice, meno superficie d'attacco, nessun caso speciale (come i CircID di 2 byte), nessuna crittografia debole da mantenere. Svantaggi: Arti non può parlare con relay molto vecchi; ma la rete stessa esclude già le versioni non più raccomandate, quindi l'esclusione riguarda soprattutto reti private o installazioni non aggiornate.
+\end{soluzione}
+
+\begin{soluzione}{es:30-cella}
+\texttt{decode\_cell} legge il comando al quinto byte e ne deduce se la cella è variabile; in quel caso la lunghezza è nei due byte successivi e la cella è lunga $7 +$ lunghezza, altrimenti 514 byte. Se i dati disponibili sono meno di quelli necessari, la funzione non segnala un errore ma restituisce \texttt{Ok(None)}: la cella è solo incompleta, e il chiamante riproverà quando arriveranno altri byte. È lo stesso comportamento che serve a un decodificatore di flusso come quello del Laboratorio~2.
+\end{soluzione}
+
+\begin{soluzione}{es:30-isolamento}
+Sì: il proxy SOCKS di Arti isola per default gli stream con credenziali SOCKS diverse (e isola anche i listener diversi). La verifica si fa osservando i circuiti dal lato dei relay (per esempio con la ControlPort dell'exit) o dai log di Arti a livello di debug. Per controllare l'isolamento in modo esplicito, usando Arti come libreria, si ricorre a \texttt{TorClient::isolated\_client} o agli isolation token di \texttt{StreamPrefs}; Arti 2.6.0 non offre ancora la configurazione per-porta equivalente a quella di tor in C (nel sorgente, \file{cfg.rs}, è annotata come sviluppo futuro).
+\end{soluzione}
+
+\begin{soluzione}{es:30-libreria}
+Esercizio di programmazione: si crea una \texttt{TorClientConfig} a partire dal file TOML del laboratorio, si avvia il client con \texttt{TorClient::create\_bootstrapped} e si apre uno stream con \texttt{connect(("127.0.0.1", 8080))}, su cui si scrive una richiesta HTTP. Serve abilitare nella configurazione l'accesso agli indirizzi locali, come nel file generato dal laboratorio.
+\end{soluzione}
+
+\section*{Capitolo \ref{cap:31-futuro}: Problemi aperti}
+
+\begin{soluzione}{es:31-stato}
+Esempi: \proposta{332} (ntor-v3) è \emph{Closed}: implementata e riportata nelle specifiche. \proposta{324} (controllo della congestione) è \emph{Finished}: implementata, in attesa che il testo confluisca del tutto nelle specifiche. \proposta{359} (CGO) è \emph{Open}: già nel codice, ma ancora in discussione come proposta. Lo stato si legge nell'intestazione di ogni proposta e nell'indice per stato del repository.
+\end{soluzione}
+
+\begin{soluzione}{es:31-celle}
+Con il formato tradizionale, come semplice conto dimensionale, la chiave pubblica ML-KEM-768 da 1184 byte richiede $\lceil 1184/498 \rceil = 3$ celle e il testo cifrato da 1088 byte altre $\lceil 1088/498 \rceil = 3$: sei celle in tutto. Il protocollo attuale, però, non consente nemmeno di frammentare così un singolo messaggio relay. La \proposta{340} introduce il framing che serve --- frammentare un messaggio su più celle e impacchettarne più d'uno nella stessa cella --- con un corpo di 493 byte per relay cell (non 498: il nuovo formato spende 16 byte per il tag di autenticazione, $509 - 16 = 493$, come nel \cref{cap:08-celle}), e con 490 byte utili nel primo frammento di un messaggio, dove sta anche l'intestazione. Mantiene però, per ora, un massimo di 493 byte per i body dei messaggi ordinari: perché un \texttt{EXTEND2} post-quantistico possa superarlo servirà anche una nuova versione del sottoprotocollo \texttt{Relay} che alzi quel limite. Anche ipotizzando tale estensione, la chiave pubblica occupa comunque 3 celle e il testo cifrato altre 3; e poiché i due valori viaggiano in direzioni \emph{opposte} --- il client manda la chiave pubblica al relay, il relay risponde con il testo cifrato incapsulato --- non possono essere impacchettati insieme. Il totale resta di sei celle.
+\end{soluzione}
+
+\begin{soluzione}{es:31-epistemico}
+Se ogni client scaricasse un sottoinsieme diverso di relay, un avversario che conosce (o influenza) il sottoinsieme di un utente potrebbe riconoscerne i circuiti: un circuito che usa relay noti solo a quell'utente rivela chi lo ha costruito. Anche senza conoscerlo in anticipo, osservare quali relay un client usa nel tempo restringe l'insieme dei client possibili.
+\end{soluzione}
+
+\begin{soluzione}{es:31-conflux}
+Si filtrano i circuiti con \texttt{purpose} \texttt{CONFLUX\_LINKED} e si raggruppano per \texttt{CONFLUX\_ID} (\cref{cap:18-stem}); per ogni coppia si confrontano i percorsi. L'exit è sempre lo stesso, come previsto. Le altre posizioni, invece, risultano spesso condivise: per esempio le due gambe \texttt{[test007e, test003r, test006e]} e \texttt{[test003r, test007e, test006e]} usano gli stessi tre relay in ordine diverso. Non è un difetto di tor: la rete di laboratorio ha pochi relay idonei, e la \proposta{329} chiede di non condividerli con un \texttt{SHOULD NOT}, non con un divieto. Sulla rete pubblica, con migliaia di relay, la condivisione è molto più rara.
+\end{soluzione}
+
+\begin{soluzione}{es:31-proposta}
+Esercizio aperto. Il formato di riferimento è descritto in \proposta{001}: intestazione con numero, titolo, autore, data e stato, poi motivazione, progetto, analisi di sicurezza e di compatibilità, piano di implementazione e di distribuzione.
+\end{soluzione}
+
+\section*{Appendice \ref{cap:B-crittografia}: Complementi di crittografia}
+
+\begin{soluzione}{es:B-bit}
+Su 256 bit, cinque sono fissati (i tre bassi, il più alto e il penultimo): restano $2^{251}$ valori distinti, contro $2^{256}$. La riduzione non indebolisce la chiave: la sicurezza della curva è comunque di circa 128 bit.
+\end{soluzione}
+
+\begin{soluzione}{es:B-inversa}
+Da $y = (u-1)/(u+1)$ si ricava $u = (1+y)/(1-y) \bmod p$. In Python: si legge $y$ dai 32 byte little-endian azzerando il bit del segno, si calcola \texttt{(1 + y) * pow(1 - y, P - 2, P) \% P} e si codifica il risultato su 32 byte little-endian. Applicando \texttt{montgomery\_a\_edwards} con il segno originale si ritrova la chiave di Edwards di partenza.
+\end{soluzione}
+
+\begin{soluzione}{es:B-digest}
+Una cella alterata a caso supera il controllo con probabilità circa $2^{-16} \cdot 2^{-32} = 2^{-48}$ (due byte di \texttt{recognized} nulli e quattro di digest corretti). Ma la marcatura non cerca di far accettare la cella: il relay complice che la vede passare, o l'estremo che la rifiuta, riconosce l'alterazione dall'effetto, per esempio dalla chiusura del circuito o da un contenuto prevedibile, e questo basta a collegare i due punti del circuito.
+\end{soluzione}

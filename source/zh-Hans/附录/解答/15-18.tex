@@ -1,0 +1,89 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{第 \ref{cap:15-dos} 章：拒绝服务防御}
+
+\begin{soluzione}{es:15-bucket}
+在第一分钟内，初始满令牌桶提供 60 个令牌，补充机制增加 $2\times60=120$ 个，因此理论上约可建立 180 条电路；实际可能稍少，因为令牌桶一旦降到零，客户端便被标记。一小时内按持续速率计算，合计约 $60+2\times3600=7260$ 条。正常客户端通常只建立几十条电路。
+\end{soluzione}
+
+\begin{soluzione}{es:15-guard}
+只有第一跳知道客户端真实的 IP 地址。对于后续跳点，通道上可见的\enquote{地址}其实属于上一台中继。如果中间中继按地址限制电路，它实际上会限制来自某个入口守卫的全部电路，而该守卫可能服务数千名用户。这样会伤及所有人，而不是针对攻击者实施限制。因此，按地址限制只用于未经认证的客户端连接。
+\end{soluzione}
+
+\begin{soluzione}{es:15-amplificazione}
+客户端在可重复使用的电路上发送一条 \texttt{INTRODUCE1}。服务必须解密请求、执行 hs-ntor 握手，并向汇合点新建至少三跳的电路。这需要与中继进行多次 ntor 握手，还要发送创建和扩展各跳所需的信元。因此，一条客户端信元可能触发数次公钥运算和数十条网络信元，形成十倍到百倍量级的放大效应。
+\end{soluzione}
+
+\begin{soluzione}{es:15-bit}
+要求前 $k$ 位为零，只能表达 2 的幂次工作量等级：1、2、4 等。每多要求一个零位，预期计算成本就翻倍。线性检验则允许任意整数工作量 $E$。以较小步长调整工作量的反馈控制器需要这种更细致的刻度；倍增式刻度容易使控制器在工作量过低与过高之间来回振荡。
+\end{soluzione}
+
+\begin{soluzione}{es:15-sforzo}
+不能。工作量 $E$ 是计算 Equi-X 解和哈希 $R$ 所使用挑战的一部分。把声明值改为 $E=5000$，挑战随之改变，因此最初针对 $E=50$ 找到的解会失效。客户端必须在开始搜索前就选择 $E=5000$。
+\end{soluzione}
+
+\begin{soluzione}{es:15-oom}
+这是实验练习。信元会在中间中继的电路队列中积累，直到内存占用超过 \opt{MaxMemInQueues}。内存管理器随后关闭排队数据最旧的电路，包括我们的电路，并在中继日志中记录释放了多少内存。
+\end{soluzione}
+
+\begin{soluzione}{es:15-coda}
+这是编程练习。提供较高工作量的请求，预期具有短而稳定的等待时间。工作量为零的请求，主要在队列几乎为空时才会得到处理；一旦队列需要缩减，就可能被丢弃。这正是机制想实现的效果：保护愿意支付适度计算成本的用户。
+\end{soluzione}
+
+\section*{第 \ref{cap:16-censura} 章：审查、网桥与可插拔传输}
+
+\begin{soluzione}{es:16-guard}
+网桥与入口守卫承担相同角色，都是电路的第一跳，但网桥不出现在公开共识中。客户端通过私下获得的网桥配置行知道它的地址。启用 \opt{UseBridges} 后，客户端使用网桥\emph{代替}公开守卫。再增加一台公开守卫就需要直接连接已公布的地址，而审查者恰恰会封锁或监视这类连接。
+\end{soluzione}
+
+\begin{soluzione}{es:16-strategie}
+\enquote{看起来不像任何可识别的协议}：obfs4。要封锁它，审查者需要拒绝所有无法识别为获准协议的流量。\enquote{看起来像允许的协议}：meek，需要封锁大型内容分发服务商；Snowflake，需要干扰 WebRTC、协调服务器和大量志愿者代理；WebTunnel，需要封锁发往陌生网站或托管网桥网站的 HTTPS；Conjure，需要封锁合作网络接入服务商的大片地址空间。
+\end{soluzione}
+
+\begin{soluzione}{es:16-sondaggio}
+审查者可能检查：发往没有对应主机名的地址的长时间连接、从首个数据包开始就具有很高熵的字节、类似 Tor 信元集中发送的大小与时间分布，以及类似网页浏览的上下行流量比例。\texttt{iat-mode} 增加随机延迟和分片，使时间与长度特征更难识别，代价是性能下降。
+\end{soluzione}
+
+\begin{soluzione}{es:16-lox}
+每获得一台网桥就立即封锁它的审查者，无法积累信誉：网桥被封锁后，其凭据就无法升到更高级别，也不能获得邀请权限。攻击者可以改为暂时不封锁网桥，先累积足够多的高级凭据，再同时发动封锁。然而，这需要维护大量耐心等待数月的身份；在这段时间里，被发现的网桥仍可以帮助合法用户。每份高级凭据能够访问的网桥数量也是有限的。
+\end{soluzione}
+
+\begin{soluzione}{es:16-entropia}
+两份抓包的每字节熵都应接近八比特：TLS 完成握手后也传输加密数据。差别主要在少数可识别字节，例如 TLS 记录头部（\texttt{16 03 01}、\texttt{17 03 03}，后面是长度字段）和最初未加密的握手。深度包检测不需要计算统计熵，也可以识别这些特征。
+\end{soluzione}
+
+\begin{soluzione}{es:16-sondaggio-lab}
+实验~1 会超时（\texttt{TimeoutError}），因为网桥不作回应。错误的 \texttt{cert} 参数会使客户端 \cmd{obfs4proxy} 握手失败。网桥无法识别客户端的认证标记，因此不会回应，延迟一段时间后关闭连接。根据日志详细程度，网桥日志可能只有握手失败消息，也可能没有相关记录。
+\end{soluzione}
+
+\section*{第 \ref{cap:17-torrc} 章：安装与 torrc 配置}
+
+\begin{soluzione}{es:17-verifica}
+tor 会报告无法识别的选项，例如显示 \texttt{Unknown option '...'. Failing.}，然后不启动就退出。对客户端的 \file{torrc} 运行 \texttt{--dump-config short}，会显示所有不同于默认值的设置，包括实验网络特有的 \opt{TestingTorNetwork}、\opt{DirAuthority} 条目以及监听端口。
+\end{soluzione}
+
+\begin{soluzione}{es:17-isolamento}
+如果邮箱与论坛流量共用电路，出口就能看到同一电路在接近的时间连接了用户的邮箱服务商（可能暴露身份）与使用假名的论坛，从而关联假名和真实用户。解决方法包括：给两个应用分别设置 SOCKS 端口，默认情况下不同端口彼此隔离，除非设为同一个 \opt{SessionGroup}；使用不同 SOCKS 凭据并启用 \texttt{IsolateSOCKSAuth}；或者在共用端口上使用 \texttt{IsolateDestAddr}。
+\end{soluzione}
+
+\begin{soluzione}{es:17-exitnodes}
+监控意大利网络的攻击者，可能同时看到意大利用户进入 Tor，以及意大利出口访问意大利目的地。通信两端于是位于同一个司法辖区或可观察的网络区域，使 Tor 威胁模型所排除的流量关联成为可能。意大利出口数量也相对有限，强行限制出口选择会让用户更显眼，也更容易成为恶意中继的目标。
+\end{soluzione}
+
+\section*{第 \ref{cap:18-stem} 章：Control Port 与 Stem}
+
+\begin{soluzione}{es:18-codici}
+\texttt{552} 是对命令的永久性错误回应：请求的键 \texttt{pippo} 不存在。与之不同，\texttt{650} 不是命令回应，而是客户端通过 \texttt{SETEVENTS} 订阅后收到的异步事件。它可以在任何时刻到达，包括另一条命令的回应尚未完成时。
+\end{soluzione}
+
+\begin{soluzione}{es:18-onion}
+思路：调用控制器的 \file{create\_ephemeral\_hidden\_service}，将虚拟端口 80 映射到本机端口 8080，并设置 \file{await\_publication}。方法返回洋葱地址。通过 \texttt{curl --socks5-hostname 127.0.0.1:9008 http://<address>.onion/} 访问。tor 将临时服务密钥保存在内存中，并把它们返回给控制器；控制器可以保存密钥，以便将来重建相同地址。默认情况下，除非设置为脱离控制连接运行，否则控制连接关闭时临时服务也会消失。
+\end{soluzione}
+
+\begin{soluzione}{es:18-banda}
+思路：注册处理 \texttt{EventType.BW} 的回调函数。它每秒收到的已读和已写字节数分别位于 \texttt{event.read} 与 \texttt{event.written}。下载大文件期间显示这些值。入站速率会逐渐上升，直到接近拥塞控制与可用系统资源所允许的上限。
+\end{soluzione}
+
+\begin{soluzione}{es:18-percorso}
+启用 \file{\_\_LeaveStreamsUnattached} 后，tor 不再自动把流附加到电路。\texttt{EXTENDCIRCUIT 0 test004r,test005r,test006e} 会建立电路并返回其标识符。当状态为 \texttt{NEW} 的 \texttt{STREAM} 事件到达时，调用 \texttt{ATTACHSTREAM}。手工选择路径很危险，因为它绕过加权选择与守卫策略：不寻常的路径可能让用户更容易被识别，恶意软件也可能故意通过攻击者控制的中继传输流量。
+\end{soluzione}

@@ -1,0 +1,153 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Chapter \ref{cap:07-canali}: Channels and the Link Protocol}
+
+\begin{soluzione}{es:07-ruoli}
+A client always initiates its connections: to its guard and to relays providing directory information. No one needs to contact the client, and listening on a port would make it easier to identify. A relay initiates channels chiefly when it receives an \texttt{EXTEND2} request and must reach the circuit's next hop, or when, like any node, it creates its own circuits to download directory documents or check its reachability.
+\end{soluzione}
+
+\begin{soluzione}{es:07-scadenza}
+$\texttt{0x000772F7} = 488183$ hours, corresponding to 9 September 2025 at 23:00 UTC. A 32-bit unsigned count of seconds would overflow in 2106. Counting hours instead gives hundreds of thousands of years, while hour-level resolution is sufficient for certificates lasting days or weeks. One specification note deserves caution: \texttt{cert-spec} says four bytes suffice until the year 10136. That is an error explicitly identified in \proposta{338}; it arose from interpreting the counter as measuring \emph{minutes}, since $2^{32}$ minutes are approximately 8,166 years.
+\end{soluzione}
+
+\begin{soluzione}{es:07-authchallenge}
+$38 = 32 + 2 + 2 \times 2$ describes a challenge with two methods. If N\_Methods is 2, the body must contain $32 + 2 + 4 = 38$ bytes. A 36-byte cell body declares more methods than it contains and is malformed, so it must be rejected. The specification permits ignoring \emph{extra} bytes, not missing bytes.
+\end{soluzione}
+
+\begin{soluzione}{es:07-impostore}
+The comparison between the key certified by certificate type 5 and the SHA-256 fingerprint of the adversary's TLS certificate fails: it differs from the genuine relay's certificate. If the adversary presented the identical genuine TLS certificate, they could not complete the TLS handshake without the corresponding private key.
+\end{soluzione}
+
+\begin{soluzione}{es:07-netinfo}
+\texttt{695661c0} (1 January 2026, 12:00:00 UTC); \texttt{04 04 c6336407} (the client's address, 198.51.100.7); \texttt{01}; and \texttt{04 04 cb007105} (the relay's address, 203.0.113.5), followed by zero padding up to 509 bytes.
+\end{soluzione}
+
+\begin{soluzione}{es:07-client-auth}
+First, the guard would see the same identity when the user moved between home, work, and mobile networks, linking sessions and IP addresses across all those environments. Second, the identity would also be supplied to relays from which the client fetched directory information. Colluding relays, or an adversary observing them, could link the user's activity across different relays. In either case, a persistent identifier would destroy Tor's intended unlinkability.
+\end{soluzione}
+
+\begin{soluzione}{es:07-rsa}
+Outline: parse the type-2 certificate with an X.509 library such as \texttt{cryptography.x509}. Extract its RSA public key, verify its self-signature, and check that its exponent is 65537. Next, parse the type-7 cross-certificate according to its format. Ensure that the certified Ed25519 key matches the already verified identity and check the RSA signature using PKCS\#1 v1.5 without a hash-algorithm OID over the SHA-256 hash of the prescribed prefix and fields. The relay fingerprint is the SHA-1 digest of the RSA public key's DER-encoded PKCS\#1 representation.
+\end{soluzione}
+
+\begin{soluzione}{es:07-padding}
+No. Client \texttt{test008c}'s traffic passes through \emph{its own} channel to its guard, not through our channel. Our channel has never been used for a circuit, so \file{channelpadding\_decide\_to\_pad\_channel} decides not to add padding. To observe channel padding, we must carry a multihop circuit over our own channel, as in \cref{cap:10-cifratura-relay}.
+\end{soluzione}
+
+\begin{soluzione}{es:07-mitm}
+TLSSECRETS is derived from the secrets of the TLS session between $A$ and the intermediary, and $A$'s signature covers it. $B$ recalculates TLSSECRETS from the secrets of \emph{its own} session with the intermediary. Those secrets differ, so verification fails even when the intermediary forwards every cell faithfully, making SLOG and CLOG match. Without TLSSECRETS and SCERT, the intermediary could present itself to $B$ as $A$ and forward $A$'s signature, misleading $B$ into believing it had an authenticated channel to $A$.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:08-celle}: Cells}
+
+\begin{soluzione}{es:08-lunghezze}
+\cella{CREATE2} is a fixed-length cell: 512 bytes under link protocol 3 with a two-byte CircID, or 514 bytes under version 5 with a four-byte CircID. The \cella{VERSIONS} cell always uses a two-byte CircID, giving $2 + 1 + 2 + 4 = 9$ bytes.
+\end{soluzione}
+
+\begin{soluzione}{es:08-formato}
+0 (\cella{PADDING}) is fixed-length; 7 (\cella{VERSIONS}) is variable-length; 9 (\cella{RELAY\_EARLY}) is fixed-length; 12 (\cella{PADDING\_NEGOTIATE}) is fixed-length; and 129 (\cella{CERTS}) is variable-length. Command 200 would be variable-length under the $\ge 128$ rule, but it is undefined and therefore not permitted. A recipient may discard it and close the channel.
+\end{soluzione}
+
+\begin{soluzione}{es:08-circid}
+Only \texttt{0x92345678}. A CircID of zero is reserved for cells outside a circuit. Under link protocol $\ge 4$, the side initiating the channel, here the client, must select CircIDs with their most significant bit set to 1; \texttt{0x12345678} has its MSB set to 0.
+\end{soluzione}
+
+\begin{soluzione}{es:08-hex}
+First cell: CircID \texttt{00000000}, command \texttt{0x81} = 129 (\cella{CERTS}), so variable-length; length \texttt{0003}, body \texttt{aa bb cc}. Second cell: CircID \texttt{0x80000007}, command \texttt{0x04} (\cella{DESTROY}), fixed-length, so it has a 509-byte body. The first body byte, \texttt{00}, means reason NONE. The \texttt{aabbcc} body is not itself a valid CERTS object: the exercise concerns cell framing only.
+\end{soluzione}
+
+\begin{soluzione}{es:08-relay}
+\texttt{02 0000 0005 00000000 012c}: DATA command (2), Recognized 0, StreamID 5, Digest provisionally zero, and length $300 = \texttt{0x012c}$. The remaining $509 - 11 - 300 = 198$ bytes are padding: the first four bytes are zero and the other 194 are random.
+\end{soluzione}
+
+\begin{soluzione}{es:08-recognized}
+For a cell still encrypted in another layer, Recognized is zero with probability $2^{-16}$: on average, about $10^6 / 65536 \approx 15$ such cells per million. Recognized alone is insufficient because false positives occur. Only comparison with the running digest, which a non-target relay cannot make match except by chance (another factor of $2^{-32}$), confirms that the relay is the cell's destination.
+\end{soluzione}
+
+\begin{soluzione}{es:08-destroy}
+Suppose an adversary controls the guard and exit. When the exit wants to mark a circuit, it closes it using a rare reason such as \texttt{NOSUCHSERVICE}. If the middle and guard forwarded the reason unchanged toward the client, the guard could observe that unusual value on one of its circuits at the same moment, linking the client known to the guard with the destination known to the exit. If all relays transmit and propagate only NONE, the reason byte cannot carry such a signal. Correlation through the timing of circuit closure remains possible, but that channel is much noisier.
+\end{soluzione}
+
+\begin{soluzione}{es:08-efficienza}
+Traditional format: $\lceil 1048576/498 \rceil = 2106$ cells, occupying $2106 \times 514 = \num{1082484}$ bytes on the channel, or 3.2\% overhead. CGO: $\lceil 1048576/488 \rceil = 2149$ cells, occupying \num{1104586} bytes, or 5.3\% overhead. SENDME and stream-establishment messages are excluded.
+\end{soluzione}
+
+\begin{soluzione}{es:08-lab-fuzz}
+Outline: use Hypothesis to generate lists of tuples containing CircID, command, and body. Choose commands from \texttt{CellCommand} and limit fixed-length cell bodies to 509 bytes. Concatenate the results of \texttt{encode}, split the result into fragments of random lengths, and feed them incrementally into a buffer. Repeatedly call \texttt{decode} to extract cells until no complete cell remains. Compare fixed-length cells against bodies zero-padded to 509 bytes.
+\end{soluzione}
+
+\begin{soluzione}{es:08-arti}
+In Arti 2.6.0, the channel codec is \texttt{ChannelCodec} in \file{crates/tor-cell/src/chancell/codec.rs}, initialized with the link-protocol version using \texttt{ChannelCodec::new}. Its methods \file{write\_cell} and \file{decode\_cell} serialize and extract cells. Like our \texttt{decode}, \file{decode\_cell} handles incomplete cells without raising an error, returning \texttt{Ok(None)} until enough bytes have arrived and consuming buffer data only for complete cells. Arti instead operates on a mutable \texttt{BytesMut} buffer and is generic over channel message type (\texttt{M: ChanMsg}), allowing a narrower set of accepted messages. Another notable difference: \file{decode\_cell} reads the command at offset 4 and assumes 514-byte fixed-length cells, meaning four-byte CircIDs. Arti only supports link protocols 4 and 5, as specified by \file{LINK\_PROTOCOLS} in \file{crates/tor-proto/src/channel/handshake.rs}; the initial two-byte-CircID \cella{VERSIONS} cell is handled separately during the handshake.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:09-circuiti}: Circuit Construction}
+
+\begin{soluzione}{es:09-dimensioni}
+ntor requires $20 + 32 + 32 = 84$ bytes. ntor-v3 with a three-byte message requires $32 + 32 + 32 + 3 + 32 = 131$ bytes. HDATA can carry at most $509 - 4 = 505$ bytes, so $CM$ can occupy at most $505 - 128 = 377$ bytes.
+\end{soluzione}
+
+\begin{soluzione}{es:09-fast}
+The secret for \cella{CREATE\_FAST} is $X \| Y$, sent in plaintext inside the channel. For a second hop, $X$ and $Y$ would cross the circuit through the first relay. That relay knows its own layer keys and could read those values, derive the second hop's keys, and decrypt everything the client exchanged with that hop, destroying separation between the hops.
+\end{soluzione}
+
+\begin{soluzione}{es:09-direzioni}
+AES-CTR encrypts by XORing plaintext with a keystream depending only on a key and counter. With the same key in both directions, the client's cell number $n$ and the relay's cell number $n$ would use the same keystream. An intermediate relay observing both ciphertexts could XOR them to obtain the XOR of the plaintexts, often allowing both messages to be recovered.
+\end{soluzione}
+
+\begin{soluzione}{es:09-extend2}
+Relay \texttt{test004r} uses ORPort 5104 = \texttt{0x13f0}: \texttt{03} means three link specifiers; the IPv4-address-and-port specifier is \texttt{00 06 7f000001 13f0}. The full message contains $1 + (2+6) + (2+20) + (2+32) = 65$ specifier bytes, plus $2 + 2 = 4$ bytes for HTYPE and HLEN and $32 \cdot 3 + 1 + 32 = 129$ bytes of HDATA. The total is 198 bytes, comfortably within a relay message's 498-byte capacity.
+\end{soluzione}
+
+\begin{soluzione}{es:09-ds}
+Without $\mathrm{EXP}(B, x)$, the relay is not authenticated. An intermediate relay forwarding the handshake could generate its own $Y$ and $\mathit{AUTH}$ using its own $y$, impersonate the next hop, and read subsequent traffic destined for it: a \emph{man-in-the-middle} attack. Without $\mathrm{EXP}(Y, x)$, forward secrecy is lost. Anyone later obtaining the long-term onion key $b$ could recompute $\mathrm{EXP}(X, b)$ from recorded handshakes and derive all the session keys.
+\end{soluzione}
+
+\begin{soluzione}{es:09-ver}
+\texttt{VER} binds the handshake to its context, \texttt{"circuit extend"} for Tor. Because it enters every derivation, a handshake generated in one context produces neither keys nor $\mathit{AUTH}$ values valid in another. Without \texttt{VER}, an adversary might replay a handshake message from an unrelated protocol to a Tor relay, or vice versa, if both accepted the same computations. These are \emph{cross-protocol} attacks.
+\end{soluzione}
+
+\begin{soluzione}{es:09-cc}
+On the laboratory network, \texttt{test003r}, which supports \texttt{Relay=2-6}, rejects a request consisting only of \texttt{[02 06]} using a \cella{DESTROY} cell with reason \texttt{PROTOCOL}. It accepts the combined request containing \file{CC\_FIELD\_REQUEST} and responds with \file{CC\_FIELD\_RESPONSE}. Tor's code enables CGO at a hop only when congestion control is enabled too: \file{enable\_cgo = supports\_cgo \&\& use\_congestion\_control} in \file{src/core/or/extendinfo.c}. \proposta{359} explains why the new relay-message format, in which only some commands have a StreamID, is incompatible with the previous stream-level SENDME flow-control mechanism. It requires the flow control of \proposta{324}, or \texttt{FlowCtrl=2}.
+\end{soluzione}
+
+\begin{soluzione}{es:09-ntor-ref}
+This is a hands-on exercise. \file{ntor\_ref.py} contains the client and server functions. Using fixed keys instead of randomly generating new ones produces reproducible values for comparison against \file{ntor.py}.
+\end{soluzione}
+
+\begin{soluzione}{es:09-relay}
+Outline: \file{server\_part1} receives HDATA, verifies \texttt{ID} and $B$, computes $X_b = \mathrm{EXP}(X, b)$, derives phase-one keys, verifies the MAC, and decrypts $CM$. Then \file{server\_part2} generates $(y, Y)$, calculates $\mathit{key\_seed}$ and $\mathit{verify}$, derives the key for $SM$, and calculates $\mathit{AUTH}$. When $y$ is fixed to the proposal's test-vector value, the response must match \file{server\_handshake}.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:10-cifratura-relay}: The Onion}
+
+\begin{soluzione}{es:10-ordine}
+The client updates the second hop's forward running digest, encrypts with Kf$_2$, and then encrypts with Kf$_1$. The third hop sees nothing: the second hop recognizes the cell and does not forward it.
+\end{soluzione}
+
+\begin{soluzione}{es:10-contatore}
+Each cell consumes 509 bytes of keystream. After 1,000 cells, the keystream position is $509 \times 1000 = \num{509000}$ bytes, past AES block \num{31812}, whose blocks are 16 bytes. Reusing the key for a new circuit whose counter restarted at zero would reuse the keystream; XORing two ciphertexts encrypted with it would reveal the XOR of their plaintexts. Each circuit therefore derives fresh keys through a handshake with ephemeral values.
+\end{soluzione}
+
+\begin{soluzione}{es:10-falso}
+The relay's running digest would include a cell the client had not counted for that hop. From then on, their digest states would diverge and no subsequent cell would be recognized, destroying the circuit. The problem occurs with probability $2^{-16}$ for each transiting cell not addressed to the relay: once every \num{65536} such cells on average, corresponding to approximately 33\,MB of traffic.
+\end{soluzione}
+
+\begin{soluzione}{es:10-tag}
+An adversary should alter bytes whose expected plaintext is known or predictable, so an accomplice at the exit can detect a specific modification: for example, the relay command, \texttt{02} for \texttt{DATA}, the StreamID, or the four zero bytes at the start of padding. Before checking the digest, the complicit exit examines whether those bytes match the expected alteration. An honest exit sees only a cell with an invalid digest and destroys the circuit.
+\end{soluzione}
+
+\begin{soluzione}{es:10-cgo-tag}
+Under CGO, after removing the exit's encryption layer, an altered cell produces a pseudorandom tag and contents. There is no recognizable mark: the modification propagates unpredictably across the cell. Because the tag feeds into processing of the next cell, subsequent cells on that circuit also become undecryptable and the circuit must be discarded. An adversary can therefore only destroy circuits, which it could do anyway.
+\end{soluzione}
+
+\begin{soluzione}{es:10-padding}
+Observed intervals: 4.1, 3.0, 5.7, 8.7, and 6.8 seconds, averaging 5.7. For the maximum of two independent uniform variables on $[a, b]$, the expected value is $a + \tfrac{2}{3}(b - a) = 1.5 + \tfrac{2}{3} \cdot 8 \approx 6.8$ seconds. Five samples are too few for the observed difference to be surprising. Also note that the timer restarts whenever \emph{any} cell crosses the channel, not just padding cells.
+\end{soluzione}
+
+\begin{soluzione}{es:10-drop}
+On the laboratory network, the middle relay does not reply to \texttt{DROP}; the message is recognized and silently discarded. Indirect evidence comes from the circuit remaining usable: after two \texttt{DROP} messages, the client can still extend it to the exit. If the middle had not recognized the cells, being the circuit's final hop at that point, it would have destroyed the circuit. If client and middle had counted cells differently, their running digests would have fallen out of sync and the subsequent extension would have failed.
+\end{soluzione}
+
+\begin{soluzione}{es:10-alterazione}
+In the private-network test, changing one bit in an \texttt{EXTEND2} cell intended for the guard, then the only hop in the circuit, makes the digest check fail. As the endpoint of that circuit, the guard replies with a \cella{DESTROY} cell carrying reason 1 (\texttt{PROTOCOL}). On a longer circuit, a modification the client makes to a cell intended for the third hop would be forwarded through the first two hops and detected only by the third.
+\end{soluzione}

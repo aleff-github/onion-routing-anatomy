@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Import shared markup and TikZ styles without changing the Italian edition.
+% Localize only reader-visible names, retaining all original environment names.
+\input{../it/macro}
+\renewcommand{\proposta}[1]{Proposal~#1\index{Proposals!#1}}
+% In English, known usages supply identical #1 and #2 (initiator/responder),
+% so do not print a duplicate parenthetical English name.
+\renewcommand{\termine}[2]{\emph{#1}\index{#1}}
+\renewcommand{\aggiornatoal}[2]{%
+  \begin{center}\small\color{torgrigio}\textit{Last verified: #1 --- #2}\end{center}}
+\renewcommand{\dacontrollare}[1]{\textcolor{avviso}{\textbf{[TO VERIFY: #1]}}}
+\renewtcolorbox{obiettivi}{base,colback=torviola!5,colframe=torviola,title={Chapter objectives}}
+\renewtcolorbox{approfondimento}[1][]{base,colback=torgrigio!4,colframe=torgrigio,title={In depth\ifx&#1&\else: #1\fi}}
+\renewtcolorbox{attenzione}[1][]{base,colback=avviso!5,colframe=avviso,title={Warning\ifx&#1&\else: #1\fi}}
+\renewtcolorbox{storia}[1][]{base,colback=torverde!5,colframe=torverde!70!black,title={Historical note\ifx&#1&\else: #1\fi}}
+\renewtcolorbox{specbox}[1]{base,colback=white,colframe=torviola!60,title={From the specification: #1}}
+\renewtcolorbox{laboratorio}[2][]{base,colback=torverde!4,colframe=torverde!60!black,
+  title={\ifx&#1&\refstepcounter{laboratorio}Laboratory \thechapter.\arabic{laboratorio}\else Laboratory~#1\fi: #2}}
+\renewenvironment{esercizio}[1][1]{\refstepcounter{esercizio}\par\medskip
+  \noindent\textbf{Exercise \theesercizio}\ \stelle{#1}\quad}{\par}
+\renewenvironment{soluzione}[1]{\par\medskip\noindent\textbf{Solution \ref{#1}.}\quad}{\par}

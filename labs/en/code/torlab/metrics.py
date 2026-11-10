@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Alessandro Greco
+"""Laboratory 15: network statistics from public documents.
+
+Two tools: a consensus summary (relays, flags, bandwidth, versions, /16 networks)
+and the Tor Metrics user estimate (directory requests / 10).
+"""
+from __future__ import annotations
+
+import math
+from collections import Counter
+
+from .directory import Consensus
+from .path_selection import network16
+
+
+def summary(consensus: Consensus) -> dict:
+    """Summarize one consensus. Bandwidth shares are None when total weight is zero."""
+    relay = consensus.relay
+    bandwidth = sum(r.bandwidth or 0 for r in relay)
+    flag = Counter(f for r in relay for f in r.flag)
+    exit_ = [r for r in relay if "Exit" in r.flag and "BadExit" not in r.flag]
+    guard = [r for r in relay if "Guard" in r.flag]
+    return {
+        "relay": len(relay),
+        # deterministic order: when counts tie, sort by name (otherwise it depends
+        # on set iteration order, which differs between Python runs)
+        "flag": dict(sorted(flag.items(), key=lambda x: (-x[1], x[0]))),
+        "total_bandwidth": bandwidth,
+        "exit_bandwidth_share": (sum(r.bandwidth or 0 for r in exit_) / bandwidth
+                                 if bandwidth > 0 else None),
+        "guard_bandwidth_share": (sum(r.bandwidth or 0 for r in guard) / bandwidth
+                                  if bandwidth > 0 else None),
+        "versions": sorted(Counter(" ".join(r.version.split()[:2]) for r in relay).items(),
+                            key=lambda x: (-x[1], x[0]))[:5],
+        "networks16": sorted(Counter(network16(r) for r in relay).items(),
+                         key=lambda x: (-x[1], x[0]))[:5],
+    }
+
+
+def estimate_users(reported_requests: int, fraction: float) -> int | None:
+    """Estimate average concurrent Tor users from daily directory requests.
+
+    Formula r(N) = floor(r(R) / frac / 10). The 10%–110% fraction
+    threshold follows Tor Metrics. This is not a count of unique people.
+    """
+    if isinstance(reported_requests, bool) or not isinstance(reported_requests, int) or reported_requests < 0:
+        raise ValueError("reported_requests must be a non-negative integer")
+    if isinstance(fraction, bool) or not isinstance(fraction, (int, float)):
+        return None
+    if not math.isfinite(fraction):
+        return None
+    if not 0.10 <= fraction <= 1.10:
+        return None
+    return math.floor(reported_requests / fraction / 10)
+
+
+def remove_rounding(value: int, step: int = 8) -> int | None:
+    """Undo upward count binning by subtracting half a positive even step.
+
+    For example dirreq-v3-reqs uses step=8; values <= half the step
+    carry insufficient information and return None.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("value must be a non-negative integer")
+    if isinstance(step, bool) or not isinstance(step, int) or step <= 0 or step % 2:
+        raise ValueError("step must be a positive even integer")
+    v = value - step // 2
+    return v if v > 0 else None
+
+
+if __name__ == "__main__":
+    import sys
+    from .directory import parse_consensus
+    with open(sys.argv[1], encoding="utf-8") as source:
+        c = parse_consensus(source.read())
+    for k, v in summary(c).items():
+        print(f"{k}: {v}")

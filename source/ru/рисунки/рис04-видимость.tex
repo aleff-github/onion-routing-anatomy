@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Цепь Tor от клиента через сторожевой, промежуточный и выходной ретрансляторы к сайту назначения. Таблица под ретрансляторами и сайтом показывает видимость на сетевом уровне без утечек приложения: сторожевой узел видит исходный IP-адрес клиента, выходной знает назначение, а промежуточный не знает ни один из двух концов. Сайт видит IP выходного узла вместо IP клиента; наблюдатель на входе и выходе может сопоставлять потоки.}
+% Что знает каждый наблюдатель вдоль цепи.
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  sa/.style={fill=avviso!15,draw=avviso!60,rounded corners=1pt,minimum height=0.5cm,minimum width=1.5cm},
+  no/.style={fill=torverde!12,draw=torverde!50!black,rounded corners=1pt,minimum height=0.5cm,minimum width=1.5cm}]
+  \node[client,minimum width=1.5cm,minimum height=0.7cm] (c) at (0,0) {клиент};
+  \node[relay,minimum size=0.9cm] (g) at (2.6,0) {сторожевой};
+  \node[relay,minimum size=0.9cm] (m) at (5.2,0) {промежуточный};
+  \node[relay,minimum size=0.9cm,fill=torverde!30] (e) at (7.8,0) {выходной};
+  \node[server,minimum width=1.5cm,minimum height=0.7cm] (s) at (10.4,0) {сайт};
+  \draw[cellaf] (c) -- (g); \draw[cellaf] (g) -- (m); \draw[cellaf] (m) -- (e);
+  \draw[->,thick,torgrigio] (e) -- (s);
+  \node[font=\sffamily\tiny,anchor=east,align=right] at (-1.0,-1.1) {знает\\клиента};
+  \node[font=\sffamily\tiny,anchor=east,align=right] at (-1.0,-1.9) {знает\\назначение};
+  \node[sa] at (2.6,-1.1) {да};
+  \node[no] at (5.2,-1.1) {нет}; \node[no] at (7.8,-1.1) {нет}; \node[no] at (10.4,-1.1) {нет};
+  \node[no] at (2.6,-1.9) {нет}; \node[no] at (5.2,-1.9) {нет};
+  \node[sa] at (7.8,-1.9) {да}; \node[sa] at (10.4,-1.9) {да};
+  \node[align=center,font=\sffamily\tiny,text=avviso] at (5.2,-2.8) {ни один ретранслятор Tor не знает оба конца цепи:\\наблюдатель на входе и выходе может сопоставить потоки (гл.~26)};
+\end{tikzpicture}

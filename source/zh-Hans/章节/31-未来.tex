@@ -1,0 +1,136 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{开放问题与正在推进的项目}\label{cap:31-futuro}
+\aggiornatoal{2026 年 9 月 23 日}{截至第 369 号的 torspec 提案；tor 0.4.9.13；Arti 2.6.0}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 跟踪 Tor 协议的修改流程，并正确解读提案状态；
+  \item 解释为什么后量子密码学要求改变消息格式，而不只是替换算法；
+  \item 描述 Conflux、Walking Onions 等旨在改善性能和可扩展性的项目；
+  \item 找到参与 Tor Project 的具体途径。
+\end{itemize}
+\end{obiettivi}
+
+本书描述的内容没有一成不变的部分。2026 年研究的协议，已不同于缺少 ntor-v3、拥塞控制和 CGO 的 2016 年版本；到 2036 年，它必然又会有所变化。最后一章展望未来。对于每个开放问题，我们都要问：现在哪些方面还不够好、已经提出了什么方案，以及相关工作进展到哪里。以下内容都不可避免地具有暂时性：提案状态以本章参考日期时规范仓库中的记录为准。
+
+% ---------------------------------------------------------------------------
+\section{协议如何发生变化？}\label{sec:fut-processo}
+
+自 2007 年以来，Tor 协议的修改通过编号\textbf{提案}（proposal）来发展，有些类似于 IETF 的 RFC。贡献者先在开发者邮件列表讨论设想，再按规定格式编写文档；当大家广泛同意这个想法值得进一步研究时，编辑者就将它以特定编号加入仓库。随后不断讨论和完善，直到足够详细，可以实现。功能完成后，其具有规范约束力的内容会被纳入正式协议规范。与 RFC 不同，Tor 提案可能在保持编号不变的情况下继续修改；而且，对已经实现的功能来说，提案并不是最终权威文档，该角色属于协议规范（\proposta{001}）。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图31-提案}
+\caption{依据 Proposal~001 绘制的 Tor 提案状态示意图（简化且非穷尽）。\emph{Draft}--\emph{Open}--\emph{Accepted}--\emph{Finished}--\emph{Closed} 只是可能的路径，不是必经顺序；\emph{Finished} 表示已实现，\emph{Closed} 还表示内容已纳入规范。\emph{Needs-Revision} 与 \emph{Needs-Research} 是不同障碍，\emph{Dead} 可以重新开启，\emph{Rejected} 是不采纳所述方案；\emph{Informational} 是最终的信息性文档，本身不属于规范。图中省略 \emph{Meta}、\emph{Reserve}、\emph{Obsolete} 等其他状态。}
+\label{fig:proposte}
+\end{figure}
+
+阅读提案时，首先应该检查它的状态（\cref{fig:proposte}）。本书介绍过不同阶段的提案。ntor-v3（\proposta{332}）处于 \emph{Closed}：已实现并纳入规范。拥塞控制（\proposta{324}）和 Conflux（\proposta{329}）处于 \emph{Finished}：已经实现，但尚未完全纳入规范。CGO（\proposta{359}）虽然已出现在 tor 和 Arti 中，状态仍为 \emph{Open}。移除 TAP 的计划（\proposta{350}）为 \emph{Accepted}，而 Walking Onions（\proposta{300}）属于 \emph{Informational}。
+
+% ---------------------------------------------------------------------------
+\section{量子计算机}\label{sec:fut-pq}
+
+\paragraph{问题。}Tor 的全部公钥机制，包括用于握手的 X25519、用于签名的 Ed25519，以及仍在使用的 RSA，如果出现足够强大的量子计算机，都将面临被攻破的风险（\cref{cap:05-crittografia}）。目前没有人知道这样的计算机是否、或者何时会出现。然而对匿名系统来说，威胁可能更早开始：攻击者可以今天保存加密流量，未来再解密。
+
+\paragraph{两种情景。}2025 年的 \proposta{355} 区分两种环境。在\emph{过渡}环境中，只需防护\emph{未来}的量子计算机：今天捕获的流量必须能抵御未来解密，但传统签名仍可接受，因为今天要主动伪造签名，就需要目前已经存在强大量子计算机。在\emph{下一代}环境中，防护还必须涵盖量子计算机\emph{已经存在}，能够伪造签名或主动攻击握手的情况。
+
+\paragraph{代价。}2024 年，NIST 标准化了后量子密钥建立机制 ML-KEM，以及签名算法 ML-DSA 和 SLH-DSA~\cite{nistpqc2024}。相关提案将其数据大小与现有算法比较：
+\begin{center}\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+算法 & 公钥 & 密文或签名 \\
+\midrule
+X25519 & 32 字节 & 32 字节 \\
+ML-KEM-768 & 1\,184 字节 & 1\,088 字节 \\
+Ed25519 & 32 字节 & 64 字节 \\
+ML-DSA-65 & 1\,952 字节 & 3\,309 字节 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\Cref{cap:08-celle} 已说明，一条 relay 消息最多承载 498 字节。因此，即使不考虑握手的其他字段，单个 ML-KEM-768 公钥就需要三个 cell。后量子密码学并非简单地替换算法：它会改变消息在 cell 中的装载方式。现有 relay 消息格式无法直接携带如此大的消息：三条 cell 仅代表假设新格式能够分片时的有效载荷容量下界。
+
+\paragraph{当前方向。}提案的结论相当谨慎。过渡阶段可能只需按照先前提案，把后量子机制加入 ntor。对于下一代系统，优先方案是在成本可接受的前提下，使用两种后量子密钥建立机制，同时提供前向保密。如果把后量子公钥加入微描述符，还会抵消通过移除 TAP 密钥（\proposta{350}）和引入基于密钥的家族机制（\cref{sec:relay-famiglie}）所节省的部分带宽。最终选择还依赖尚待完成的测量：有多少电路需要从零建立？握手消耗多少中继带宽和 CPU 时间？这仍是开放的研究问题，也是贡献测量结果的机会（\cref{cap:29-ricerca}）。
+
+% ---------------------------------------------------------------------------
+\section{更大的消息，以及更小的消息}\label{sec:fut-340}
+
+在参考日期处于 \emph{Open} 状态的 \proposta{340}，直接针对一条消息只能装入一个 cell 的限制。它建议将 relay 消息与 cell 分离：较长的消息可以跨越多个 cell，而几个较短的消息可以共享一个 cell。其动机既包括后量子握手、UDP 传输和 Walking Onions 所需的超过 498 字节的消息，也包括 \texttt{SENDME}、\texttt{XON} 和 \texttt{XOFF} 等很短的消息。这些短消息目前也要占据整整一个 cell；将来则可以藏在其他消息的填充空间里，使观察者无法直接辨认。新格式旨在与新版 relay 加密配合，而其 CGO 设计已在 \cref{sec:cgo} 中讨论。协调这些修改，有助于避免产生越来越多互不兼容的格式。
+
+% ---------------------------------------------------------------------------
+\section{性能：多路径传输}\label{sec:fut-conflux}
+
+拥塞控制（\cref{sec:cc}）提高了单条电路的效率。下一步是\textbf{Conflux}（\proposta{329}，\emph{Finished}）。客户端建立两条通向同一个出口的电路，使用不同的守卫与中间中继；然后把它们关联起来，并根据每条电路测量得到的往返时延分配流量。这一思想源于 AlSabah、Bauer、Elahi 和 Goldberg 的研究；Tor 的实现利用拥塞控制信息，并借鉴多路径 TCP 的经验。我们已在实验网络（\cref{sec:rp-stem}）和通过 Stem（\cref{cap:18-stem}）观察过 Conflux 电路。提案建议，除出口外，两条分支不要共用其他中继，以避免共享瓶颈。这是建议而非严格规则，在规模很小的实验网络中经常无法满足。tor 从 0.4.8 版本开始使用 Conflux；如 \cref{sec:arti-supporto} 所述，本章参考日期时 Arti 尚未实现客户端 Conflux。使用或不使用 Conflux 的 OnionPerf 测量点可以用于比较其对真实网络的影响（\cref{sec:metrics-prestazioni}）。
+
+% ---------------------------------------------------------------------------
+\section{可扩展性：Walking Onions}\label{sec:fut-walking}
+
+目前，每个 Tor 客户端都知道\emph{全部}中继：它下载共识和微描述符，目录流量会随中继数量增长。微描述符与共识差分能降低成本，却没有改变根本结构。启动时的开销还高度集中：新客户端必须先下载完整目录，才能建立第一条电路（\proposta{300}）。
+
+直观的解决办法都有已知缺点。只向每位客户端展示部分网络，会产生\emph{认知差异}（epistemic）攻击：客户端视图之间的区别本身就可能识别用户。让每台中继选择下一跳，又会像某些去中心化系统一样，使恶意中继容易控制路径。Walking Onions 提出另一种方式：目录权威节点发布经过签名的结构，把每台中继与一个数值区间关联起来。客户端随机选择一个数值，电路中的上一跳中继在扩展时提供一份签名证明，说明哪个中继占据对应区间。客户端能够验证签名，而不必持有完整中继列表。原始提案的状态为 \emph{Informational}；更详细的后续提案（\proposta{323}）试图弥补其剩余缺陷。包括后量子密码学在内的近期提案也会考虑这一设计。
+
+% ---------------------------------------------------------------------------
+\section{其他开放问题}\label{sec:fut-altri}
+
+\begin{description}
+  \item[UDP] Tor 只传输 TCP。视频通话、游戏以及 HTTP/3 所使用的 QUIC 因此无法直接支持，或者需要使用可能不安全的变通方式。\proposta{348}（\emph{Open}）探索了从经出口建立隧道到原生数据报传输的多种方案，同时也讨论新风险：应用程序指纹、对等通信元数据收集和端口耗尽。
+  \item[指纹识别] \cref{sec:att-wf} 以一个开放问题收尾：目前还没有一种普遍有效、开销又可接受的网站指纹防御。tor 已部署用于洋葱服务电路的填充状态机；Arti 则在基于 \emph{maybenot} 库的框架中继续开发，这些都为未来防御提供基础。
+  \item[流量关联] \cref{cap:26-attacchi} 的核心问题仍未解决：低延迟网络可能保留可关联的时间与流量规模特征，但缓冲及并发流量也会改变这些模式。恒定速率填充与增加延迟等已知方法成本较高，研究人员仍在寻找更高效的折中方案，以及考虑互联网拓扑的路径选择。
+  \item[拒绝服务] 工作量证明保护洋葱服务（\cref{cap:15-dos}）；如何自动调节防御机制，是 \proposta{362} 的研究主题。
+  \item[Arti 作为中继] 当 Arti 能够运行中继和目录权威节点之后，C 语言代码库最终可能退役。这是 Tor Project 的长期目标之一（\cref{cap:30-arti}）。
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{如何参与贡献？}\label{sec:fut-contribuire}
+
+读到这里的读者有多种途径可以贡献力量，并不是每一种都需要编写代码：
+\begin{itemize}
+  \item \textbf{贡献带宽}：运行中间中继或网桥；在采取 \cref{cap:25-legale} 所述防护措施的前提下运行出口（\cref{cap:22-relay}）；也可以运行 Snowflake 代理，甚至仅通过浏览器参与。
+  \item \textbf{阅读和讨论提案}：许多提案处于 \emph{Open}，因为还需要反馈、分析和测量。开发者讨论列表是公开的。
+  \item \textbf{贡献代码}：tor 与 Arti 在 Tor Project 的 GitLab 上开发，有专门适合新贡献者的 issue 标签。Arti 对新增功能尤其重要。
+  \item \textbf{开展研究}：使用 Shadow、Chutney 和 Metrics 数据，并遵守 Research Safety Board 的指南（\cref{cap:29-ricerca}）。
+  \item \textbf{翻译与编写文档}：志愿者帮助翻译 Tor Browser、手册和网站。包括意大利语在内的各种语言都需要更多文档。
+  \item \textbf{使用 Tor}：更多用户可能扩大匿名集合，但若时间特征、行为或其他元数据可区分，用户数量本身并不能保证不可区分性。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item Tor 协议通过编号提案演进；随着修改被实现并纳入正式规范，提案状态可从 \emph{Draft} 发展到 \emph{Closed}。
+  \item 即使强大量子计算机尚未存在，后量子密码学也很重要。它需要比单个 cell 更大的消息，因而推动了关于消息分片与打包的第 340 号提案。
+  \item Conflux 将流量分配到两条电路；Walking Onions 则可能免去每个客户端下载完整网络目录的需要。
+  \item UDP、指纹识别和流量关联防御、DoS 自动调节，以及 Arti 发展为中继实现，都仍是开放挑战。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:31-stato}
+选择本书提到的三个提案，分别确认它们当前的状态以及状态的含义：功能是否已部署？是否已纳入正式规范？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:31-celle}
+假设每条 relay 消息最多承载 498 字节，并且不同消息不能共用一个 cell，那么传输一个 ML-KEM-768 公钥与一个 ML-KEM-768 密文，各需要多少个 cell？采用 \proposta{340} 后会有什么变化？请区分不计分片封装开销的理论最少 cell 数与实际需要的数量；后者取决于提案定义的封装方式。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:31-epistemico}
+举例说明认知差异攻击：如果不同客户端只知道网络中不同的中继子集，攻击者可以如何利用这些差异？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:31-conflux}
+利用 Stem 找出实验网络中具有相同 \file{CONFLUX\_ID} 的 Conflux 电路对。确认两条分支是否以同一个出口结束，以及是否像 \proposta{329} 建议的那样避免共用其他中继。你观察到什么？如何解释？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:31-proposta}
+从本章选择一个开放问题，按照 Tor Project 的格式编写简短提案：动机、设计、安全性分析、兼容性与实施计划。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \texttt{torspec} 仓库中按状态分类的提案索引，以及提案流程文档（\proposta{001}）。
+  \item N.~Mathewson，\titolo{Options for postquantum circuit extension handshakes}（\proposta{355}）。
+  \item \titolo{Walking Onions: Scaling and Saving Bandwidth}（\proposta{300}）及后续提案（\proposta{323}）。
+  \item Tor Project 博客，用于了解协议变更公告及解释。
+\end{itemize}

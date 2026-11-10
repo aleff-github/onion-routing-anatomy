@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 替代文本。
+\altfig{六层简化示意图，自上而下依次为：运行于流之上的 HTTP 应用；流命令 BEGIN、DATA、END、SENDME（第 11 章）；分层加密的 RELAY 消息（第 10 章）；电路控制，其中 CREATE2 和 DESTROY 是信元命令，而 EXTEND2 是 RELAY 消息（第 9 章）；链路协议 v4 及以上版本中长 514 字节的定长信元，此外还存在变长信元（第 8 章）；TCP 上的 TLS 通道及 CERTS、NETINFO（第 7 章）。这里按功能分层，并非严格的信元类型分类。}
+% Tor 协议层次。
+\begin{tikzpicture}[font=\sffamily\small,
+  liv/.style={draw,rounded corners=2pt,minimum width=7cm,minimum height=0.8cm,align=center},
+  rifcap/.style={font=\sffamily\scriptsize,text=torgrigio,anchor=west}]
+  \node[liv,fill=torverde!20] (a) at (0,4) {应用（HTTP 等）运行在数据流之上};
+  \node[liv,fill=torverde!10] (s) at (0,3) {数据流：BEGIN、DATA、END、SENDME};
+  \node[liv,fill=torviola!20] (r) at (0,2) {分层加密的 RELAY 消息};
+  \node[liv,fill=torviola!10] (c) at (0,1) {电路：CREATE2、EXTEND2、DESTROY};
+  \node[liv,fill=torgrigio!15] (l) at (0,0) {定长信元：514 字节（v4+）};
+  \node[liv,fill=torgrigio!5] (t) at (0,-1) {通道：TCP 上的 TLS、CERTS、NETINFO};
+  \node[rifcap] at (3.7,3) {第 11 章};
+  \node[rifcap] at (3.7,2) {第 10 章};
+  \node[rifcap] at (3.7,1) {第 9 章};
+  \node[rifcap] at (3.7,0) {第 8 章};
+  \node[rifcap] at (3.7,-1) {第 7 章};
+\end{tikzpicture}

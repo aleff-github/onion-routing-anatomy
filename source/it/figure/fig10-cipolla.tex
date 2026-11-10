@@ -1,0 +1,37 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Tor1 in avanti: il client applica Kf3, Kf2, Kf1; guard, middle ed exit tolgono rispettivamente uno strato. Le caselle interne rappresentano corpo RELAY ancora cifrato. Solo l'exit può riconoscere il messaggio RELAY quando Recognized è zero e il digest progressivo corrisponde. Non è necessariamente testo applicativo in chiaro: HTTPS può proteggerlo ancora. Intestazioni di canale e metadati del traffico non sono rappresentati.}
+% Gli strati di cifratura in avanti
+\begin{tikzpicture}[font=\sffamily\small,
+  s1/.style={draw=torgrigio,fill=torgrigio!15,rounded corners=3pt},
+  s2/.style={draw=torviola!70,fill=torviola!18,rounded corners=3pt},
+  s3/.style={draw=torverde!60!black,fill=torverde!28,rounded corners=3pt},
+  msg/.style={font=\ttfamily\tiny,fill=white,draw,inner sep=2pt}]
+  % pacchetto con n strati centrato in x
+  \newcommand{\pacchetto}[2]{%
+    \ifnum#2>2 \draw[s1] (#1-1.05,-0.5) rectangle (#1+1.05,0.5);\fi
+    \ifnum#2>1 \draw[s2] (#1-0.85,-0.37) rectangle (#1+0.85,0.37);\fi
+    \ifnum#2>0 \draw[s3] (#1-0.65,-0.25) rectangle (#1+0.65,0.25);\fi
+    \ifnum#2=0 \node[msg] at (#1,0) {messaggio};\else \node[msg] at (#1,0) {cifrato};\fi}
+  \pacchetto{0}{3}
+  \node[relay] (g) at (2.45,0) {Guard};
+  \pacchetto{4.35}{2}
+  \node[relay] (mi) at (6.2,0) {Middle};
+  \pacchetto{7.9}{1}
+  \node[relay,fill=torverde!30] (e) at (9.6,0) {Exit};
+  \draw[cellaf] (1.05,0) -- (g); \draw[cellaf] (g) -- (3.5,0);
+  \draw[cellaf] (5.2,0) -- (mi); \draw[cellaf] (mi) -- (7.25,0);
+  \draw[cellaf] (8.55,0) -- (e);
+  % il messaggio in chiaro, sotto l'exit
+  \begin{scope}[yshift=-1.6cm]\pacchetto{9.6}{0}\end{scope}
+  \draw[cellaf] (e) -- (9.6,-1.4);
+  \node[font=\scriptsize,align=center] at (0,-0.95) {client: cifra con\\Kf$_3$, poi Kf$_2$, poi Kf$_1$};
+  \node[font=\scriptsize] at (2.45,-0.85) {toglie Kf$_1$};
+  \node[font=\scriptsize] at (6.2,-0.85) {toglie Kf$_2$};
+  \node[font=\scriptsize,align=right,anchor=east] at (8.8,-1.6) {toglie Kf$_3$: Recognized = 0\\e digest corretto};
+  % legenda
+  \draw[s1] (1.2,1.0) rectangle ++(0.3,0.2); \node[font=\scriptsize,anchor=west] at (1.55,1.1) {strato del guard};
+  \draw[s2] (3.9,1.0) rectangle ++(0.3,0.2); \node[font=\scriptsize,anchor=west] at (4.25,1.1) {del middle};
+  \draw[s3] (6.0,1.0) rectangle ++(0.3,0.2); \node[font=\scriptsize,anchor=west] at (6.35,1.1) {dell'exit};
+\end{tikzpicture}

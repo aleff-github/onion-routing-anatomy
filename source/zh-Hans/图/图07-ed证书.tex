@@ -1,0 +1,21 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版可访问性替代文本（EPUB）。
+\altfig{Tor Ed25519 证书格式：VERSION（1 字节）、CERT\_TYPE（1）、EXPIRATION\_DATE（4，表示自 Unix 纪元起的小时数）、CERT\_KEY\_TYPE（1）、CERTIFIED\_KEY（32，按类型存放公钥或摘要）、N\_EXTENSIONS（1）、零个或多个变长扩展以及 SIGNATURE（64）。每个扩展依次包含 ExtLen（2 字节，仅为 ExtData 长度）、ExtType（1）、ExtFlags（1）和 ExtData（ExtLen 字节）。Ed25519 签名覆盖它前面的所有字段，但不包括签名本身。图中字段名使用缩写，标出的起始偏移量依次为 0、1、2、6、7、39、40。}
+% Tor Ed25519 证书。
+\begin{tikzpicture}[campo/.style={draw,minimum height=1.05cm,font=\sffamily\scriptsize,inner sep=1pt,align=center}]
+  \node[campo,fill=torviola!35,minimum width=1.1cm] (a) {VER\\(1)};
+  \node[campo,fill=torviola!25,minimum width=1.3cm,right=0pt of a] (b) {TYPE\\(1)};
+  \node[campo,fill=torviola!15,minimum width=1.8cm,right=0pt of b] (c) {EXPIRATION\\(4)};
+  \node[campo,fill=torviola!25,minimum width=1.4cm,right=0pt of c] (d) {KEY\_TYPE\\(1)};
+  \node[campo,fill=torverde!15,minimum width=2.4cm,right=0pt of d] (e) {CERTIFIED\_KEY\\(32)};
+  \node[campo,fill=torviola!15,minimum width=1.1cm,right=0pt of e] (f) {N\_EXT\\(1)};
+  \node[campo,fill=torgrigio!10,minimum width=1.9cm,right=0pt of f] (g) {扩展\\(可变)};
+  \node[campo,fill=avviso!15,minimum width=1.9cm,right=0pt of g] (h) {SIGNATURE\\(64)};
+  \foreach \n/\o in {a/0,b/1,c/2,d/6,e/7,f/39,g/40} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]a.south west) -- ([yshift=-2pt]g.south east)
+    node[midway,below=6pt,font=\sffamily\small] {Ed25519 签名覆盖的字节};
+  \node[below=1.3cm of g,draw,fill=torgrigio!10,font=\sffamily\scriptsize,align=left] (est)
+    {每个扩展：ExtLen (2) · ExtType (1) · ExtFlags (1) · ExtData (ExtLen)};
+  \draw[dotted] (g.south) -- (est.north);
+\end{tikzpicture}

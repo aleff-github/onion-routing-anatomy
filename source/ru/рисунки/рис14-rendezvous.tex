@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Протокол встречи onion-сервиса: сервис строит многоузловую цепь к точке введения и передаёт ESTABLISH\_INTRO (1), затем публикует дескриптор в HSDir (2). Клиент загружает его, строит отдельную цепь к узлу встречи и отправляет ESTABLISH\_RENDEZVOUS с cookie (3); через другой маршрут к точке введения он посылает INTRODUCE1 (4). Точка введения пересылает сообщение сервису как INTRODUCE2 по ранее созданной сервисом цепи, не читая зашифрованное содержимое. Сервис отправляет RENDEZVOUS1 к узлу встречи (5), который связывает две цепи и пересылает клиенту RENDEZVOUS2 (6). Все линии изображают логические многоузловые пути, не прямое соединение клиента и сервиса.}
+% Протокол встречи
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  circ/.style={-{Stealth[length=2.5mm]},thick,decorate,decoration={snake,amplitude=.5mm,segment length=4mm,post length=3mm}},
+  msg/.style={font=\ttfamily\scriptsize,fill=white,inner sep=1.5pt,align=center}]
+  \node[client] (c) at (0,0) {Клиент};
+  \node[client,fill=torverde!15,draw=torverde!60!black] (s) at (11,0) {Онион-сервис};
+  \node[relay,fill=torgrigio!10,draw=torgrigio,font=\sffamily\scriptsize] (h) at (1.2,3.8) {HSDir};
+  \node[relay,fill=torviola!15,draw=torviola,align=center,font=\sffamily\scriptsize] (ip) at (8.2,3.6) {точка\\введения};
+  \node[relay,fill=torverde!25,align=center,font=\sffamily\scriptsize] (rp) at (5.5,-3) {узел\\встречи};
+  % Сервис
+  \draw[circ,torverde!60!black] (s) -- node[msg,pos=0.35,right=12pt]{(1) ESTABLISH\_INTRO} (ip);
+  \draw[circ,torverde!60!black] (s.north) to[out=80,in=20,looseness=1.1] node[msg,pos=0.45,above=2pt]{(2) публикует дескриптор} (h.north east);
+  % Клиент
+  \draw[circ,torviola] (c) -- node[msg,pos=0.5,left=4pt]{загружает\\дескриптор} (h);
+  \draw[circ,torviola] (c) -- node[msg,pos=0.45,left=6pt]{(3) ESTABLISH\_RENDEZVOUS\\(cookie)} (rp);
+  \draw[circ,torviola] (c.north east) to[out=15,in=210] node[msg,pos=0.5,below=3pt]{(4) INTRODUCE1} (ip.south west);
+  \draw[->,thick,torviola,dashed] (ip.south east) to[out=-30,in=100] node[msg,pos=0.45,left=3pt]{INTRODUCE2} (s.north);
+  \draw[circ,torverde!60!black] (s) -- node[msg,pos=0.45,right=6pt]{(5) RENDEZVOUS1\\(cookie)} (rp);
+  \node[font=\sffamily\scriptsize,align=center,below=3pt of rp] {(6) связывает две цепи\\и передаёт RENDEZVOUS2 клиенту};
+\end{tikzpicture}

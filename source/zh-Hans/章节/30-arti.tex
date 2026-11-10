@@ -1,0 +1,178 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Arti：用 Rust 实现 Tor}\label{cap:30-arti}
+\aggiornatoal{2026 年 9 月 23 日}{Arti 2.6.0（2026 年 9 月 1 日）；tor 0.4.9.13；实验网络}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 解释为什么 Tor Project 要使用 Rust 重写 tor，并评估项目进展；
+  \item 理解 Arti 的架构，识别本书第二部分介绍过的概念；
+  \item 阅读其支持的子协议表格，并了解目前仍缺少哪些功能；
+  \item 把 Arti 配置为本书私有网络的客户端（实验~20）。
+\end{itemize}
+\end{obiettivi}
+
+本书一直以 \emph{tor} 为基础——这是从 2002 年开始开发的 C 语言实现。然而，Tor 客户端的未来是 \textbf{Arti}，一个使用 Rust 完全重写的实现。Tor Project 已将 Arti 指定为开发新功能时优先使用的客户端，并宣布今后所有新的客户端功能都将提供 Arti 实现。本章面向已经在实验中用 Python 编写过简易 Tor 客户端的读者：Arti 的许多设计决策与我们曾面临的问题相同，只是将它们提升到了生产级规模。
+
+% ---------------------------------------------------------------------------
+\section{为什么重写 tor？}\label{sec:arti-perche}
+
+项目介绍文档列出了四个动机：
+\begin{description}
+  \item[安全性] 安全 Rust 能避免许多内存安全错误，但 unsafe 代码、依赖库与逻辑缺陷仍需审查。Tor Project 估计，tor 历史上记录的至少一半安全漏洞如果使用 Rust 就不可能出现，另外许多漏洞发生的概率也会大幅降低。
+  \item[开发速度] 语言层面的保证有助于更有信心地编写新代码，减少开发所需时间。
+  \item[灵活性] tor 最初只是一个 SOCKS 代理，后来才加入其他集成功能。Arti 则从一开始就设计为可由其他应用嵌入的模块化库。
+  \item[可维护性] 二十年的开发使 tor 代码库的组件之间形成复杂联系。重写提供了更清楚地分离职责的机会。
+\end{description}
+
+\paragraph{重要里程碑。}Arti 第一个公开版本 0.0.1 发布于 2021 年 10 月。2022 年 9 月 1 日发布的 1.0.0 宣布 Arti 已成为稳定的客户端。2023 年 8 月的 1.1.7 默认启用了编译客户端洋葱服务支持的选项，但使用者仍须主动开启相应功能。2026 年 2 月，2.0.0 发布。本章采用的参考版本为 2026 年 9 月 1 日发布的 2.6.0，它永久启用了拥塞控制（\cref{sec:cc}）和 CGO 加密（\cref{sec:cgo}）。
+
+\paragraph{目前的功能范围。}根据参考日期时的项目文档，Arti 已是完整的通用客户端，支持网桥和可插拔传输，也可以访问及发布洋葱服务。它尚不能作为中继、网桥或目录权威节点运行。这些功能仍在开发中，近期版本的许多工作都集中在中继与权威节点方面。
+
+% ---------------------------------------------------------------------------
+\section{架构}\label{sec:arti-architettura}
+
+Arti 由数十个 Rust \emph{crate}（Rust 的编译单元）组成，2.6.0 版本有七十多个。名称约定区分其角色：直接面向用户的 crate 以 \texttt{arti} 开头；Tor 协议专用 crate 以 \texttt{tor-} 开头；可在 Tor 之外复用的 crate 则使用更通用的名称。设计中的一个指导原则是：尽量减少直接读写网络数据的代码；多数组件应能表现得\enquote{仿佛网络不存在}，以便更容易测试。
+
+\Cref{fig:crate} 将主要 crate 与实现类似功能的 \texttt{torlab} 模块放在一起。它们有意形成对应：两者都遵循协议的分层，从底层原语一直延伸到高层客户端。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图30-crate}
+\caption{Arti 的部分 crate 与教学用 \texttt{torlab} 模块的简化功能示意图。实线表示概括的架构关系，而非精确的 Cargo 依赖图；虚线表示功能类比，不是跨项目依赖或完整等价。例如，\texttt{onion.py} 只解密描述符，不能替代完整的洋葱服务客户端；图中未包含 \texttt{tor-bytes}、\texttt{tor-hsservice} 等 crate。}
+\label{fig:crate}
+\end{figure}
+
+\begin{description}
+  \item[\texttt{tor-llcrypto}、\texttt{tor-bytes}] 密码学原语和二进制数据的解析与序列化。它们提供了 \file{ntor.py} 和 \file{encryption.py} 借助 Python 的 \texttt{cryptography} 与 \texttt{struct} 模块实现的基础功能。
+  \item[\texttt{tor-cell}] Cell 和 relay 消息，相当于 Arti 中的 \file{cells.py}（\cref{cap:08-celle}）。
+  \item[\texttt{tor-proto}] 通道、电路、分层加密与流，也就是我们使用 \file{channel.py}、\file{circuit.py} 和 \file{stream.py} 实现的全部内容。
+  \item[\texttt{tor-chanmgr}、\texttt{tor-circmgr}、\texttt{tor-guardmgr}] 管理多条通道和电路、选择路径并维护守卫。教学客户端几乎没有实现这些功能，但它们是真实客户端中最复杂的部分之一。
+  \item[\texttt{tor-netdoc}、\texttt{tor-dirmgr}] 读取和更新目录文档，对应 \file{directory.py}。
+  \item[\texttt{tor-hsclient}、\texttt{tor-hsservice}] 洋葱服务的客户端和服务端功能；我们的 \file{onion.py} 只实现了描述符解密。
+  \item[\texttt{arti-client}、\texttt{arti}] 分别是供其他应用嵌入的高层库，以及提供 SOCKS 代理的命令行程序。
+\end{description}
+
+\subsection{对比：编写一个 Cell}
+
+实验~2 中，我们曾编写 cell 编码函数。Arti 在 \file{crates/tor-cell/src/chancell/codec.rs} 中的对应函数 \texttt{write\_cell} 遵循相同步骤：先写 CircID，再写命令。对于变长 cell，预留两字节长度字段，编码消息体，然后返回填写实际长度；对于定长 cell，则先编码消息体，再确认它没有超过 509 字节（\texttt{CELL\_DATA\_LEN}）。其中有两点值得注意：
+\begin{itemize}
+  \item CircID \emph{始终}写作四个字节。Arti 不实现版本 4 之前的链路协议，因此不需要处理两字节 CircID 的特殊情况（\cref{cap:08-celle}）。只有协商前发送的 \cella{VERSIONS} cell 会单独处理。
+  \item 超出长度限制不会作为调用者错误返回，而会被视为\emph{内部}错误：如果生成了过长的 cell，就意味着 Arti 自身代码存在缺陷，而不是收到恶意对端的数据。错误类型本身可以区分实现缺陷与恶意输入。
+\end{itemize}
+Arti 明确不打算支持过时协议。它的目标是兼容\emph{当前推荐}的版本，而不是永久保留所有历史格式。
+
+% ---------------------------------------------------------------------------
+\section{支持的功能}\label{sec:arti-supporto}
+
+描述 Tor 实现能力最准确的方式，是查看它支持哪些\textbf{子协议}（\spec{tor-spec}{Subprotocol-based versioning}）。每台中继和每个客户端都要声明自己支持各个功能族的版本：\texttt{Link}、\texttt{Relay}、\texttt{FlowCtrl}、\texttt{HSIntro} 等。Arti 的兼容性文档列出了以下客户端能力：
+\begin{itemize}
+  \item \texttt{Link=4} 和 \texttt{Link=5}：四字节 CircID 与现代通道填充（\cref{cap:07-canali}）；
+  \item \texttt{Relay=4}（ntor-v3，\cref{cap:09-circuiti}）、\texttt{Relay=5}（子协议协商）和 \texttt{Relay=6}（CGO 加密）；
+  \item \texttt{FlowCtrl=1}（带认证的 SENDME）和 \texttt{FlowCtrl=2}（拥塞控制）；
+  \item \texttt{Desc=4}：\cref{sec:relay-famiglie} 所述的基于密钥的家族机制。
+\end{itemize}
+
+\begin{attenzione}[Arti 表格中的差一错误]
+Arti 的兼容性文档将上述两种流量控制子协议编号为 \texttt{FlowCtrl=0} 和 \texttt{FlowCtrl=1}。然而规范将带认证的 SENDME 定义为 1，将拥塞控制定义为 2~\spec{tor-spec}{Subprotocol-based versioning}；公共网络共识中的中继也声明 \texttt{FlowCtrl=1-2}。这是文档编号偏差，并非代码实现错误。它还说明了一项实用原则：当资料来源互相矛盾时，应核对规范，并寻找共识等独立证据。
+\end{attenzione}
+
+在本章的参考日期，C 客户端的两项功能仍未在 Arti 客户端中实现。\texttt{Conflux=1} 提供多路径功能：\texttt{tor-proto} crate 已支持它，但 Arti 尚不会构建 Conflux 电路。\texttt{Padding=2} 对应旨在掩盖洋葱服务电路构建过程的填充状态机（\cref{sec:att-wf}）。虽然 \texttt{tor-proto} 包含一个基于 \emph{maybenot} 库的填充框架，但尚未实现这些状态机。中继侧的子协议还没有被标记为已支持：相当一部分中继代码已经存在，但只有当 Arti 能够提供实际可运行的中继时，相关功能才会被正式声明为支持。
+
+% ---------------------------------------------------------------------------
+\section{实验：让 Arti 接入私有网络}\label{sec:lab-arti}
+
+\begin{laboratorio}[20]{第二个客户端：Rust 实现}
+\textbf{目标。}编译 Arti，将它配置为本书私有网络的客户端，并使用其 SOCKS 代理代替 \texttt{test008c}。\\
+\textbf{前置条件。}实验网络正在运行，并已安装 Rust 工具链（\cmd{cargo}）。\\
+\textbf{预计时间。}1--2 小时，其中大部分用于编译。
+\end{laboratorio}
+
+\paragraph{步骤 1：编译。}从本书仓库根目录获取参考版本 Arti 2.6.0，放在 \file{labs/zh-Hans/vendor/arti}，并构建 \texttt{arti} 程序：
+\begin{lstlisting}[language=bash,numbers=none]
+$ mkdir -p labs/zh-Hans/vendor
+$ git clone https://gitlab.torproject.org/tpo/core/arti.git labs/zh-Hans/vendor/arti
+$ git -C labs/zh-Hans/vendor/arti checkout arti-v2.6.0
+$ (cd labs/zh-Hans/vendor/arti && cargo build --release -p arti --locked)
+$ labs/zh-Hans/vendor/arti/target/release/arti --version
+Arti 2.6.0
+\end{lstlisting}
+第一次构建需要几分钟，因为它必须编译整套 crate 及其依赖。
+
+\paragraph{步骤 2：配置。}Arti 不读取 \file{torrc}，而是使用 TOML。为了连接非公开 Tor 网络，Arti 必须知道目录权威节点的身份，以及用来获取最初目录文档的后备缓存；这与 Chutney 生成的 \file{torrc} 中 \texttt{DirAuthority} 配置的作用相同（\cref{sec:rp-file}）。\file{labs/zh-Hans/实验室/arti\_config.py} 脚本读取每台权威节点本地文件中的 RSA 指纹、Ed25519 密钥、v3 证书身份和监听端口，并将这些信息写入 \file{labs/zh-Hans/实验室/net/arti/arti.toml}。下面只是省略内容的示例，不是可直接使用的 TOML：权威身份由本地网络生成，省略号仅作占位：
+\begin{lstlisting}[numbers=none]
+[tor_network]
+fallback_caches = [
+  { rsa_identity = "7B465200C885ED566C6CD4F46DBB0492076D203A",
+    ed_identity = "JwhsA9VS01mRVnQseL9xsKZfstoBae7OcgL3jBvDzis",
+    orports = ["127.0.0.1:5100"] },
+  ...
+]
+[tor_network.authorities]
+v3idents = ["390998046DEFF1E68AC346D7577319791B32C91A", ...]
+\end{lstlisting}
+还有三项配置是为所有节点均位于 \texttt{127.0.0.1} 的网络准备的。\texttt{allow\_local\_addrs} 允许连接本地地址，而公共网络客户端通常禁止这样做。两个不可能的网络前缀长度（IPv4 为 33 位，IPv6 为 129 位）用于关闭同网段约束；否则实验网络里的所有电路都会遭到阻止。最后，\texttt{hsdir\_interval} 缩短洋葱服务时间周期，与 tor 的 \opt{TestingTorNetwork} 效果类似。这些设置参照了 Chutney 自身的 Arti 配置。
+
+\paragraph{步骤 3：启动。}先从本书仓库根目录运行 \file{python3 labs/zh-Hans/实验室/arti\_config.py} 生成配置，再执行 \file{labs/zh-Hans/vendor/arti/target/release/arti proxy -p 9150 -c labs/zh-Hans/实验室/net/arti/arti.toml}。引导耗时取决于机器；在我们的一次运行中：
+\begin{lstlisting}[numbers=none]
+INFO tor_dirmgr::bootstrap: 1: Looking for a consensus.
+INFO tor_dirmgr::bootstrap: 1: Downloading certificates for consensus
+     (we are missing 3/3).
+INFO tor_dirmgr::bootstrap: 1: Downloading microdescriptors (we are missing 8).
+INFO tor_dirmgr: Marked consensus usable.
+WARN tor_netdir: Requested 60 relays, but only 8 were usable, ...  role=Guard
+INFO arti::subcommands::proxy: Sufficiently bootstrapped; proxy now functional.
+INFO tor_guardmgr::guard: We have found that guard [scrubbed] is usable.
+\end{lstlisting}
+从中可以看出三个重要细节。引导流程逐步对应 \cref{sec:dir-client}：先获取共识，再获取三台权威节点的证书，最后下载八个微描述符。\texttt{tor\_netdir} 的警告反映了实验网络太小：守卫管理器希望得到 60 个候选节点，但可用的只有八个。日志中的守卫身份被显示为 \texttt{[scrubbed]}：Arti 利用 \texttt{safelog} crate 标记敏感值，避免将其写入日志，效果类似于 tor 的 \opt{SafeLogging}。在后续目录更新中，其他日志可能出现 \texttt{Applying a consensus diff}（这一行未出现在上方摘录中）。如果差异文件可用且通过 \texttt{DirCache=2} 协商，Arti 可以只下载变更部分；并非每次更新都必然如此。
+
+\paragraph{步骤 4：使用。}Arti 在端口 9150 提供 SOCKS 代理。\cmd{curl} 可以像使用 \texttt{test008c} 一样使用它：
+\begin{lstlisting}[language=bash,numbers=none]
+$ curl -s -o /dev/null -w '%{http_code} in %{time_total}s\n' \
+       --noproxy "" --socks5-hostname 127.0.0.1:9150 http://127.0.0.1:8080/
+200 in 0.047224s
+\end{lstlisting}
+空的 \texttt{-{}-noproxy} 参数可防止 \texttt{NO\_PROXY} 使本地目标绕过 SOCKS。电路经过私有网络中的 C 语言中继：Rust 客户端与 C 中继讲的是完全相同的字节级协议，也就是第二部分研究的协议。最后还有一个与实验~18 有关的发现：仅包含 IP 地址的 SOCKS 请求（\texttt{-{}-socks5}）同样会成功，而 Arti 默认日志没有显示与 tor 类似的警告。不过，\texttt{arti-client} crate 的文档提醒 API 使用者，本地域名解析可能向 DNS 解析器暴露目的地，具体取决于配置；但 SOCKS 请求只携带 IP 地址本身并不能证明 DNS 已经泄露（\cref{sec:lab-opsec}）。
+
+Arti 编译完成后，本实验包含在 \texttt{make verifica-lab} 中；否则该测试会被跳过并给出提示。
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item Arti 用具有内存安全保证的 Rust 重写 tor。它采用模块化库设计，自 2022 年起已是稳定的客户端，也是开发新客户端功能的优先平台。
+  \item Arti 的架构沿协议层次组织：密码学原语和 cell、通道与电路，以及目录、路径和守卫管理。
+  \item 子协议版本精确描述 Arti 的能力。客户端实现了 ntor-v3、CGO、拥塞控制和基于密钥的家族机制；在本章参考日期，Conflux 和填充状态机仍不完整，中继功能仍在开发。
+  \item 与 Chutney 节点类似，Arti 通过配置目录权威节点和缓存接入私有网络。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:30-crate}
+针对第二部分的每一章，找出实现其主要概念的 Arti crate。
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:30-obsoleto}
+Arti 决定不实现过时协议版本，这有什么优点和缺点？哪些用户或节点可能因此无法使用？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:30-cella}
+阅读 \file{crates/tor-cell/src/chancell/codec.rs} 中的 \texttt{decode\_cell}，并与实验~2 的 \texttt{decode} 比较。它如何识别变长 cell？如果输入尚未包含完整 cell，会发生什么？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:30-isolamento}
+使用 Arti 作为 SOCKS 代理，重复实验~11 的流隔离测试。不同的 SOCKS 凭据能否使流避免共用电路？请区分流隔离与“每组凭据永久对应唯一电路”的错误假设，并查找 Arti 的相关配置方法。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:30-libreria}
+使用 \texttt{arti-client} 编写一个简单的 Rust 程序，从文件读取实验~20 的配置，并通过私有网络访问实验服务器上的网页。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item 项目网站 \url{https://arti.torproject.org/} 与源码仓库，特别是 README、\emph{Architectural overview}（\file{doc/dev/Architecture.md}）和兼容性指南（\file{doc/Compatibility.md}）。
+  \item Arti 的更新日志，记录每个月发布版本中的变化。
+  \item Chutney 自动生成 Arti 配置的源码（\file{lib/chutney/arti/config.py}），也是实验~20 的设计来源。
+\end{itemize}

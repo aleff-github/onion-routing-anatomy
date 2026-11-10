@@ -1,0 +1,39 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Prefazione}
+
+Tor è usato ogni giorno da milioni di persone, ed è raccontato quasi sempre per i suoi usi, veri o presunti: la censura aggirata, le fonti protette, il \enquote{dark web}. Questo libro racconta invece come funziona. Parte dai byte che due relay si scambiano e risale, capitolo dopo capitolo, fino alle scelte di progetto, agli attacchi, ai casi reali e alle questioni ancora aperte. E chiede al lettore di non fidarsi: ogni meccanismo descritto nella parte tecnica viene costruito e provato in un laboratorio, su una rete Tor privata che gira su un normale computer.
+
+\section*{Origine, metodo e invito alla revisione}
+
+Questo libro nasce da documenti e appunti di studio che ho prodotto nel corso degli anni, a partire dalla mia tesi di laurea triennale. Per trasformare quei materiali in una trattazione organica ho diretto l'impiego di strumenti di intelligenza artificiale, che hanno contribuito in modo sostanziale a sviluppare le spiegazioni, argomentare e redigere il testo, e realizzare figure, esercizi, codice e laboratori. L'IA non è stata un semplice correttore stilistico e non costituisce un revisore indipendente.
+
+Nonostante i controlli tecnici e la mia revisione, possono rimanere errori, semplificazioni e informazioni non più aggiornate. Invito chi legge a segnalarli e a proporre correzioni attraverso la repository del libro. Ho scelto di distribuire gratuitamente l'opera attraverso i canali ufficiali del progetto, con i relativi sorgenti sotto licenza GNU GPL-3.0-or-later, per favorire la \enquote{diffusione dei saperi senza fondare poteri}. La licenza stabilisce le condizioni di riuso e redistribuzione, anche commerciale.
+
+\section*{A chi è rivolto questo libro}
+
+A studenti di informatica e di sicurezza, a professionisti che incontrano Tor nel proprio lavoro, a chi gestisce o vuole gestire un relay, a chi fa ricerca. Servono nozioni di base di reti (TCP/IP, l'idea di TLS), un po' di familiarità con la riga di comando e, per i laboratori, con Python. La crittografia necessaria è introdotta nel \cref{cap:05-crittografia}, con approfondimenti nell'\cref{cap:B-crittografia}.
+
+\section*{Come leggere questo libro}
+
+Il libro è diviso in cinque parti, che si possono seguire in ordine o scegliendo un percorso:
+\begin{description}
+  \item[Percorso storico e concettuale] Parte I (capitoli 1--4) e Parte V (capitoli 29--31): che cos'è l'anonimato, da dove viene Tor, contro chi protegge, dove sta andando.
+  \item[Percorso del protocollo] Parte II (capitoli 5--16), da leggere in ordine, con i laboratori: è il cuore del libro.
+  \item[Percorso pratico] Parte III (capitoli 17--25): configurare tor, osservarne il traffico, pubblicare un onion service, gestire un relay, usare Tor Browser, misurare la rete, conoscere gli aspetti legali. Il \cref{cap:19-rete-privata} è il prerequisito di tutti i laboratori.
+  \item[Percorso della sicurezza] Parte IV (capitoli 26--28), preceduta dal \cref{cap:04-modello-minaccia}: gli attacchi letti attraverso la ricerca, i casi reali, gli errori operativi.
+\end{description}
+
+\section*{Convenzioni}
+
+Ogni capitolo si apre con gli obiettivi e con una riga \emph{Aggiornato al}, che indica la data e le versioni del software e delle specifiche su cui il contenuto è stato verificato: Tor cambia, e il lettore deve sapere a quale Tor si riferisce il testo. Nel testo \emph{Tor} indica la rete e il progetto, \emph{tor} il programma in C, \emph{Arti} l'implementazione in Rust. I riferimenti alle specifiche hanno la forma \spec{documento}{sezione}; le proposte di modifica al protocollo sono indicate con il loro numero. I termini inglesi conservati nel testo sono raccolti, con il corrispondente italiano, nell'\cref{cap:A-glossario}.
+
+I riquadri separano il filo principale dalle digressioni: \emph{approfondimenti}, \emph{note storiche} e \emph{avvertenze}. Gli esercizi sono graduati con stelle: una per la comprensione, due per l'applicazione, tre per un laboratorio o una piccola ricerca; le soluzioni sono nell'\cref{cap:D-soluzioni}. I laboratori sono numerati da 1 a 20 e costruiscono, nella Parte II, un piccolo client Tor in Python (\texttt{torlab}); il codice e la rete di laboratorio accompagnano il libro, e un sistema di prove automatiche permette di rieseguirli dopo gli aggiornamenti. Tutto questo --- il pacchetto \texttt{torlab}, i venti laboratori, la rete Docker di prova e gli strumenti di verifica --- \`e nel repository del libro: \repolibro.
+
+\section*{Una nota etica}
+
+Tutti gli esperimenti del libro si svolgono sulla rete Tor privata del laboratorio, oppure usano la rete reale solo come un normale client, senza osservare né alterare il traffico di altre persone. È la regola che il Tor Research Safety Board raccomanda a chi fa ricerca, ed è anche una questione di legge (\cref{cap:25-legale}). I capitoli sugli attacchi hanno un taglio analitico e difensivo: spiegano che cosa è stato fatto e come ci si protegge, non come colpire qualcuno.
+
+\section*{Ringraziamenti}
+
+Questo libro poggia sul lavoro del Tor Project e della sua comunit\`a: le specifiche aperte, il codice di \texttt{tor} e di Arti, le proposte di modifica e la documentazione sono la fonte di ogni affermazione tecnica che segue, e la loro disponibilit\`a pubblica \`e ci\`o che permette di verificare tutto alla fonte, anzich\'e chiedere al lettore di fidarsi. Un grazie va anche a chi costruisce e mantiene gli strumenti liberi con cui il libro \`e stato scritto e i suoi laboratori messi alla prova: \LaTeX{}, Python, Docker, Chutney, Wireshark e i molti altri progetti citati nel testo.

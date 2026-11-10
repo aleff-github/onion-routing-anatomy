@@ -1,0 +1,89 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Capítulo \ref{cap:15-dos}: defensas frente a DoS}
+
+\begin{soluzione}{es:15-bucket}
+Durante el primer minuto, el depósito lleno ofrece 60 tokens y la reposición añade $2\times60=120$, lo que permite aproximadamente 180 circuitos, quizá algunos menos porque el cliente queda marcado en cuanto el depósito llega a cero. En una hora, a velocidad sostenida, el total es aproximadamente $60+2\times3600=7260$. Un cliente normal solo crea unas pocas decenas de circuitos.
+\end{soluzione}
+
+\begin{soluzione}{es:15-guard}
+Solo el primer repetidor conoce la IP real del cliente. En los saltos posteriores, la \enquote{dirección} aparente del canal pertenece al repetidor anterior. Un intermedio que limitara los circuitos por dirección limitaría en realidad todos los circuitos procedentes de un guardia determinado, que puede transportar tráfico de miles de usuarios. Perjudicaría a todos en lugar de restringir al atacante concreto. Por eso los límites por dirección se aplican únicamente a conexiones de cliente no autenticadas.
+\end{soluzione}
+
+\begin{soluzione}{es:15-amplificazione}
+El cliente envía un mensaje \texttt{INTRODUCE1} mediante un circuito que puede reutilizar. El servicio debe descifrar la solicitud, efectuar un intercambio hs-ntor y establecer un circuito nuevo de al menos tres saltos hacia el punto de encuentro. Esto implica varios intercambios ntor con repetidores y las celdas necesarias para crear y extender cada salto. Una sola celda del cliente puede, por tanto, provocar varias operaciones de clave pública y decenas de celdas de red: amplificación de uno o dos órdenes de magnitud.
+\end{soluzione}
+
+\begin{soluzione}{es:15-bit}
+Exigir $k$ bits iniciales a cero solo permite niveles de esfuerzo que sean potencias de dos: 1, 2, 4, etcétera. Cada bit adicional duplica el coste computacional esperado. La comprobación lineal, en cambio, permite cualquier esfuerzo entero $E$. Un controlador de realimentación que ajuste el esfuerzo con incrementos pequeños necesita esa escala más fina. Con saltos de duplicación, tendería a oscilar entre un esfuerzo demasiado bajo y otro demasiado alto.
+\end{soluzione}
+
+\begin{soluzione}{es:15-sforzo}
+No. El esfuerzo $E$ forma parte del desafío utilizado para calcular tanto la solución Equi-X como el hash $R$. Cambiar la afirmación a $E=5000$ modifica el desafío e invalida la solución encontrada para $E=50$. El cliente tendría que haber elegido $E=5000$ antes de iniciar la búsqueda.
+\end{soluzione}
+
+\begin{soluzione}{es:15-oom}
+Es un ejercicio de laboratorio. Las celdas se acumulan en la cola de circuitos del repetidor intermedio hasta que su consumo total de memoria supera \opt{MaxMemInQueues}. Entonces el administrador de memoria cierra los circuitos que llevan más tiempo con datos en cola, incluido el nuestro, y registra en el log del repetidor la memoria liberada.
+\end{soluzione}
+
+\begin{soluzione}{es:15-coda}
+Es un ejercicio de programación. Las solicitudes que ofrecen mayor esfuerzo deberían tener tiempos de espera breves y estables. Las de esfuerzo cero deberían atenderse principalmente cuando la cola está casi vacía, o descartarse cuando se reduce. Es el comportamiento previsto: proteger a usuarios dispuestos a asumir un coste computacional moderado.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:16-censura}: censura, puentes y transportes conectables}
+
+\begin{soluzione}{es:16-guard}
+Un puente desempeña la misma función que un guardia, primer salto del circuito, pero no figura en el consenso público. El cliente conoce su dirección mediante una línea de puente obtenida por canales privados. Con \opt{UseBridges}, utiliza puentes \emph{en lugar de} guardias públicos. Añadir un guardia público exigiría conectarse directamente con una dirección publicada, precisamente lo que un censor bloquea o vigila.
+\end{soluzione}
+
+\begin{soluzione}{es:16-strategie}
+\enquote{No parecerse a nada reconocible}: obfs4, cuyo bloqueo exigiría impedir tráfico que no puede reconocerse como protocolo permitido. \enquote{Parecerse a algo permitido}: meek, que obligaría a bloquear un gran proveedor de contenidos; Snowflake, que requeriría interferir con WebRTC, su intermediario de señalización y numerosos proxies voluntarios; WebTunnel, que exigiría bloquear HTTPS hacia sitios desconocidos o los sitios que alojan puentes; y Conjure, cuyo bloqueo requeriría impedir el acceso a grandes rangos de direcciones de proveedores de conectividad colaboradores.
+\end{soluzione}
+
+\begin{soluzione}{es:16-sondaggio}
+Un censor podría examinar conexiones duraderas con direcciones sin nombres de host asociados, bytes de entropía inusualmente alta desde el primer paquete, distribuciones reconocibles de tamaños y tiempos, como ráfagas asociadas a celdas Tor, y proporciones de subida y bajada semejantes a navegación web. \texttt{iat-mode} introduce retardos aleatorios y fragmentación para dificultar el reconocimiento de patrones temporales y de tamaño, a costa de rendimiento.
+\end{soluzione}
+
+\begin{soluzione}{es:16-lox}
+Un censor que bloquea todos los puentes recibidos no consigue reputación: los puentes bloqueados impiden que sus credenciales alcancen niveles superiores o permisos para invitar. Podría, en cambio, mantener puentes sin bloquear mientras acumula suficientes credenciales de nivel alto y después bloquearlos simultáneamente. Eso exige mantener muchas identidades pacientes durante meses, mientras los puentes conocidos siguen ayudando a usuarios legítimos. Cada credencial de nivel alto solo permite acceder a un número limitado de puentes.
+\end{soluzione}
+
+\begin{soluzione}{es:16-entropia}
+Ambas capturas deberían presentar entropía próxima a ocho bits por byte: después del intercambio inicial, TLS también transporta datos cifrados. La diferencia reside en unos pocos bytes reconocibles, como las cabeceras de registros TLS (\texttt{16 03 01}, \texttt{17 03 03}, seguidas de la longitud) y el intercambio inicial sin cifrar. La inspección profunda de paquetes puede reconocerlos sin necesidad de pruebas estadísticas de entropía.
+\end{soluzione}
+
+\begin{soluzione}{es:16-sondaggio-lab}
+El laboratorio~1 agota el tiempo de espera (\texttt{TimeoutError}) porque el puente no responde. Utilizar un parámetro \texttt{cert} incorrecto hace que \cmd{obfs4proxy}, del lado del cliente, no complete el intercambio. El puente no reconoce la marca de autenticación del cliente, así que no responde y cierra la conexión después de un retardo. Según el nivel de detalle de los registros, puede aparecer un mensaje de intercambio fallido o ninguno relevante.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:17-torrc}: instalación y torrc}
+
+\begin{soluzione}{es:17-verifica}
+tor informa de la opción desconocida mediante un mensaje como \texttt{Unknown option '...'. Failing.} y termina sin iniciarse. Ejecutar \texttt{--dump-config short} con el \file{torrc} del cliente muestra solo los valores diferentes de los predeterminados, incluidas opciones propias del laboratorio como \opt{TestingTorNetwork}, las entradas \opt{DirAuthority} y los puertos de escucha.
+\end{soluzione}
+
+\begin{soluzione}{es:17-isolamento}
+Si el correo y el foro comparten circuito, la salida observa conexiones con el proveedor de correo del usuario, que quizá lo identifique, y con el foro seudónimo a través del mismo circuito y en el mismo intervalo. Podría vincular el seudónimo con la persona. Las soluciones incluyen dos puertos SOCKS separados, uno por aplicación, aislados por defecto salvo que reciban el mismo \opt{SessionGroup}; credenciales SOCKS distintas con \texttt{IsolateSOCKSAuth}; o \texttt{IsolateDestAddr} en el puerto compartido.
+\end{soluzione}
+
+\begin{soluzione}{es:17-exitnodes}
+Un adversario que vigile redes italianas podría observar tanto al usuario que entra en Tor como a una salida italiana que se conecta con el destino italiano. Ambos extremos estarían en la misma jurisdicción o región de red observable, facilitando la correlación excluida del modelo de amenazas de Tor. Además, las salidas italianas son relativamente escasas y restringir la selección hace al usuario más distinguible y facilita atacarlo con repetidores maliciosos.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:18-stem}: puerto de control y Stem}
+
+\begin{soluzione}{es:18-codici}
+\texttt{552} es un error permanente en respuesta a un comando: la clave \texttt{pippo} no existe. En cambio, un mensaje \texttt{650} no responde a un comando, sino que es un evento asíncrono enviado porque el cliente se suscribió mediante \texttt{SETEVENTS}. Puede llegar en cualquier momento, incluso mientras se espera la respuesta a otro comando.
+\end{soluzione}
+
+\begin{soluzione}{es:18-onion}
+Esquema: llama a \file{create\_ephemeral\_hidden\_service} del controlador, asociando el puerto virtual 80 al local 8080 e indicando \file{await\_publication}. El método devuelve la dirección onion. Accede mediante \texttt{curl --socks5-hostname 127.0.0.1:9008 http://<address>.onion/}. tor conserva en memoria las claves de un servicio efímero y las entrega al controlador, que puede guardarlas para recrear más adelante la misma dirección. Por defecto, el servicio desaparece al cerrarse la conexión de control, salvo que esté desacoplado.
+\end{soluzione}
+
+\begin{soluzione}{es:18-banda}
+Esquema: registra una función para \texttt{EventType.BW}. Recibe cada segundo la cantidad de bytes leídos y escritos como \texttt{event.read} y \texttt{event.written}. Muestra esos valores mientras descargas un archivo grande. La tasa de entrada aumenta hacia el límite impuesto por el control de congestión y los recursos disponibles.
+\end{soluzione}
+
+\begin{soluzione}{es:18-percorso}
+Con \file{\_\_LeaveStreamsUnattached}, tor no asigna automáticamente flujos a circuitos. \texttt{EXTENDCIRCUIT 0 test004r,test005r,test006e} construye un circuito y devuelve su identificador. Cuando llega un evento \texttt{STREAM} con estado \texttt{NEW}, llama a \texttt{ATTACHSTREAM}. La selección manual de rutas es peligrosa porque elude las políticas de guardias y la selección ponderada: una ruta inusual puede distinguir al usuario o un programa malicioso podría dirigir deliberadamente su tráfico por repetidores del adversario.
+\end{soluzione}

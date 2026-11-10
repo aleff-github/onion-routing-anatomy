@@ -1,0 +1,400 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Construcción de circuitos: TAP, CREATE\_FAST, ntor y ntor-v3}\label{cap:09-circuiti}
+% Encabezado más corto: el título completo llega hasta el número de página.
+\chaptermark{Circuitos: TAP, CREATE\_FAST, ntor y ntor-v3}
+\aggiornatoal{23 de septiembre de 2026}{commit de torspec \texttt{8e1f245}; tor 0.4.9.13; propuestas 216, 332 y 350}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item describir cómo el cliente construye un circuito salto a salto mediante CREATE2 y EXTEND2;
+  \item explicar las garantías que debe proporcionar un intercambio de creación de circuitos: autenticación del repetidor, confidencialidad y secreto hacia adelante;
+  \item seguir paso a paso los intercambios CREATE\_FAST, ntor y ntor-v3, y entender por qué se abandonó TAP;
+  \item derivar las cuatro claves de un salto (Df, Db, Kf y Kb) a partir del material negociado;
+  \item verificar una implementación mediante los vectores de prueba oficiales;
+  \item construir circuitos reales hacia un repetidor de la red de laboratorio (laboratorio~3).
+\end{itemize}
+\end{obiettivi}
+
+Con un canal abierto (\cref{cap:07-canali}) y el alfabeto de celdas a nuestra disposición (\cref{cap:08-celle}), tenemos todo lo necesario para construir la estructura central de Tor: el \textbf{circuito}. Veremos cómo el cliente establece un secreto compartido con cada repetidor de la ruta, desconocido para cualquier otra parte, y cómo convierte ese secreto en claves para cifrar el tráfico. Su utilización en el cifrado por capas será el tema del \cref{cap:10-cifratura-relay}.
+
+% ---------------------------------------------------------------------------
+\section{Un salto cada vez}\label{sec:circ-telescopio}
+
+El cliente construye el circuito \emph{incrementalmente}, o mediante \enquote{construcción telescópica}~\cite{dingledine2004tor}:
+\begin{enumerate}
+  \item Elige una ruta, por ejemplo un guardia $R_1$, un intermedio $R_2$ y una salida $R_3$ (\cref{cap:13-percorso}).
+  \item En su canal hacia $R_1$, envía una celda \cella{CREATE2} que contiene la primera mitad de un intercambio criptográfico. $R_1$ responde con \cella{CREATED2}; a partir de ese momento, el cliente y $R_1$ comparten material de claves.
+  \item Envía un mensaje \texttt{EXTEND2}, cifrado para $R_1$, con el que le pide extender el circuito hasta $R_2$. El mensaje contiene la primera mitad de un nuevo intercambio, esta vez destinado a $R_2$.
+  \item $R_1$ abre un canal hacia $R_2$, o reutiliza uno existente, y le envía una celda \cella{CREATE2} con esos datos. La respuesta \cella{CREATED2} vuelve a $R_1$, que la reenvía al cliente dentro de un mensaje \texttt{EXTENDED2}.
+  \item El cliente completa el intercambio con $R_2$ y repite el proceso para $R_3$, ahora a través de $R_1$ y $R_2$.
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig09-telescopio}
+\caption{Construcción telescópica de un circuito de tres saltos. Cada intercambio se produce entre el cliente y un solo repetidor; los intermedios se limitan a transportar los mensajes. Las flechas discontinuas representan mensajes que circulan dentro del circuito, cifrados con las claves de los saltos ya establecidos.}
+\label{fig:telescopio}
+\end{figure}
+
+Esta organización tiene una consecuencia fundamental. El intercambio con $R_3$ pasa por $R_1$ y $R_2$, pero está destinado a la clave pública de $R_3$: ni $R_1$ ni $R_2$ pueden derivar su secreto compartido. Y, como cada salto utiliza un secreto distinto, ningún repetidor puede leer lo que el cliente intercambia con los demás. El guardia $R_1$ conoce al cliente, pero no el destino del tráfico; la salida $R_3$ conoce el destino, pero no quién lo envió.
+
+\begin{storia}[Encaminamiento cebolla de primera generación]
+En el sistema original del Naval Research Laboratory, el cliente preparaba una sola \enquote{cebolla}: un mensaje cifrado en capas mediante las claves públicas de todos los repetidores. Cada repetidor retiraba una capa para descubrir el siguiente salto y su propia clave de sesión (\cref{cap:03-nascita-tor}). Un repetidor comprometido en el futuro podría haber descifrado cebollas previamente registradas. La construcción telescópica de Tor, con un intercambio Diffie--Hellman efímero por salto, introdujo el \emph{secreto hacia adelante}: una vez eliminadas las claves de sesión, ni siquiera la posesión posterior de las claves a largo plazo permite descifrar el tráfico pasado~\cite{dingledine2004tor}.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{Celdas y mensajes}\label{sec:circ-celle}
+
+\subsection{CREATE2 y CREATED2}
+
+El formato de \cella{CREATE2} es deliberadamente genérico~\spec{tor-spec}{Create and Created cells}: un tipo de intercambio (HTYPE, 2 bytes), una longitud (HLEN, 2 bytes) y los datos (HDATA). \cella{CREATED2} solo contiene HLEN y HDATA, porque el tipo ya se conoce. Todo debe caber en una celda de longitud fija, por lo que los datos del intercambio no pueden superar $509 - 4 = 505$ bytes en \cella{CREATE2}.
+
+\begin{center}
+\begin{tabular}{cll}
+\toprule
+HTYPE & Intercambio & Estado \\
+\midrule
+\texttt{0x0000} & TAP & obsoleto; eliminado en tor 0.4.9.1-alpha \\
+\texttt{0x0001} & --- & reservado \\
+\texttt{0x0002} & ntor & en uso \\
+\texttt{0x0003} & ntor-v3 & en uso; preferido \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Si el intercambio tiene éxito, el repetidor responde con \cella{CREATED2}; en caso de fallo, responde con \cella{DESTROY}. El CircID de la celda nueva obedece las reglas de \cref{sec:circid}: desde el protocolo de enlace~4, quien abrió el canal utiliza valores cuyo bit más significativo es 1.
+
+\subsection{EXTEND2 y EXTENDED2}\label{sec:extend2}
+
+El mensaje relay \texttt{EXTEND2} (comando relay 14) contiene, además de los campos de \cella{CREATE2}, una lista de \emph{especificadores de enlace} que indican al repetidor cómo llegar al siguiente salto e identificarlo~\spec{tor-spec}{Extend and Extended messages}:
+
+\begin{center}
+\begin{tabular}{cll}
+\toprule
+Tipo & Contenido & Longitud \\
+\midrule
+\texttt{00} & dirección IPv4 y ORPort & 6 \\
+\texttt{01} & dirección IPv6 y ORPort & 18 \\
+\texttt{02} & identidad RSA heredada (SHA-1, 20 bytes) & 20 \\
+\texttt{03} & identidad Ed25519 & 32 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+El repetidor que extiende el circuito debe verificar \emph{todas} las identidades indicadas y no debe extenderlo si el repetidor alcanzado no demuestra poseerlas durante el intercambio inicial del canal descrito en \cref{cap:07-canali}. Así puede asegurarse el cliente de que su intercambio llega al repetidor previsto, aunque nunca se comunique directamente con $R_2$. El repetidor también rechaza las solicitudes de extensión hacia sí mismo o hacia el repetidor del que procede la solicitud.
+
+Dos detalles muestran el cuidado que dedica el protocolo a la \emph{indistinguibilidad}. Primero, la especificación recomienda enviar siempre los especificadores en el mismo orden (\texttt{00}, \texttt{02}, \texttt{03}, \texttt{01}), para que este no revele la implementación utilizada. Segundo, \texttt{EXTEND2} siempre viaja dentro de una celda \cella{RELAY\_EARLY} (\cref{sec:comandi}); el número limitado de estas celdas impide construir circuitos de longitud arbitraria.
+
+\texttt{EXTENDED2} (comando relay 15) tiene exactamente el mismo cuerpo que \cella{CREATED2}.
+
+% ---------------------------------------------------------------------------
+\section{Qué debe garantizar un intercambio}\label{sec:circ-requisiti}
+
+Antes de examinar los intercambios uno por uno, fijemos qué esperamos de ellos. Al terminar, el cliente y el repetidor deben compartir un secreto con las siguientes propiedades:
+\begin{description}
+  \item[Autenticación del repetidor] El cliente debe saber que comparte el secreto con \emph{ese repetidor concreto} y con ningún otro. En cambio, el repetidor no debe conocer información sobre la identidad del cliente: el intercambio se autentica \emph{en una sola dirección}; de lo contrario, cada repetidor conocería la identidad del cliente.
+  \item[Confidencialidad] Un observador de la red, o un repetidor anterior del circuito que reenvía los mensajes, no debe poder derivar el secreto.
+  \item[Secreto hacia adelante] Incluso quien consiga en el futuro las claves de larga duración del repetidor no debe poder reconstruir los secretos de sesiones anteriores.
+  \item[Eficiencia] Un repetidor con mucho tráfico realiza miles de intercambios por segundo, por lo que importa el coste de cálculo.
+\end{description}
+Cada intercambio que examinaremos establece compromisos distintos entre estos requisitos.
+
+% ---------------------------------------------------------------------------
+\section{TAP: el primer intercambio}\label{sec:tap}
+
+El intercambio original de Tor, TAP (\emph{Tor Authentication Protocol}), combinaba Diffie--Hellman convencional sobre un grupo modular de 1024 bits con cifrado de clave pública RSA de 1024 bits. El cliente cifraba su mitad de Diffie--Hellman con la clave RSA \enquote{onion} del repetidor; solo el repetidor previsto podía descifrarla y responder. A continuación se derivaban las claves mediante KDF-TOR, una función basada en SHA-1 (\cref{sec:circ-chiavi}).
+
+TAP cumplía los requisitos, pero sus márgenes de seguridad se reducían: 1024 bits resultan insuficientes tanto para RSA como para Diffie--Hellman modular, la construcción de cifrado híbrido se consideraba frágil y los intercambios eran costosos. Desde 2013, TAP convivió con ntor, y con tor 0.4.9.1-alpha los repetidores dejaron de admitirlo por completo (\proposta{350}). Queda un vestigio: por compatibilidad, todavía publican la antigua clave RSA \enquote{onion} en sus descriptores. En la red de laboratorio puede observarse en los microdescriptores bajo \texttt{onion-key}, junto a la clave \texttt{ntor-onion-key} que sí se utiliza.
+
+% ---------------------------------------------------------------------------
+\section{CREATE\_FAST: cuando no hace falta una clave pública}\label{sec:create-fast}
+
+Existe un caso en el que no es necesario un intercambio de clave pública: el \emph{primer} salto. El cliente acaba de abrir un canal TLS con ese repetidor y de verificar su identidad; por tanto, TLS ya proporciona un canal cifrado y autenticado. \cella{CREATE\_FAST} aprovecha esta circunstancia~\spec{tor-spec}{CREATE\_FAST/CREATED\_FAST cells}:
+\begin{enumerate}
+  \item El cliente envía 20 bytes aleatorios $X$.
+  \item El repetidor responde con 20 bytes aleatorios $Y$ y 20 bytes $KH$.
+  \item Ambos derivan material de claves con KDF-TOR a partir de $K_0 = X \| Y$. Los primeros 20 bytes deben coincidir con $KH$, lo que demuestra que el repetidor recibió $X$.
+\end{enumerate}
+
+La seguridad de \cella{CREATE\_FAST} depende por completo del canal TLS: quien pueda leer su tráfico también podrá leer $X$ e $Y$. Por ello solo debería emplearse en circuitos de un salto. Un caso habitual es el inicio de un cliente que necesita descargar información de directorio desde un repetidor cuya clave onion todavía no conoce. El código de \texttt{tor} lo expresa de forma explícita: \file{should\_use\_create\_fast\_for\_circuit} (en \file{src/core/or/circuitbuild.c}) selecciona \cella{CREATE\_FAST} únicamente cuando el cliente carece de una clave onion utilizable para el primer salto.
+
+\begin{attenzione}[CREATE\_FAST revela el primer salto]
+Un repetidor que recibe \cella{CREATE\_FAST} sabe con certeza que ocupa el primer salto del circuito y, por tanto, que la parte del otro extremo del canal es el cliente. La especificación sugiere que los repetidores aprovechen precisamente esta señal para rechazar circuitos de un único salto que intenten salir hacia Internet.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{ntor}\label{sec:ntor}
+
+El intercambio ntor, propuesto por Goldberg, Stebila y Ustaoglu~\cite{goldberg2013ntor} e introducido en Tor mediante la \proposta{216} (tor 0.2.4.8-alpha, 2013), sustituye RSA y Diffie--Hellman modular por \textbf{Curve25519}, un intercambio de claves rápido sobre curvas elípticas con claves de solo 32 bytes (\cref{cap:05-crittografia}).
+
+\subsection{Los elementos}
+
+El repetidor dispone de una clave onion Curve25519 de duración intermedia: la secreta $b$ y la pública $B = b\,G$, publicada en su descriptor como \texttt{ntor-onion-key}. El cliente conoce $B$ y la identidad del repetidor (aquí, su huella RSA de 20 bytes, \texttt{ID}). Utilizaremos $\mathrm{EXP}(P,k)$ para representar un intercambio Diffie--Hellman Curve25519 entre el punto $P$ y el escalar $k$, y $H(x,t)$ para el HMAC-SHA256 del mensaje $x$ con la clave $t$. Las claves $t$ son cadenas constantes derivadas del identificador \texttt{"ntor-curve25519-sha256-1"}.
+
+\subsection{El protocolo}
+
+\begin{enumerate}
+  \item El cliente genera un par efímero $(x,X)$ y envía en \cella{CREATE2} los elementos \texttt{ID} (20 bytes), $B$ (32 bytes, para identificar la clave onion elegida) y $X$ (32 bytes). El total es de 84 bytes.
+  \item El repetidor comprueba \texttt{ID} y $B$, genera un par efímero $(y,Y)$ y calcula
+  % En EPUB esta fórmula se representa como SVG; el texto alternativo se
+  % configura en epub.mk4 y debe revisarse si cambia la fórmula.
+  \[ \mathit{secret\_input} = \mathrm{EXP}(X, y) \,\|\, \mathrm{EXP}(X, b) \,\|\, \texttt{ID} \,\|\, B \,\|\, X \,\|\, Y \,\|\, \texttt{PROTOID}. \]
+  A partir de este valor deriva $\mathit{KEY\_SEED} = H(\mathit{secret\_input}, t_{\mathit{key}})$ y un valor de confirmación $\mathit{AUTH}$. Responde con $Y$ (32 bytes) y $\mathit{AUTH}$ (32 bytes).
+  \item El cliente calcula el mismo $\mathit{secret\_input}$ utilizando sus secretos, $\mathrm{EXP}(Y,x) \,\|\,\allowbreak \mathrm{EXP}(B,x) \,\|\, \ldots$, y verifica que $\mathit{AUTH}$ coincide.
+\end{enumerate}
+
+El núcleo del intercambio son dos operaciones Diffie--Hellman:
+\begin{itemize}
+  \item $\mathrm{EXP}(X,y) = \mathrm{EXP}(Y,x)$ combina dos claves \textbf{efímeras}, lo que proporciona secreto hacia adelante porque $x$ e $y$ se eliminan inmediatamente después.
+  \item $\mathrm{EXP}(X,b) = \mathrm{EXP}(B,x)$ utiliza la clave onion del repetidor y proporciona \textbf{autenticación}: solo quien conozca $b$ puede calcular ese valor y generar el $\mathit{AUTH}$ correcto.
+\end{itemize}
+
+Ninguna de las operaciones basta por sí sola. Sin la primera, quien robara $b$ en el futuro podría reconstruirlo todo; sin la segunda, un intermediario podría hacerse pasar por el repetidor. Mientras tanto, el cliente no utiliza claves a largo plazo: el repetidor solo sabe que comparte el secreto con \enquote{quien haya enviado $X$}.
+
+\begin{approfondimento}[Comprobar el punto en el infinito]
+La especificación exige que ambas partes verifiquen que ninguna operación Diffie--Hellman produce el \enquote{punto en el infinito}, representado aquí por un resultado compuesto únicamente por ceros. Un adversario podría enviar como $Y$ un punto de orden pequeño, forzando $\mathrm{EXP}(Y,x)$ a un valor predecible. En Curve25519, esta comprobación sencilla es una alternativa suficiente a verificar exhaustivamente que $Y$ pertenece al grupo correcto. En el laboratorio~3 corresponde a tres líneas de la función \file{x25519\_dh}.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{ntor-v3}\label{sec:ntor3}
+
+ntor presenta una limitación: no transporta nada más que las claves. Con el tiempo surgió la necesidad de \emph{negociar} opciones al establecer un salto, como el control de congestión (\cref{cap:11-stream}) o CGO (\cref{cap:10-cifratura-relay}). ntor-v3 (\proposta{332}) amplía ntor con \textbf{mensajes cifrados} en ambas direcciones e introduce además varias modificaciones criptográficas.
+
+\subsection{Qué cambia}
+
+\begin{itemize}
+  \item La identidad del repetidor pasa a ser su identidad \textbf{Ed25519} (32 bytes), en lugar de su huella RSA.
+  \item Las funciones hash pertenecen ahora a la familia SHA-3: SHA3-256 para resúmenes y MAC, y SHAKE-256 para derivación de claves de longitud variable. Cada entrada lleva una etiqueta de dominio codificada junto con su longitud (función $\mathrm{ENCAP}$), evitando confundir un valor calculado para un propósito con otro destinado a un uso diferente.
+  \item Una cadena de verificación \texttt{VER}, conocida por las dos partes, interviene en todos los cálculos: un intercambio realizado en un contexto no puede reutilizarse en otro. Para circuitos ordinarios, \texttt{tor} utiliza \texttt{"circuit extend"} (constante \file{NTOR3\_CIRC\_VERIFICATION} en \file{src/core/crypto/onion\_crypto.c}).
+  \item El cliente puede enviar un mensaje $CM$ y el repetidor otro $SM$, ambos cifrados.
+\end{itemize}
+
+\subsection{El protocolo}
+
+\begin{enumerate}
+  \item El cliente genera $(x,X)$ y calcula inmediatamente $B_x = \mathrm{EXP}(B,x)$. A partir de $B_x$ y los parámetros públicos deriva dos claves de \enquote{fase 1}: una para cifrar $CM$ mediante AES-256-CTR y otra para autenticarlo con un MAC. Envía \texttt{ID} (32), $B$ (32), $X$ (32), $CM$ cifrado y un MAC (32).
+  \item El repetidor calcula $\mathrm{EXP}(X,b) = B_x$, deriva las mismas claves de fase 1, verifica el MAC y descifra $CM$. Después genera $(y,Y)$ y combina las operaciones $\mathrm{EXP}(X,y)$ y $\mathrm{EXP}(X,b)$ en un $\mathit{key\_seed}$. Mediante SHAKE-256 deriva una clave para cifrar su respuesta $SM$ y el flujo de claves del circuito. Responde con $Y$ (32), $\mathit{AUTH}$ (32) y $SM$ cifrado.
+  \item El cliente verifica $\mathit{AUTH}$, descifra $SM$ y deriva el mismo flujo de claves.
+\end{enumerate}
+
+\begin{attenzione}[El mensaje del cliente no tiene secreto hacia adelante]
+$CM$ se cifra con claves que dependen únicamente de $B_x$, derivado mediante la clave onion del repetidor. Alguien que registre el intercambio y obtenga $b$ posteriormente podría descifrar $CM$. La especificación lo declara explícitamente: solo los datos del repetidor se benefician del secreto hacia adelante. Por ello, $CM$ debe contener exclusivamente parámetros de negociación, nunca datos del usuario.
+\end{attenzione}
+
+\subsection{Extensiones}
+
+Los mensajes $CM$ y $SM$ comparten un formato común~\spec{tor-spec}{Sending extensions in the circuit extension handshake}: un byte con el número de extensiones y, para cada una, un tipo (1 byte), una longitud (1 byte) y los datos. Las extensiones definidas para crear circuitos son:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}cl>{\raggedright\arraybackslash}X@{}}
+\toprule
+Tipo & Dirección & Significado \\
+\midrule
+1 & cliente $\to$ repetidor & \file{CC\_FIELD\_REQUEST}: el cliente solicita control de congestión de la \proposta{324}; cuerpo vacío \\
+2 & repetidor $\to$ cliente & \file{CC\_FIELD\_RESPONSE}: el repetidor acepta; 1 byte, \file{sendme\_inc} \\
+3 & cliente $\to$ repetidor & solicitud de subprotocolo, por ejemplo \texttt{[02 06]} para CGO (\texttt{Relay=6}) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{¿Qué intercambio utiliza tor actualmente?}
+
+En tor 0.4.9.13, la elección se realiza por separado para cada salto (\file{circuit\_pick\_create\_handshake}). Se utiliza ntor-v3 cuando el repetidor admite control de congestión y esa función está activada, como suele ocurrir en la red actual, o cuando se desea negociar CGO. De lo contrario, \texttt{tor} vuelve a ntor. En la práctica, como observa la especificación, los clientes modernos casi siempre utilizan ntor-v3, y ntor permanece como alternativa de compatibilidad.
+
+% ---------------------------------------------------------------------------
+\section{De los secretos negociados a las claves del circuito}\label{sec:circ-chiavi}
+
+Cada intercambio produce un flujo de bytes seudoaleatorios del que se extraen las claves utilizadas para cifrar celdas relay bajo el esquema tradicional (denominado \enquote{tor1})~\spec{tor-spec}{Setting circuit keys}:
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+Clave & Bytes & Finalidad & Dirección \\
+\midrule
+Df & 20 & semilla del resumen acumulativo (SHA-1) & cliente $\to$ repetidor \\
+Db & 20 & semilla del resumen acumulativo (SHA-1) & repetidor $\to$ cliente \\
+Kf & 16 & clave AES-128-CTR & cliente $\to$ repetidor \\
+Kb & 16 & clave AES-128-CTR & repetidor $\to$ cliente \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+El total es de 72 bytes (constante \file{CPATH\_KEY\_MATERIAL\_LEN} del código de \texttt{tor}). La forma de producir el flujo depende del intercambio:
+\begin{description}
+  \item[KDF-TOR] (\cella{CREATE\_FAST} y anteriormente TAP) $K = \mathrm{SHA1}(K_0 \| \texttt{00}) \,\|\, \mathrm{SHA1}(K_0 \| \texttt{01}) \,\|\, \ldots$. Los primeros 20 bytes forman $KH$, seguidos por Df, Db, Kf y Kb. El contador de un solo byte limita la salida a 5120 bytes, mucho más de lo necesario.
+  \item[KDF-RFC5869] (ntor) utiliza HKDF con SHA-256 y \file{KEY\_SEED} como clave; Df, Db, Kf y Kb ocupan los primeros 72 bytes.
+  \item[SHAKE-256] (ntor-v3) utiliza los primeros 32 bytes para cifrar $SM$; después aparecen Df, Db, Kf y Kb.
+\end{description}
+
+No es un lujo utilizar claves distintas para las dos direcciones. Si cliente y repetidor emplearan la misma clave AES-CTR para ida y vuelta, los flujos cifrados reutilizarían el mismo flujo de clave y el XOR de dos celdas revelaría el XOR de ambos textos en claro.
+
+CGO modifica la distribución de claves; lo examinaremos en el \cref{cap:10-cifratura-relay}.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: construir circuitos reales}\label{sec:lab-circuiti}
+
+\begin{laboratorio}[3]{Intercambios para crear circuitos}
+\textbf{Objetivo.} Implementar \file{labs/es/codigo/torlab/ntor.py} con CREATE\_FAST, ntor y ntor-v3; verificarlo mediante los vectores de prueba oficiales; construir circuitos de un salto hacia un repetidor de la red de laboratorio.\\
+\textbf{Requisitos previos.} Laboratorios~1 y~2, red de laboratorio activa, biblioteca \texttt{cryptography} (X25519, AES) y módulo estándar \texttt{hashlib} (SHA-3, SHAKE).\\
+\textbf{Tiempo estimado.} 3--4 horas.
+\end{laboratorio}
+
+\paragraph{Paso 1: ntor-v3 en pocas líneas.} La implementación sigue casi literalmente la especificación. Primero, las funciones auxiliares:
+\begin{lstlisting}[language=Python]
+NTOR3_PROTOID = b"ntor3-curve25519-sha3_256-1"
+def _t(name):  return NTOR3_PROTOID + b":" + name.encode()
+def _encap(s): return struct.pack(">Q", len(s)) + s
+def _h3(s, t): return hashlib.sha3_256(_encap(t) + s).digest()
+def _mac3(k, msg, t):
+    return hashlib.sha3_256(_encap(t) + _encap(k) + msg).digest()
+def _kdf3(s, t, n): return hashlib.shake_256(_encap(t) + s).digest(n)
+\end{lstlisting}
+
+Después, el lado del cliente:
+\begin{lstlisting}[language=Python]
+def ntor3_client_start(ID, B, message, ver=b"circuit extend", x=None):
+    sk, X = x25519_generate(x)
+    Bx = x25519_dh(sk, B)
+    phase1 = _kdf3(Bx + ID + X + B + NTOR3_PROTOID + _encap(ver),
+                  _t("kdf_phase1"), 64)
+    enc_k1, mac_k1 = phase1[:32], phase1[32:]
+    encrypted = aes_ctr(enc_k1, message)
+    mac = _mac3(mac_k1, ID + B + X + encrypted, _t("msg_mac"))
+    state = Ntor3State(sk, X, B, ID, Bx, mac, ver)
+    return state, ID + B + X + encrypted + mac
+
+def ntor3_client_finish(st, response, length=72):
+    Y, auth, msg = response[:32], response[32:64], response[64:]
+    secret_input = (x25519_dh(st.x, Y) + st.Bx + st.ID + st.B + st.X + Y
+                    + NTOR3_PROTOID + _encap(st.ver))
+    key_seed = _h3(secret_input, _t("key_seed"))
+    verify = _h3(secret_input, _t("verify"))
+    auth_input = (verify + st.ID + st.B + Y + st.X + st.mac
+                  + _encap(msg) + NTOR3_PROTOID + b"Server")
+    if not hmac.compare_digest(_h3(auth_input, _t("auth_final")), auth):
+        raise HandshakeError("AUTH de ntor-v3 no válido")
+    stream = _kdf3(key_seed, _t("kdf_final"), 32 + length)
+    return aes_ctr(stream[:32], msg), stream[32:]
+\end{lstlisting}
+
+La comparación de $\mathit{AUTH}$ utiliza \file{hmac.compare\_digest}, que tarda lo mismo independientemente de dónde difieran los valores. Una comparación ordinaria podría revelar, a través del tiempo de ejecución, cuántos bytes iniciales son correctos.
+
+\paragraph{Paso 2: vectores de prueba.} No basta con verificar un intercambio criptográfico haciéndolo \enquote{funcionar}: dos implementaciones que compartan el mismo error podrían funcionar perfectamente entre sí. Utilizaremos en cambio los \textbf{vectores de prueba} de la especificación: entradas fijas, incluidas las claves supuestamente \enquote{aleatorias}, y salidas esperadas, byte a byte. La \proposta{332} proporciona un vector completo para ntor-v3, y la \proposta{216} ofrece varios para la función HKDF de ntor. El archivo \file{labs/es/codigo/torlab/test/test\_ntor.py} los reproduce; por ejemplo:
+
+\begin{lstlisting}[language=Python]
+def test_ntor3_vectors_proposal_332():
+    st, hdata = ntor3_client_start(h(V["ID"]), h(V["B"]), h(V["CM"]),
+                                    ver=h(V["VER"]), x=h(V["x"]))
+    assert hdata.hex() == V["client"]
+    sm, stream = ntor3_client_finish(st, h(V["server"]), length=256)
+    assert sm == h(V["SM"])
+    assert stream[:32].hex() == V["keystream_start"]
+\end{lstlisting}
+
+Otras pruebas verifican que alterar $\mathit{AUTH}$ o cambiar la cadena \texttt{VER} provoque el fallo del intercambio.
+
+\paragraph{Paso 3: claves del repetidor.} Para realizar el intercambio necesitamos la identidad Ed25519 del repetidor y su \texttt{ntor-onion-key}. Un cliente real las obtiene del consenso y de los microdescriptores (\cref{cap:12-directory}); aquí las tomaremos de esas mismas fuentes, mediante el archivo \file{cached-microdescs.new} del cliente de laboratorio, en el que cada repetidor tiene una entrada como esta:
+
+\begin{lstlisting}[numbers=none]
+onion-key
+-----BEGIN RSA PUBLIC KEY-----
+MIGJAoGBAJet1Oxp+cvg/vgryEmJuVv2s++WxQt5Id1BQ9UNwCOVFcYvEN9KVklM
+...
+-----END RSA PUBLIC KEY-----
+ntor-onion-key gsi2OisnQE96UkjOVvBKtWDLfwRdYG9d4DScg2wz4Qs
+id ed25519 Kz1dj/u6/g7WvhHrt9Ds0jVZjKC+KHo26hWViXAJ1Pg
+\end{lstlisting}
+
+Obsérvese la antigua clave TAP, todavía publicada pero sin uso, y las dos líneas base64 que realmente necesitamos.
+
+\paragraph{Paso 4: contra un repetidor real.} Abrimos un canal hacia \texttt{test003r} mediante el laboratorio~1 y enviamos una celda \cella{CREATE2} para cada tipo de intercambio:
+
+\begin{lstlisting}[language=Python]
+c = open_channel("127.0.0.1", 5103, expected_identity=ed)
+st, hd = ntor3_client_start(ed, B, encode_extensions([]))
+c.send(Cell(0x80000001, CellCommand.CREATE2,
+              create2_body(HTYPE_NTOR_V3, hd)))
+r = c.receive()
+sm, stream = ntor3_client_finish(st, hdata_created2(r.body))
+keys = CircuitKeys.from_stream(stream)
+\end{lstlisting}
+
+Al repetir la prueba con las distintas variantes, se obtiene:
+
+\begin{lstlisting}[numbers=none]
+<- CircID=0x80000001 CREATED2 cuerpo=509 bytes
+   ntor-v3 correcto, mensaje del repetidor: []
+<- CircID=0x80000002 CREATED2 cuerpo=509 bytes
+   ntor-v3 con CC_FIELD_REQUEST correcto, respuesta: [(2, b'\x1f')]
+<- CircID=0x80000003 CREATED2 cuerpo=509 bytes
+   ntor correcto
+<- CircID=0x80000004 CREATED_FAST cuerpo=509 bytes
+   CREATE_FAST correcto
+<- CircID=0x80000005 DESTROY cuerpo=509 bytes     (MAC modificado)
+   motivo: 1
+\end{lstlisting}
+
+Todos los intercambios funcionan si no se alteran. En el segundo caso, el repetidor acepta el control de congestión y responde con la extensión 2, con \file{sendme\_inc} igual a 31 (\cref{cap:11-stream}). En el último caso modificamos deliberadamente un bit del MAC: el repetidor rechaza el intercambio con una celda \cella{DESTROY} cuyo motivo es 1, \texttt{PROTOCOL}. Aquí puede revelarse el motivo real porque el repetidor genera el error; no está reenviando el \cella{DESTROY} de otro nodo (\cref{sec:comandi}).
+
+\paragraph{Una observación inesperada.} En el \cref{cap:07-canali} vimos que un canal nuevo no recibe celdas \cella{PADDING}. Ahora este canal tiene cuatro circuitos abiertos y, sin embargo, durante veinte segundos de espera tampoco llega ninguna celda. La explicación está en el código de \texttt{tor} (\file{src/core/or/relay.c}): un repetidor considera que un canal está \enquote{en uso}, y por tanto admite relleno, únicamente si transporta un circuito que continúa más allá de ese repetidor. Los circuitos de un solo salto no cuentan. En el \cref{cap:10-cifratura-relay}, cuando extendamos un circuito, aparecerá el relleno.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item Un circuito se construye salto a salto: \cella{CREATE2}/\cella{CREATED2} con el primer repetidor y \texttt{EXTEND2}/\texttt{EXTENDED2} a través del circuito para los siguientes. Cada intercambio involucra al cliente y a un único repetidor.
+  \item \texttt{EXTEND2} contiene especificadores de enlace (dirección e identidades RSA y Ed25519); el repetidor que extiende debe verificar esas identidades.
+  \item El intercambio de un circuito autentica al repetidor, pero no al cliente, y debe proporcionar confidencialidad y secreto hacia adelante.
+  \item TAP (RSA y DH de 1024 bits) se eliminó en tor 0.4.9.1-alpha. \cella{CREATE\_FAST} depende de TLS y solo debería emplearse en circuitos de un salto.
+  \item ntor combina dos intercambios Curve25519: efímero--efímero para el secreto hacia adelante y efímero--clave onion para la autenticación.
+  \item ntor-v3 utiliza identidad Ed25519 y la familia SHA-3; añade mensajes cifrados para negociar opciones como el control de congestión y CGO. El mensaje del cliente carece de secreto hacia adelante.
+  \item El flujo de claves aporta Df y Db (20 bytes cada una) y Kf y Kb (16 bytes cada una): una clave y un resumen para cada dirección.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:09-dimensioni}
+Calcula la longitud de HDATA en \cella{CREATE2} para ntor y para ntor-v3 con un mensaje de tres bytes. ¿Cuál es el tamaño máximo del mensaje $CM$ de ntor-v3 dentro de una celda \cella{CREATE2}?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:09-fast}
+¿Por qué no debe utilizarse \cella{CREATE\_FAST} para el segundo salto de un circuito? ¿Qué podría hacer el primer repetidor?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:09-direzioni}
+¿Por qué emplean cliente y repetidor distintas claves AES en ambas direcciones (Kf y Kb)? Explica qué sucedería si utilizaran una sola clave.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-extend2}
+Escribe en hexadecimal la cabecera del cuerpo de un mensaje \texttt{EXTEND2} (número de especificadores y especificador IPv4) para extender un circuito hasta el repetidor de laboratorio \texttt{test004r}. ¿Cuántos bytes ocuparía el mensaje completo con ntor-v3 y un $CM$ de un byte?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-ds}
+En ntor, supongamos que el cliente utiliza solo $\mathrm{EXP}(Y,x)$ y omite $\mathrm{EXP}(B,x)$. Describe un ataque concreto que podría realizar un repetidor intermedio al reenviar el intercambio al siguiente salto. Supón ahora que omite $\mathrm{EXP}(Y,x)$: ¿qué propiedad se pierde?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-ver}
+¿Qué función cumple la cadena \texttt{VER} de ntor-v3? Imagina que otro protocolo distinto de Tor utilizara el mismo intercambio con las mismas claves: ¿qué podría ocurrir sin \texttt{VER}?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-cc}
+Repite el paso 4 del laboratorio con la solicitud de subprotocolo \texttt{[02 06]} (CGO), además de \file{CC\_FIELD\_REQUEST}. ¿La acepta el repetidor? Según la \proposta{359}, explica por qué CGO requiere también control de congestión.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:09-ntor-ref}
+El repositorio de \texttt{tor} contiene una implementación de referencia de ntor en Python (\file{src/test/ntor\_ref.py}). Utilízala para generar vectores completos del intercambio ntor (cliente y repetidor) e incorpóralos a \file{test\_ntor.py}.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:09-relay}
+Implementa el \emph{lado del repetidor} de ntor-v3 (funciones \file{server\_part1} y \file{server\_part2}) y verifícalo mediante los vectores de la \proposta{332}. Después ejecuta un intercambio completo entre el cliente y el repetidor, en memoria.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification}, capítulos \enquote{Creating and extending circuits} y \enquote{Setting circuit keys}~\cite{torspec}.
+  \item I.~Goldberg, D.~Stebila y B.~Ustaoglu, \titolo{Anonymity and one-way authentication in key exchange protocols}~\cite{goldberg2013ntor}: trabajo que define ntor y establece su seguridad.
+  \item Propuestas 216 (ntor), 332 (ntor-v3) y 350 (retirada de TAP).
+\end{itemize}

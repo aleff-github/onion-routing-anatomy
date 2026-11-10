@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Corpo decifrato di una cella RELAY nel formato tradizionale tor1: intestazione di 11 byte con Cmd (1, offset 0), Recognized (2, offset 1), StreamID (2, offset 3), Digest (4, offset 5) e Length (2, offset 9). Da offset 11 seguono Length byte di dati, con Length al massimo 498, poi eventuale padding fino all'offset finale 509. Il mittente imposta Recognized a zero per la cella destinata al relativo hop; il digest tradizionale include anche il padding. Quando c'è spazio, la specifica raccomanda fino a quattro byte iniziali a zero, seguiti da byte casuali: se il padding è più corto di quattro byte, è tutto a zero; se Length è 498, il padding manca. Il ricevente non deve dipendere dal contenuto del padding.}
+% Corpo decifrato di una cella RELAY (formato tradizionale)
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\scriptsize,inner sep=1pt,align=center}]
+  \node[campo,fill=torviola!35,minimum width=1.2cm] (a) {Cmd\\(1)};
+  \node[campo,fill=torviola!15,minimum width=1.6cm,right=0pt of a] (b) {Recognized\\(2)};
+  \node[campo,fill=torviola!15,minimum width=1.4cm,right=0pt of b] (c) {StreamID\\(2)};
+  \node[campo,fill=torviola!15,minimum width=1.4cm,right=0pt of c] (d) {Digest\\(4)};
+  \node[campo,fill=torviola!15,minimum width=1.3cm,right=0pt of d] (e) {Length\\(2)};
+  \node[campo,fill=torverde!15,minimum width=3.2cm,right=0pt of e] (f) {Data\\(Length)};
+  \node[campo,fill=torgrigio!10,minimum width=2cm,right=0pt of f] (g) {Padding\\zeri + casuali};
+  \foreach \n/\o in {a/0,b/1,c/3,d/5,e/9,f/11} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (g.north east) {509};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]a.south west) -- ([yshift=-2pt]e.south east)
+    node[midway,below=6pt,font=\sffamily\small] {intestazione: 11 byte};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]f.south west) -- ([yshift=-2pt]g.south east)
+    node[midway,below=6pt,font=\sffamily\small] {498 byte};
+\end{tikzpicture}

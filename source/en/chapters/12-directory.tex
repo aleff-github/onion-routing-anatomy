@@ -1,0 +1,326 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{The Directory System}\label{cap:12-directory}
+\aggiornatoal{23 September 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; consensus method 36}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item explain why Tor needs a directory system and which risks that system must avoid;
+  \item distinguish its documents: descriptors, microdescriptors, votes, consensuses, and authority certificates;
+  \item describe how directory authorities vote each hour and combine their votes;
+  \item understand the criteria used to assign flags;
+  \item read a consensus line by line and verify its signatures;
+  \item download and verify the laboratory network's consensus using your own code (Laboratory~6).
+\end{itemize}
+\end{obiettivi}
+
+In the previous laboratories, we always knew in advance which relays to connect to, which keys they used, and which ports they listened on: we read that information from the laboratory network's files. A real client does not have that luxury. It must discover which relays exist, where they are, which keys they use, and how trustworthy they are. That is the job of the \textbf{directory system}, the subject of this chapter.
+
+% ---------------------------------------------------------------------------
+\section{The Problem}\label{sec:dir-problema}
+
+A directory system for Tor must satisfy several partly competing requirements:
+\begin{description}
+  \item[Correctness] Information about relays (addresses and keys) must be authentic. An adversary who convinced a client that a particular relay had a different key could intercept its traffic.
+  \item[Common view] All clients must see \emph{the same} list of relays. If an adversary could give each client a different list, perhaps containing only a few adversary-controlled relays, clients could be recognized by the relays they use. This is a \emph{partitioning}, or \emph{epistemic}, attack.
+  \item[Resistance to abuse] Anyone can add relays to the network. The system must limit the influence of someone adding many relays (a \emph{Sybil} attack) and be able to exclude relays that misbehave.
+  \item[Scalability] Millions of clients download directory information several times a day. Distribution must be economical.
+\end{description}
+
+Tor's solution, developed over three versions of the directory protocol, is a small set of trusted servers, the \textbf{directory authorities}. Every hour, they vote and jointly sign a single document: the \textbf{consensus}~\spec{dir-spec}{Outline}.
+
+\begin{storia}[Three generations]
+Under the first version of the protocol, each authority published its own relay list, so a dishonest authority could mislead clients. Under the second, clients downloaded every authority's list and combined the views themselves, multiplying bandwidth costs. The third version, in use for over fifteen years, delegates that combination to the authorities: they produce one document, signed by all, that clients need only verify. At that point the authorities also stopped signing with the same key they used as relays, which they had to keep in plaintext in memory.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{The Participants}\label{sec:dir-attori}
+
+\begin{description}
+  \item[Directory authority] Servers operated by trusted members of the Tor community. The public network has nine, plus a separate authority for bridges (\cref{cap:16-censura}). Their list is compiled into tor (\file{src/app/config/auth\_dirs.inc}) so that every client starts with the same set. Each authority has a long-term \emph{identity} key kept offline, which certifies a \emph{signing} key valid for 3 to 12 months. The latter signs votes and consensuses.
+  \item[Directory cache] Relays that fetch consensuses and descriptors from authorities and redistribute them to clients, reducing the authorities' load. They have the \texttt{V2Dir} flag and serve \file{BEGIN\_DIR} streams (\cref{cap:11-stream}).
+  \item[Fallback directory] A list of approximately two hundred stable relays, also compiled into tor (\file{fallback\_dirs.inc}, 200 entries in tor 0.4.9.13). A newly installed client asks one of them for its first consensus instead of overwhelming the authorities.
+  \item[Relay] Relays periodically publish their own descriptors to the authorities.
+  \item[Client] Clients download the consensus and microdescriptors, verify them, and use them to select paths (\cref{cap:13-percorso}).
+\end{description}
+
+\Cref{fig:dir-flusso} shows how these documents circulate.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig12-flow}
+\caption{The flow of directory documents. Relays publish descriptors to the authorities; authorities exchange votes, compute consensus from the available votes, and exchange signatures; directory caches download consensuses and microdescriptors and serve them to clients.}
+\label{fig:dir-flusso}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{The Documents}\label{sec:dir-documenti}
+
+All directory documents are text in the format the specification calls \emph{netdoc}: a sequence of lines (\emph{items}), each containing a keyword and arguments, sometimes followed by a base64-encoded object between \texttt{-----BEGIN ...-----} and \texttt{-----END ...-----} lines. This format is straightforward for people to read and programs to parse, as we will see in the laboratory.
+
+\begin{description}
+  \item[Relay descriptor] (\emph{server descriptor}) Written and signed by the relay: addresses and ports, keys (identity, ntor onion key, Ed25519 certificates), advertised bandwidth, full exit policy, family, platform, and version. It is republished at least every 18 hours (\file{FORCE\_REGENERATE\_DESCRIPTOR\_INTERVAL} in tor's code), or sooner if something important changes.
+  \item[Extra-info document] Statistics not needed for protocol operation (such as bridge traffic broken down by country), published separately to avoid bloating descriptors. They feed Tor Metrics (\cref{cap:24-metrics}).
+  \item[Microdescriptor] The subset of a descriptor that a client actually needs and that changes infrequently: the ntor onion key, family, an exit-policy summary, and Ed25519 identity. Authorities calculate it; each microdescriptor is identified by the SHA-256 digest of its text.
+  \item[Vote] An authority's assessment of the network: the flags, bandwidth, and version for each relay.
+  \item[Consensus] The result of combining votes, signed by the authorities. It has two \emph{flavors}: \texttt{ns}, containing the full descriptor digest for each relay, and \texttt{microdesc}, containing the microdescriptor digest. Modern clients use only the more compact second flavor.
+  \item[Authority key certificate] Binds an authority's signing key to its identity.
+\end{description}
+
+\begin{approfondimento}[Why microdescriptors?]
+A full descriptor is several kilobytes long and changes frequently, for example whenever advertised bandwidth changes. Downloading all descriptors for thousands of relays several times a day would cost clients considerable bandwidth, especially on mobile connections. A microdescriptor contains only information that rarely changes. Frequently changing information, such as bandwidth and flags, belongs in the consensus, which the client downloads anyway. Because a client requests microdescriptors by digest rather than relay identity, a directory cache cannot give one client a microdescriptor different from the one everyone else receives.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Voting}\label{sec:dir-voto}
+
+\subsection{The schedule}
+
+Each consensus has three timestamps~\spec{dir-spec}{Voting timeline}:
+\begin{description}
+  \item[\texttt{valid-after}] when it becomes valid;
+  \item[\texttt{fresh-until}] when it ceases to be the freshest consensus; normally this matches the next consensus's \texttt{valid-after};
+  \item[\texttt{valid-until}] when the client can no longer use it.
+\end{description}
+On the public network, the voting interval is one hour and a consensus remains valid for three intervals (the \opt{V3AuthVotingInterval} and \opt{V3AuthNIntervalsValid} options). Thus several valid consensuses coexist at any given time and a delay at the authorities need not block clients. Before each interval begins, authorities have five minutes to exchange votes and five minutes to exchange signatures (\opt{V3AuthVoteDelay} and \opt{V3AuthDistDelay}). In the laboratory network, everything is accelerated: a vote every 20 seconds, with 4 seconds for each phase (\cref{sec:rp-opzioni}).
+
+\subsection{Combining the votes}
+
+Each authority collects the others' votes and computes the consensus with a deterministic algorithm, so that all authorities obtain the same document and can sign it~\spec{dir-spec}{Computing a consensus from a set of votes}. The principal rules are:
+\begin{itemize}
+  \item a relay appears in the consensus only if enough authorities know it and, under current consensus methods (24 and later; the laboratory uses 36), only if it has both \texttt{Running} and \texttt{Valid};
+  \item a relay receives a flag if more than half the authorities voting on that flag assign it;
+  \item bandwidth (\texttt{w}) is the lower median of the voted bandwidths, except that if at least three authorities have \emph{measured} its bandwidth, the median of those measurements is used;
+  \item network parameters (\texttt{params}) are included if a majority of all authorities, or at least three authorities, vote for them (\texttt{i > total\_authorities/2 || i >= 3} in the code); the chosen value is the lower median;
+  \item timestamps are the medians of the proposed times.
+\end{itemize}
+Because authorities may run different tor versions, the document declares the \emph{consensus method} in use: a number identifying the exact set of rules, chosen as the highest method supported by enough authorities. The laboratory network's consensus uses method 36.
+
+\subsection{Flags}\label{sec:dir-flag}
+
+Flags summarize each authority's assessment of a relay~\spec{dir-spec}{Assigning flags in a vote}. The specification warns that the exact criteria may change and clients must not depend on them. \Cref{tab:flag} summarizes the current criteria.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+Flag & Criterion (summary) \\
+\midrule
+\texttt{Running} & the authority has reached the relay on all its ORPorts within the past 45 minutes \\
+\texttt{Valid} & tor version not known to be defective; relay not excluded by the authorities \\
+\texttt{Fast} & bandwidth among the fastest seven-eighths, or at least 100\,KB/s \\
+\texttt{Stable} & time-weighted mean time between failures at least the median, or at least 7 days \\
+\texttt{Guard} & \texttt{Fast}, \texttt{Stable}, \emph{familiar} (on the network for several weeks), good availability, sufficient bandwidth, \texttt{V2Dir} \\
+\texttt{Exit} & permits exit traffic to at least one /8 block on both ports 80 and 443 \\
+\texttt{HSDir} & \texttt{Stable} and \texttt{Fast}, running for at least 96 hours: may store onion service descriptors \\
+\texttt{V2Dir} & serves directory information (directory cache) \\
+\texttt{Authority} & is a directory authority \\
+\texttt{BadExit} & exit that should not be used as such (for example, because it modifies traffic) \\
+\texttt{MiddleOnly} & should be used only as a middle relay (introduced in 0.4.7.2-alpha) \\
+\texttt{StaleDesc} & descriptor published more than 18 hours ago \\
+\texttt{Sybil} & exceeds the maximum number of relays per IP address (normally 2) \\
+\bottomrule
+\end{tabularx}
+\caption{Consensus flags and a summary of how authorities assign them.}
+\label{tab:flag}
+\end{table}
+
+\texttt{BadExit} and \texttt{MiddleOnly} let authorities respond to suspicious relays without removing them altogether. The \texttt{Sybil} flag limits the effect of someone running many relays from one address. In the laboratory network, where every relay runs on 127.0.0.1, the limit is disabled by \texttt{AuthDirMaxServersPerAddr=0}; the laboratory will show this in the \texttt{params} line.
+
+\subsection{Bandwidth}
+
+How fast is a relay? The value advertised in its descriptor is not trustworthy: a malicious relay could claim enormous bandwidth to be chosen more often. Some authorities, called \emph{bandwidth authorities}, therefore measure relay bandwidth by passing traffic through them with a dedicated tool (currently \emph{sbws}, \cref{cap:24-metrics}) and include it in their votes as \texttt{Measured}. If at least three measurements are available, the consensus uses their median. Otherwise, the \texttt{w} line reports \texttt{Unmeasured=1} and a limited value. Consensus bandwidth is not strictly a speed but a \emph{weight}: it determines the probability that a relay will be selected (\cref{cap:13-percorso}).
+
+% ---------------------------------------------------------------------------
+\section{Anatomy of a Consensus}\label{sec:dir-anatomia}
+
+Here is an abbreviated microdesc consensus from the laboratory network, downloaded in Laboratory~6. The excerpts in this section come from a copy preserved in the repository (\file{labs/en/code/torlab/test/data/consensus-microdesc.txt}), used by the laboratory tests. You can therefore inspect them line by line without starting the network. The copy was captured on 23 September 2026, when the laboratory relays were still running tor 0.4.9.12. That is the version in the relay entry's \texttt{v} line, not the book's reference version, which the network runs today.
+
+\paragraph{Header.}
+\begin{lstlisting}[numbers=none]
+network-status-version 3 microdesc
+vote-status consensus
+consensus-method 36
+valid-after 2026-09-23 15:37:20
+fresh-until 2026-09-23 15:37:40
+valid-until 2026-09-23 15:38:00
+voting-delay 4 4
+known-flags Authority Exit Fast Guard HSDir ... Running Stable ... Valid
+params AuthDirMaxServersPerAddr=0 cc_alg=2
+\end{lstlisting}
+The \texttt{params} line contains the \emph{consensus parameters}, which authorities use to adjust the entire network's behavior without requiring software updates. Here, besides the per-address limit, it specifies the congestion-control algorithm (\file{cc\_alg=2}, Vegas, \cref{sec:cc}). The public network has dozens of parameters.
+
+\paragraph{A relay entry.}
+\begin{lstlisting}[numbers=none]
+r test006e ml1aPg9UFy4VCx85YcpsRs/9shc 2038-01-01 00:00:00 127.0.0.1 5106 0
+m FfrgO+s4VYS6WKBq3pjfMDs+uZ2uVsvgG88JilbhIOo
+s Exit Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 ... Link=3-5 ... Relay=2-6
+w Bandwidth=4096
+\end{lstlisting}
+\begin{description}
+  \item[\texttt{r}] nickname, RSA identity digest (base64), a date field no longer meaningful in the consensus, IPv4 address, ORPort, and DirPort;
+  \item[\texttt{m}] digest of the microdescriptor to download;
+  \item[\texttt{s}] flags;
+  \item[\texttt{v}, \texttt{pr}] tor version and supported \emph{subprotocols}: this is where a client learns, for example, that the relay supports CGO (\texttt{Relay=6}) or link protocols 3--5;
+  \item[\texttt{w}] bandwidth weight in kilobytes per second.
+\end{description}
+In the \texttt{ns} flavor, each entry also has a \texttt{p} line summarizing the exit policy by port. In the microdesc flavor, this summary is in the microdescriptor and is not repeated in the consensus.
+
+\paragraph{Footer and signatures.}
+\begin{lstlisting}[numbers=none]
+directory-footer
+bandwidth-weights Wbd=821 Wbe=0 Wbg=5000 Wbm=10000 Wdb=10000 ...
+directory-signature sha256 3776EF73A9214587AEFB3D732FA4A443CFF491BA
+                           79E102D226590BC5D1D1EBBAD8A16122EC0F9801
+-----BEGIN SIGNATURE-----
+...
+-----END SIGNATURE-----
+\end{lstlisting}
+The \texttt{bandwidth-weights} values are coefficients clients use to balance relay usage across circuit positions (\cref{cap:13-percorso}). Signatures follow, one per authority: the hash algorithm, authority identity digest, signing-key digest, and signature.
+
+% ---------------------------------------------------------------------------
+\section{Verifying a Consensus}\label{sec:dir-firme}
+
+A client accepts a consensus only if it bears valid signatures from \textbf{more than half} the authorities it knows. In tor's code, the threshold is \file{n\_v3\_authorities/2 + 1} (\file{src/feature/nodelist/networkstatus.c}): 5 signatures out of 9 on the public network, or 2 out of 3 in the laboratory. To verify a signature, the client needs:
+\begin{enumerate}
+  \item the authority's \textbf{certificate}, which the client downloads (\nolinkurl{/tor/keys/all}) and verifies against the authority identity known in advance;
+  \item the \textbf{signed text}: the entire document from its beginning up to and including the space following the first \texttt{directory-signature} keyword;
+  \item the signature scheme: RSA with PKCS\#1 v1.5 padding applied directly to the digest (SHA-1 or SHA-256), \emph{without} the algorithm identifier normally expected by PKCS\#1~\spec{dir-spec}{Signing documents}.
+\end{enumerate}
+
+\begin{approfondimento}[Up to the space or up to the newline?]
+The specification's general section on signed documents says the signature covers the text through the \emph{newline} following the signature line. The consensus-specific section instead specifies the \emph{space} following \texttt{directory-signature}, ensuring that all authorities sign exactly the same bytes even though their signature lines differ. In Laboratory~6, we tested both readings against a real consensus from the laboratory network. All three signatures were valid using the space rule; none was valid using the newline rule. When in doubt, an experimental check against an independent implementation remains the final arbiter.
+\end{approfondimento}
+
+\begin{attenzione}[The authority list is a trust anchor]
+The entire system rests on the list of authorities compiled into the software. A user can change it, but the specification advises against doing so: a client using different authorities would see a different consensus from everyone else and would be recognizable. The authorities themselves are targets. If a majority were compromised, they could sign a consensus containing malicious relays. This is why they are operated by different people in different countries, with identity keys kept offline.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{How a Client Stays Up to Date}\label{sec:dir-client}
+
+A client does not download a new consensus at the stroke of every hour: if all clients did that together, directory caches would be overwhelmed. Instead, it chooses a random time between three-quarters of the first interval after the consensus ceases to be fresh and seven-eighths of the remaining time before it expires~\spec{dir-spec}{Client operation}. The specification gives an example: for a consensus valid from 1:00, fresh until 2:00, and valid until 4:00, the client will seek a new one at a random time between 2:45 and 3:50.
+
+To save bandwidth, a client can request only the \emph{differences} from the consensus it already holds (a \emph{consensus diff}), identified by its SHA3-256 digest. It then downloads only missing microdescriptors, requesting them by digest (\nolinkurl{/tor/micro/d/} followed by digests separated with \texttt{-}).
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: Downloading and Verifying a Consensus}\label{sec:lab-directory}
+
+\begin{laboratorio}[6]{The laboratory network's consensus}
+\textbf{Objective.} Write \file{labs/en/code/torlab/directory.py} to download a consensus, certificates, and microdescriptors from an authority through a circuit, parse them, and verify the signatures.\\
+\textbf{Prerequisites.} Laboratories~1--5; the laboratory network running.\\
+\textbf{Estimated time.} 3 hours.
+\end{laboratorio}
+
+\paragraph{Step 1: downloading with BEGIN\_DIR.} Like tor, we use a one-hop circuit to a directory, without congestion control, and open \file{BEGIN\_DIR} streams. We speak HTTP/1.0 over the stream:
+\begin{lstlisting}[language=Python]
+def download(circ, path, stream_id):
+    s = Stream(circ, stream_id)
+    circ.send(RelayMessage(RelayCommand.BEGIN_DIR, stream_id, b""))
+    _, msg = s._next()                      # CONNECTED, empty body
+    s.send(f"GET {path} HTTP/1.0\r\n\r\n".encode())
+    header, _, body = s.receive_all().partition(b"\r\n\r\n")
+    return body
+
+circ = build([relay("000a")], cc=False)
+text = download(circ, "/tor/status-vote/current/consensus-microdesc", 1)
+\end{lstlisting}
+
+\paragraph{Step 2: the netdoc format.} A roughly twenty-line function, \texttt{items}, splits a document into items and collects \texttt{-----BEGIN}/\texttt{-----END} objects. Two parsers are built on it: \file{parse\_consensus}, which produces an entry for each relay with its flags, bandwidth, policy, and microdescriptor digest, and \file{parse\_certificates}.
+
+\paragraph{Step 3: verifying signatures.}
+\begin{lstlisting}[language=Python]
+def signed_text(text):
+    start = text.index("network-status-version ")
+    pos = text.index("\ndirectory-signature ") + len("\ndirectory-signature ")
+    return text[start:pos].encode()
+
+def verify_signature(consensus, signature, cert):
+    h = hashlib.sha256 if signature.algorithm == "sha256" else hashlib.sha1
+    expected = h(signed_text(consensus.text)).digest()
+    recovered = cert.signing_key.recover_data_from_signature(
+        signature.signature, padding.PKCS1v15(), None)
+    return recovered == expected
+\end{lstlisting}
+The \file{recover\_data\_from\_signature} method, with algorithm \texttt{None}, returns the digest embedded in the signature without expecting an algorithm identifier: exactly Tor's scheme.
+
+\paragraph{Step 4: the results.} In one of our runs on the laboratory network (dates, names, and counts depend on the network instance):
+\begin{lstlisting}[numbers=none]
+consensus: 6035 bytes; 2026-09-23 15:37:20 -> 2026-09-23 15:38:00
+method 36; signatures 3; certificates 3
+params: {'AuthDirMaxServersPerAddr': 0, 'cc_alg': 2}
+  test006e 127.0.0.1:5106 w=4096 flag=['Exit', 'Fast', 'Guard', ...]
+  test000a 127.0.0.1:5100 w=20   flag=['Authority', 'Fast', 'Guard', ...]
+  ...
+valid signatures: 3 (required: 2)
+microdescriptors: 8; match consensus m lines: True
+\end{lstlisting}
+The consensus covers 40 seconds (two 20-second intervals), is signed by all three authorities, and the SHA-256 digest of every downloaded microdescriptor matches its \texttt{m} line in the consensus. The chain of trust runs from the authorities' keys to each relay's ntor key.
+
+\paragraph{Step 5: negative controls.} A verification that never fails verifies nothing. Change a single digit in the consensus (\texttt{Bandwidth=4096} to \texttt{4097}) and the number of valid signatures drops to zero; with only one known authority, it drops to one. The \file{test/test\_directory.py} files repeat these checks against a saved copy of the consensus, so they also run without the network.
+
+\paragraph{Step 6: the real consensus.} The same code works on the public network. Download a consensus and matching authority certificates from CollecTor for the same period, then verify them:
+\begin{lstlisting}[language=Python,numbers=none]
+c = parse_consensus(open("consensus-microdesc-2026-09-23-15").read())
+cert = parse_certificates(open("certs").read())
+valid, required, _ = verify_consensus(c, cert, 9)
+print(valid, required)          # 9 5
+\end{lstlisting}
+All nine signatures are valid, well above the required five. One detail causes trouble on the first attempt: CollecTor files begin with an annotation line, \texttt{@type network-status-microdesc-consensus-3 1.0}, which is not part of the signed document. Including it changes the digest, making \emph{all} signatures invalid. This looks like a cryptographic error but is actually a formatting error. The \texttt{signed\_text} function therefore starts at \texttt{network-status-version}, and a test checks that behavior.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item The directory system must give all clients the same authentic view of the network, resist Sybil attacks, and scale to millions of users.
+  \item Nine directory authorities (plus one for bridges), listed in the code, vote every hour and sign a single consensus, valid for three hours.
+  \item Relays publish descriptors; clients use the microdesc consensus and microdescriptors, downloaded by digest.
+  \item A flag is assigned if more than half the authorities responsible for it vote for it; bandwidth measured by at least three authorities takes precedence over advertised bandwidth.
+  \item A client accepts a consensus bearing valid signatures from more than half the authorities; the signature covers text up through the space following \texttt{directory-signature}.
+  \item Consensus parameters adjust the entire network's behavior without requiring software updates.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:12-validita}
+A consensus has \texttt{valid-after} at 10:00, \texttt{fresh-until} at 11:00, and \texttt{valid-until} at 13:00. During which interval will the client seek its replacement? What happens if it has not found a new consensus by 13:00?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:12-flag}
+A relay has 500\,KB/s bandwidth, has been on the network for two days, and has exit policy \texttt{accept *:443, reject *:*}. Which flags can it receive? Why not \texttt{Exit}?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-partizione}
+Describe a partitioning attack in which a malicious directory cache sends one particular client an old but still valid consensus. What limits the attack? Why does requesting microdescriptors by digest help?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-mediana}
+Three authorities measure a relay's bandwidth: 5000, 5200, and 90000. Which value appears in the consensus? What if the third authority, colluding with the relay, were the only one to measure it?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-voti}
+Find the \file{v3-status-votes} file in one authority's directory on the laboratory network. Compare that authority's vote with the consensus: which lines differ, and why?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-md}
+Choose a relay from the consensus downloaded in the laboratory. Calculate its microdescriptor digest manually (using \cmd{sha256sum}) and compare it with the \texttt{m} line. At which line does the hashed text start, and where does it end?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:12-autorita}
+Stop one of the laboratory network's three authorities and download the consensus again after one minute. How many signatures does it contain? Does your verifier accept it? Repeat with two authorities stopped, and explain what you observe when the consensus expires.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:12-ns}
+Also download the \texttt{ns} consensus (\nolinkurl{/tor/status-vote/current/consensus}) and verify its signatures. Which hash algorithms does it use? What additional information does the \texttt{r} line contain compared with the microdesc flavor?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item \titolo{Tor directory protocol, version 3} (dir-spec)~\cite{torspec}: formats, voting, flag assignment, and client/cache operation.
+  \item The shared-randomness protocol document (srv-spec), which authorities use to produce a common random value each day; we will need it for onion services (\cref{cap:14-onion-services}).
+  \item Tor Metrics and CollecTor, \url{https://metrics.torproject.org/}: historical archives of consensuses, votes, and descriptors.
+\end{itemize}

@@ -1,0 +1,127 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Network Architecture}\label{cap:06-architettura}
+\aggiornatoal{23 September 2026}{tor 0.4.9.13; public consensus of 23 September 2026, 15:00 UTC}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item list the roles of Tor network nodes and their respective responsibilities;
+  \item describe the protocol layers, from the TLS channel to an application's stream;
+  \item follow, at a high level, everything that happens when someone opens a web page through Tor;
+  \item understand how different implementations and versions coexist on the same network.
+\end{itemize}
+\end{obiettivi}
+
+Before examining the details in subsequent chapters, we need a bird's-eye view of the network. This chapter is a map: every element will be revisited and explored in greater depth later, with references pointing to the relevant sections.
+
+% ---------------------------------------------------------------------------
+\section{Roles}\label{sec:arch-ruoli}
+
+The Tor network consists of programs performing different roles, often more than one at the same time. \Cref{fig:arch-ruoli} summarizes them.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig06-roles}
+\caption{Roles in the Tor network. A client builds a circuit through a guard, middle, and exit. Directory authorities publish the consensus listing relays. Bridges take the place of guards for users affected by censorship. Onion services are reached through a rendezvous point without using an exit.}
+\label{fig:arch-ruoli}
+\end{figure}
+
+\begin{description}
+  \item[Client] The user's program, such as the one included in Tor Browser. It selects paths, builds circuits, and offers applications a SOCKS port. It does not accept connections from the network and does not authenticate itself (\cref{cap:07-canali}).
+  \item[Relay] A node that forwards traffic for others. Depending on the flags assigned by directory authorities and its configuration, it may act as:
+  \begin{itemize}
+    \item a \textbf{guard}: the first hop in a client's circuits, selected once and used for an extended period (\cref{sec:guard});
+    \item a \textbf{middle}: an intermediate hop that knows neither the source nor the destination;
+    \item an \textbf{exit}: the final hop, opening Internet connections according to its exit policy (\cref{cap:11-stream});
+    \item an \textbf{HSDir}: storing onion-service descriptors (\cref{sec:os-hsdir});
+    \item a \textbf{directory cache}: redistributing the consensus and descriptors (\cref{cap:12-directory}).
+  \end{itemize}
+  \item[Directory authority] Nine trusted servers that vote hourly on the network's state and sign the consensus; some also measure relay bandwidth.
+  \item[Bridge] An unpublished relay used as a first hop by people who cannot access public relays, often behind a pluggable transport (\cref{cap:16-censura}).
+  \item[Onion service] A service reachable only through Tor without revealing its location (\cref{cap:14-onion-services}).
+\end{description}
+
+In the public consensus of 23 September 2026, there are 9,358 relays: 5,306 with the \texttt{Guard} flag and 3,177 with the \texttt{Exit} flag (1,615 have both). Guards account for 70\,\% of total bandwidth, and exits for 33\,\% (\cref{cap:13-percorso}).
+
+% ---------------------------------------------------------------------------
+\section{Protocol Layers}\label{sec:arch-livelli}
+
+Tor's protocol can be described as a stack of layers, each built upon the one below (\cref{fig:arch-livelli}).
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig06-layers}
+\caption{The layers of the Tor protocol and the chapters that describe them. Each layer uses the one beneath it: streams travel as relay messages, relay messages are carried in cells encrypted in layers, and cells travel inside TLS channels.}
+\label{fig:arch-livelli}
+\end{figure}
+
+\begin{description}
+  \item[Channel] A TLS connection between two adjacent nodes, over which the relay's identity is verified (\cref{cap:07-canali}).
+  \item[Cells] The 514-byte transmission units carried by a channel (\cref{cap:08-celle}).
+  \item[Circuit] A multi-hop path built one hop at a time using handshakes that derive different keys for each hop (\cref{cap:09-circuiti}).
+  \item[Layered encryption] Relay messages wrapped in one encryption layer for each hop (\cref{cap:10-cifratura-relay}).
+  \item[Stream] Application TCP connections opened by the exit and managed using windows and congestion control (\cref{cap:11-stream}).
+\end{description}
+Alongside this stack are the directory system, which supplies clients with the list of relays, and the onion-service protocol, which uses circuits to meet at a rendezvous point.
+
+% ---------------------------------------------------------------------------
+\section{A Web Page from Start to Finish}\label{sec:arch-percorso}
+
+Let us follow, at a high level, what happens when someone starts Tor Browser for the first time and opens a page.
+\begin{enumerate}
+  \item \textbf{Startup.} tor contacts a directory authority or one of approximately two hundred \emph{fallback directories} listed in its source code and downloads the consensus, whose signatures it verifies. It then downloads relay microdescriptors (\cref{cap:12-directory}).
+  \item \textbf{Guard selection.} It randomly selects a small sample of guards, weighted by bandwidth, and uses two of them (\cref{sec:guard}).
+  \item \textbf{Channel.} It opens a TLS connection to a guard and verifies its identity using \cella{CERTS} cells (\cref{cap:07-canali}).
+  \item \textbf{Circuit.} It selects an exit suitable for the destination and a middle relay, and constructs a three-hop circuit using \cella{CREATE2} and \texttt{EXTEND2} (\cref{cap:09-circuiti,cap:13-percorso}). In practice, tor builds some circuits in advance so they are available when needed.
+  \item \textbf{Stream.} Through the SOCKS port, the browser requests a connection to \texttt{www.example.com:443}. tor sends a \texttt{BEGIN} message to the exit, which resolves the name and opens a TCP connection (\cref{cap:11-stream}).
+  \item \textbf{Data.} The browser speaks HTTPS with the website through the stream. The exit sees the website's name and TLS traffic but not who requested it. The guard sees who made the request but not what was requested. The middle relay sees neither.
+\end{enumerate}
+The entire startup process usually takes only a few seconds. Many mechanisms described in later chapters, including padding, congestion control, and vanguards, operate quietly around this sequence.
+
+% ---------------------------------------------------------------------------
+\section{Implementations and Versions}\label{sec:arch-versioni}
+
+\subsection{Two Implementations}
+
+The historical implementation is \textbf{tor}, written in C, which performs all roles: client, relay, authority, and onion service. Alongside it, the Tor Project develops \textbf{Arti}, a rewrite in Rust (\cref{cap:30-arti}), now used as a client and for onion services. In the public consensus of 23 September 2026, no relays use Arti: 6,027 run tor 0.4.9.12, 2,520 run 0.4.9.11, and most remaining versions are older releases in the 0.4.9 series. Forty-seven relays run the development version 0.5.0.0-alpha-dev.
+
+\subsection{Subprotocols}
+
+How can a network of thousands of nodes, updated at different times, introduce new features? Tor does not rely on software version numbers for this purpose. Instead, it uses \textbf{subprotocols}: each feature belongs to a subprotocol with its own version number, and every relay declares the versions it supports in the consensus's \texttt{pr} line~\spec{tor-spec}{Subprotocol-based versioning}. For example, a relay on the public network declares:
+\begin{lstlisting}[numbers=none]
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5
+   HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+\end{lstlisting}
+A client that wants to use ntor-v3 with a relay checks whether the relay advertises \texttt{Relay=4}; CGO requires \texttt{Relay=6}, and congestion control requires \texttt{FlowCtrl=2}. These numbers identify independent \emph{capabilities}, not cumulative versions: \texttt{Relay=6} does not formally imply \texttt{Relay=4} (\proposta{346}, which therefore prefers the term \enquote{subprotocol capabilities}). In practice, tor advertises them as a contiguous range because it implements the features in order. The consensus also lists \emph{required} subprotocols: a tor version that lacks support for them knows it is too old and refuses to operate rather than put its users at risk.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item The network consists of clients, relays (guards, middles, exits, HSDirs, and directory caches), directory authorities, bridges, and onion services.
+  \item The protocol is a stack: TLS channels, cells, circuits, layered encryption, and streams.
+  \item A guard knows the user but not the destination; an exit knows the destination but not the user.
+  \item tor (C) and Arti (Rust) coexist. Features are negotiated as subprotocols advertised in the consensus's \texttt{pr} line.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:06-vista}
+For each role (guard, middle, exit, HSDir, and directory authority), state what it knows about a user who visits a website through Tor.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:06-pr}
+In the \texttt{pr} line shown in this chapter, which features discussed in Chapters 9--11 does the relay support? Could you use it as an exit with CGO?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:06-livelli}
+A 100\,KB web page is downloaded through Tor. Estimate, layer by layer, how many bytes cross the link between the client and the guard, accounting for cells, relay message headers, and SENDME.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item R.~Dingledine, N.~Mathewson, P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}: the original architecture, much of which still applies.
+  \item Tor Metrics, \url{https://metrics.torproject.org/}: up-to-date figures on relays, users, and versions.
+\end{itemize}

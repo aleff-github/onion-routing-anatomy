@@ -1,0 +1,135 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% 简体中文版：CJK 排版与共享技术基础设施。
+\usepackage{fontspec}
+\ifdefined\HCode
+  % EPUB（tex4ebook 的 DVI 模式）：ctex 无法在该模式下工作，因此直接用 fontspec
+  % 选择包含中文字形的 Fandol 字体，否则 DVI 中缺失的字形会从 EPUB 文本中丢失。
+  % 中文名称在下方手动设置；章、部分的编号格式见 epub.tex。
+  \setmainfont{FandolSong-Regular}
+  \setsansfont{FandolHei-Regular}
+  \setmonofont{FandolFang-Regular}
+  \AtBeginDocument{%
+    \renewcommand{\contentsname}{目录}%
+    \renewcommand{\listfigurename}{插图}%
+    \renewcommand{\listtablename}{表格}%
+    \renewcommand{\figurename}{图}%
+    \renewcommand{\tablename}{表}%
+    \renewcommand{\appendixname}{附录}%
+  }
+\else
+  \usepackage[UTF8,scheme=plain,heading=true,fontset=fandol]{ctex}
+  \setmainfont{TeX Gyre Pagella}
+  \setsansfont{TeX Gyre Heros}[Scale=MatchLowercase]
+  \setmonofont{DejaVu Sans Mono}[Scale=0.85]
+  \setCJKmainfont{FandolSong-Regular}
+  \setCJKsansfont{FandolHei-Regular}
+  \setCJKmonofont{FandolFang-Regular}
+  % scheme=plain 保留标准版式，但不会翻译“Chapter”“Contents”等名称：heading=true
+  % 与 \ctexset 提供中文名称和“第 N 章”“第一部分”的编号格式。
+  \ctexset{
+    contentsname={目录}, listfigurename={插图}, listtablename={表格},
+    figurename={图}, tablename={表}, appendixname={附录},
+    part={name={第,部分}, number=\chinese{part}},
+    chapter={name={第,章}},
+  }
+  % book 类的页眉使用英文的 \@chapapp；改用 ctex 的章编号（“第1章”“附录A”）。
+  \makeatletter
+  \renewcommand{\chaptermark}[1]{\markboth{\ifnum\c@secnumdepth>\m@ne
+    \if@mainmatter\CTEXthechapter\quad\fi\fi #1}{}}
+  \makeatother
+\fi
+\usepackage{csquotes}
+% 为 \enquote 显式指定中文引号；ctex 不提供 csquotes 中文预设。
+\DeclareQuoteStyle{zhbook}{“}{”}{‘}{’}
+\setquotestyle{zhbook}
+\usepackage[a4paper,inner=3cm,outer=2.5cm,top=2.5cm,bottom=3cm]{geometry}
+\usepackage{microtype}
+\setlength{\emergencystretch}{3em}
+% 中文行内几乎没有可伸缩的空白：行末遇到较长的西文或等宽字词时，默认容差下找不到
+% 合适的断行点，正文便会伸出版心。放宽容差只影响原本无法排好的段落。
+\tolerance=2000
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx,longtable,multirow}
+\usepackage{amsmath,amssymb}
+\usepackage{siunitx}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes,calc,fit,backgrounds,decorations.pathreplacing,decorations.pathmorphing,matrix,chains}
+\usepackage{bytefield}
+\usepackage{listings}
+\usepackage[most]{tcolorbox}
+\usepackage[backend=biber,style=alphabetic,maxbibnames=99,date=iso,urldate=iso,seconds=false]{biblatex}
+% biblatex 没有简体中文的语言模块：参考文献中的固定用语在此设为中文，日期使用 ISO 格式
+% （否则会输出“In:”“visited on 09/23/2026”“Apr. 25, 2022”等英文形式）。
+\DefineBibliographyStrings{english}{%
+  and={和}, andothers={等}, in={载于}, url={网址}, urlseen={访问日期}, version={版本},
+  volume={卷}, number={第}, pages={页}, page={页}, edition={版}, editor={编},
+  editors={编}, byeditor={编}, techreport={技术报告}, phdthesis={博士学位论文}}
+% 页码写作“第 303–320 页”；作者之间不用英文的“, and”；网址标签用中文。
+\DeclareFieldFormat{pages}{第~#1~页}
+\DefineBibliographyExtras{english}{\let\finalandcomma\empty}
+\DeclareFieldFormat{url}{网址：\url{#1}}
+\addbibresource{../shared/bibliography/tor.bib}
+% 共享参考文献是为意大利语版编写的：这里替换其中的意大利语注释。“Consultato il ...”
+% 改为 url + urldate，由 biblatex 按本版语言输出。
+\DeclareSourcemap{\maps[datatype=bibtex,overwrite=true]{
+  \map{
+    \step[fieldsource=note, match={Consultato il 23 settembre 2026}, final]
+    \step[fieldsource=howpublished, fieldtarget=url]
+    \step[fieldsource=url, match=\regexp{\A\\url\{(.+)\}\z}, replace={$1}]
+    \step[fieldset=urldate, fieldvalue={2026-09-23}]
+    \step[fieldset=note, null]
+  }
+  \map{\step[fieldsource=entrykey, match=\regexp{\Atorblogwebtunnel\z}, final]\step[fieldset=note, fieldvalue={2024 年 3 月 12 日}]}
+  \map{\step[fieldsource=entrykey, match=\regexp{\Aperry2018torbrowser\z}, final]\step[fieldset=note, fieldvalue={草案}]}
+  \map{\step[fieldsource=entrykey, match=\regexp{\Adsa2022\z}, final]\step[fieldset=note, fieldvalue={欧盟官方公报 L 277，2022 年 10 月 27 日}]}
+  \map{\step[fieldsource=entrykey, match=\regexp{\Acodiceprivacy\z}, final]\step[fieldset=note, fieldvalue={意大利个人数据保护机构（Garante per la protezione dei dati personali）发布的合并文本}]}
+  \map{\step[fieldsource=entrykey, match=\regexp{\Awinter2014spoiled\z}, final]\step[fieldset=note, fieldvalue={后经其他作者参与，收录于 \emph{Privacy Enhancing Technologies Symposium}（PETS 2014）}]}
+  \map{\step[fieldsource=entrykey, match=\regexp{\Alegge167\z}, final]\step[fieldset=note, fieldvalue={《意大利共和国官方公报》普通系列第 277 号，2017 年 11 月 27 日}]}
+  \map{\step[fieldsource=entrykey, match=\regexp{\Anistpqc2024\z}, final]\step[fieldset=note, fieldvalue={三项后量子标准，同时发布}]}
+  \map{\step[fieldsource=entrykey, match=\regexp{\Ahayden2014metadata\z}, final]\step[fieldset=note, fieldvalue={Johns Hopkins Foreign Affairs Symposium，2014 年 4 月 1 日}]}
+  \map{\step[fieldsource=entrykey, match=\regexp{\Apfitzmann2010terminology\z}, final]\step[fieldset=howpublished, fieldvalue={版本 0.34}]}
+}}
+\DeclareBibliographyAlias{legislation}{misc}
+\usepackage{imakeidx}
+\makeindex[intoc,title={索引}]
+\usepackage[hidelinks]{hyperref}
+\usepackage[nameinlink]{cleveref}
+% cleveref 未内置中文名称；为常用引用类型显式设置本地化标签。
+\crefname{chapter}{章}{章}
+\Crefname{chapter}{章}{章}
+\crefname{section}{节}{节}
+\Crefname{section}{节}{节}
+\crefname{figure}{图}{图}
+\Crefname{figure}{图}{图}
+\crefname{table}{表}{表}
+\Crefname{table}{表}{表}
+\crefname{equation}{式}{式}
+\Crefname{equation}{式}{式}
+\crefname{appendice}{附录}{附录}
+\Crefname{appendice}{附录}{附录}
+% 章、节按中文习惯写作“第 9 章”“第 7.5 节”（与正文中手写的形式一致），
+% 而不是逐字对应英文的“章 9”“节 7.5”；多个引用写作“第 9 章和第 13 章”。
+\newcommand{\zhcrefformat}[2]{%
+  \crefformat{#1}{第~##2##1##3~#2}%
+  \Crefformat{#1}{第~##2##1##3~#2}%
+  \crefrangeformat{#1}{第~##3##1##4--##5##2##6~#2}%
+  \Crefrangeformat{#1}{第~##3##1##4--##5##2##6~#2}%
+  \crefmultiformat{#1}{第~##2##1##3~#2}{和第~##2##1##3~#2}{、第~##2##1##3~#2}{和第~##2##1##3~#2}%
+  \Crefmultiformat{#1}{第~##2##1##3~#2}{和第~##2##1##3~#2}{、第~##2##1##3~#2}{和第~##2##1##3~#2}%
+  \crefrangemultiformat{#1}{第~##3##1##4--##5##2##6~#2}{和第~##3##1##4--##5##2##6~#2}{、第~##3##1##4--##5##2##6~#2}{和第~##3##1##4--##5##2##6~#2}%
+  \Crefrangemultiformat{#1}{第~##3##1##4--##5##2##6~#2}{和第~##3##1##4--##5##2##6~#2}{、第~##3##1##4--##5##2##6~#2}{和第~##3##1##4--##5##2##6~#2}%
+}
+\zhcrefformat{chapter}{章}
+\zhcrefformat{section}{节}
+\zhcrefformat{subsection}{节}
+% 其他类型（图、表、附录）的连接词：默认是英文的“and”“to”。
+\newcommand{\crefpairconjunction}{和}
+\newcommand{\crefmiddleconjunction}{、}
+\newcommand{\creflastconjunction}{和}
+\newcommand{\crefpairgroupconjunction}{和}
+\newcommand{\crefmiddlegroupconjunction}{、}
+\newcommand{\creflastgroupconjunction}{和}
+\newcommand{\crefrangeconjunction}{--}

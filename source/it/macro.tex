@@ -1,0 +1,92 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Colori
+\definecolor{torviola}{HTML}{7D4698}
+\definecolor{torverde}{HTML}{68B030}
+\definecolor{torgrigio}{HTML}{4A4A4A}
+\definecolor{avviso}{HTML}{C0392B}
+\definecolor{sfondocodice}{HTML}{F6F4F8}
+
+% Comandi di markup semantico
+\newcommand{\cella}[1]{\texttt{\textbf{#1}}\index{#1@\texttt{#1}}}
+\newcommand{\opt}[1]{\texttt{#1}\index{torrc!#1@\texttt{#1}}}
+% \file: nomi di file e percorsi in monospaziato; possono andare a capo dopo "_" e dopo "/"
+% (i percorsi di labs/it/ sono lunghi). Comando robusto: funziona anche nelle didascalie.
+\ExplSyntaxOn
+\tl_new:N \l__libro_file_tl
+\NewDocumentCommand{\file}{m}
+  {
+    \group_begin:
+    \tl_set:Nn \l__libro_file_tl {#1}
+    \tl_replace_all:Nnn \l__libro_file_tl { / } { / \allowbreak }
+    \cs_set_eq:NN \__libro_trattino_basso: \_
+    \cs_set:Npn \_ { \__libro_trattino_basso: \allowbreak }
+    \texttt { \tl_use:N \l__libro_file_tl }
+    \group_end:
+  }
+\ExplSyntaxOff
+\newcommand{\cmd}[1]{\texttt{#1}}
+% URL del repository del libro (codice, laboratori, rete di prova).
+\newcommand{\repolibro}{\url{https://github.com/aleff-github/onion-routing-anatomy}}
+% Titolo di un'opera citata (articolo, proposta, libro): escluso dal controllo di originalità.
+\newcommand{\titolo}[1]{\emph{#1}}
+\newcommand{\termine}[2]{\emph{#1} (#2)\index{#1}}
+\newcommand{\spec}[2]{\textsf{[#1~§\,#2]}}
+\newcommand{\proposta}[1]{Proposta~#1\index{Proposte!#1}}
+\newcommand{\aggiornatoal}[2]{%
+  \begin{center}\small\color{torgrigio}\textit{Aggiornato al #1 --- #2}\end{center}}
+\newcommand{\dacontrollare}[1]{\textcolor{avviso}{\textbf{[DA CONTROLLARE: #1]}}}
+% Testo alternativo di una figura (accessibilita'). Nella stampa non produce
+% nulla; nella conversione EPUB (tex4ht) viene ridefinito in libro/epub.tex per
+% assegnare l'attributo alt dell'immagine. Va messo prima dell'ambiente grafico.
+\newcommand{\altfig}[1]{}
+
+% Riquadri
+\tcbset{base/.style={enhanced,breakable,boxrule=0.6pt,arc=2pt,left=6pt,right=6pt,fonttitle=\bfseries\sffamily}}
+\newtcolorbox{obiettivi}{base,colback=torviola!5,colframe=torviola,title={Obiettivi del capitolo}}
+\newtcolorbox{approfondimento}[1][]{base,colback=torgrigio!4,colframe=torgrigio,title={Approfondimento\ifx&#1&\else: #1\fi}}
+\newtcolorbox{attenzione}[1][]{base,colback=avviso!5,colframe=avviso,title={Attenzione\ifx&#1&\else: #1\fi}}
+\newtcolorbox{storia}[1][]{base,colback=torverde!5,colframe=torverde!70!black,title={Nota storica\ifx&#1&\else: #1\fi}}
+\newtcolorbox{specbox}[1]{base,colback=white,colframe=torviola!60,title={Dalla specifica: #1}}
+
+% Laboratori ed esercizi
+% Laboratori: [N] per i laboratori numerati di torlab (Parte II), altrimenti numerazione per capitolo.
+\newcounter{laboratorio}[chapter]
+\newtcolorbox{laboratorio}[2][]{base,colback=torverde!4,colframe=torverde!60!black,
+  title={\ifx&#1&\refstepcounter{laboratorio}Laboratorio \thechapter.\arabic{laboratorio}\else Laboratorio~#1\fi: #2}}
+\newcounter{esercizio}[chapter]
+\renewcommand{\theesercizio}{\thechapter.\arabic{esercizio}}
+\newcommand{\stelle}[1]{\ifcase#1\or$\star$\or$\star\star$\or$\star\star\star$\fi}
+\newenvironment{esercizio}[1][1]{\refstepcounter{esercizio}\par\medskip
+  \noindent\textbf{Esercizio \theesercizio}\ \stelle{#1}\quad}{\par}
+\newenvironment{soluzione}[1]{\par\medskip\noindent\textbf{Soluzione \ref{#1}.}\quad}{\par}
+
+% Codice
+\lstset{basicstyle=\ttfamily\small,backgroundcolor=\color{sfondocodice},frame=single,
+  rulecolor=\color{torviola!40},breaklines=true,columns=fullflexible,keepspaces=true,
+  % senza questa, listings stampa gli spazi dentro le stringhe come \textvisiblespace:
+  % il codice diventa illeggibile e non copiabile.
+  showstringspaces=false,
+  numbers=left,numberstyle=\tiny\color{torgrigio},keywordstyle=\color{torviola}\bfseries,
+  commentstyle=\color{torgrigio}\itshape,stringstyle=\color{torverde!60!black},
+  literate={à}{{\`a}}1 {è}{{\`e}}1 {é}{{\'e}}1 {ì}{{\`i}}1 {ò}{{\`o}}1 {ù}{{\`u}}1}
+% listings conosce i caratteri solo fino a U+00FF: con LuaTeX il cirillico e il cinese
+% dei listati uscivano fuori posto e perdevano gli spazi, nel PDF e nell'EPUB. Mentre si
+% legge un listato, ../shared/lst-unicode.lua racchiude quei caratteri fra due ` (il
+% carattere di escape, assente da tutti i listati) e li fa comporre come testo normale.
+\lstset{escapechar=`}
+\directlua{lstunicode = dofile("../shared/lst-unicode.lua")}
+\AddToHook{env/lstlisting/begin}{\directlua{lstunicode.enable()}}
+\AddToHook{env/lstlisting/end}{\directlua{lstunicode.disable()}}
+\lstdefinelanguage{torrc}{morekeywords={SocksPort,ControlPort,ORPort,DirPort,ExitPolicy,
+  HiddenServiceDir,HiddenServicePort,UseBridges,Bridge,ClientTransportPlugin,Nickname,ContactInfo},
+  morecomment=[l]{\#}}
+
+% Stili TikZ comuni
+\tikzset{
+  client/.style={draw=torviola,fill=torviola!10,rounded corners,minimum width=1.8cm,minimum height=0.9cm,font=\sffamily\small},
+  relay/.style={draw=torverde!60!black,fill=torverde!12,circle,minimum size=1.1cm,font=\sffamily\small},
+  server/.style={draw=torgrigio,fill=torgrigio!8,minimum width=1.8cm,minimum height=0.9cm,font=\sffamily\small},
+  cellaf/.style={-{Stealth[length=2.5mm]},thick,torviola},
+  risposta/.style={-{Stealth[length=2.5mm]},thick,dashed,torverde!60!black},
+}

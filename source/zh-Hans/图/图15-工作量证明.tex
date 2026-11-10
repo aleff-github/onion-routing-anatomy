@@ -1,0 +1,21 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 无障碍替代文本。
+\altfig{洋葱服务的可选 PoW 防护：启用后，服务通过 pow-params 发布种子与建议工作量；客户端自行选择实际 E，搜索 nonce 和 Equi-X 解，并满足 R 乘 E 不超过 2^32−1。证明通过 INTRODUCE1 加密扩展发送，介绍点以 INTRODUCE2 转发。服务验证种子、nonce 重放、Equi-X 与工作量，拒绝无效证明。验证通过的请求按工作量从高到低排队；没有证明的请求视为 E=0。队列溢出时实现会丢弃工作量最低的一半。900、400、120、40、0 仅为示例而非固定门槛。}
+% 洋葱服务工作量证明：从描述符到优先队列
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  box/.style={draw,rounded corners=2pt,align=center,minimum height=1cm}]
+  \node[box,fill=torgrigio!8,text width=2.2cm] (d) at (0,0) {描述符：\\\texttt{pow-params}\\种子、建议工作量};
+  \node[box,fill=torviola!10,text width=3.2cm] (c) at (3.8,0) {客户端：选择 $E$，寻找 nonce 和\\满足条件的 Equi-X 解\\$R \cdot E \le 2^{32}-1$};
+  \node[box,fill=torgrigio!8,text width=2.2cm] (i) at (8.4,0) {引介点\\（限制速率）};
+  \node[box,fill=torverde!12,text width=2.2cm] (s) at (8.4,-2.2) {服务：\\验证证明\\（速度快）};
+  \draw[->] (d) -- (c);
+  \draw[->] (c) -- node[below,pos=0.45] {\texttt{INTRODUCE1}} (i);
+  \draw[->] (i) -- node[right] {\texttt{INTRODUCE2}} (s);
+  \foreach \k/\e/\c in {0/900/torverde!45,1/400/torverde!35,2/120/torverde!25,3/40/torverde!15,4/0/torgrigio!10}
+    \node[draw,minimum width=1.1cm,minimum height=0.55cm,fill=\c] (q\k) at (1.2+1.1*\k,-2.2) {$E{=}\e$};
+  \draw[->] (s) -- (q4.east);
+  \node[above=0.1cm of q2] {优先队列：按工作量排序（无证明时 $E=0$）};
+  \node[below=0.1cm of q0,align=center] {优先处理};
+  \node[below=0.1cm of q4,align=center] {队列已满：丢弃\\工作量最低的一半};
+\end{tikzpicture}

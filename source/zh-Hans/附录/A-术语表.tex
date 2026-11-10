@@ -1,0 +1,62 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Tor 术语表}\label[appendice]{cap:A-glossario}
+
+本术语表解释简体中文版中使用的技术术语，并为每个条目列出首次系统介绍它的章节。
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.1cm}>{\raggedright\arraybackslash}p{8.0cm}r@{}}
+\toprule
+术语 & 含义 & 章 \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+流量分析 & 不读取通信内容，仅根据时间、数据量和地址信息推断相关事实。 & \ref{cap:01-anonimato} \\
+匿名性 & 在称为匿名集的主体集合内，无法识别某个特定主体。 & \ref{cap:01-anonimato} \\
+Sybil 攻击 & 向网络展示大量身份（例如多个中继），以提高被选中的概率。 & \ref{cap:26-attacchi} \\
+目录权威节点 & 参与投票并签署网络共识的少数服务器之一。 & \ref{cap:12-directory} \\
+网桥（bridge） & 不出现在公开共识中的中继，为面临审查的用户提供网络入口。 & \ref{cap:16-censura} \\
+通道（channel） & 相邻两台 Tor 节点之间的 TLS 连接，承载来自多条电路的 cell。 & \ref{cap:07-canali} \\
+cell & Tor 通道上的传输单位：通常为 514 字节，部分命令采用变长格式。 & \ref{cap:08-celle} \\
+盲化密钥 & 根据洋葱服务身份密钥和特定周期派生的密钥，用于向 HSDir 隐藏服务身份。 & \ref{cap:14-onion-services} \\
+家族密钥 & 由同一运营者管理的中继共享、用于证明其家族归属的密钥。 & \ref{cap:22-relay} \\
+电路 ID（CircID） & 仅在单条通道内有效的电路标识符；每一跳的值都不同。 & \ref{cap:08-celle} \\
+电路（circuit） & 逐跳建立、经过多个中继的多层加密路径。 & \ref{cap:09-circuiti} \\
+共识（consensus） & 由目录权威节点签署、列出中继及其标志和权重的文档。 & \ref{cap:12-directory} \\
+拥塞控制 & 根据测得的往返时延调整电路上尚未确认的数据量。 & \ref{cap:11-stream} \\
+流量控制 & 利用窗口和 SENDME 消息防止发送方使接收方负载过高。 & \ref{cap:11-stream} \\
+流量关联 & 判断网络上不同位置观察到的两条流是否属于同一次通信。 & \ref{cap:26-attacchi} \\
+描述符（descriptor） & 中继或洋葱服务发布密钥、地址和属性的文档。 & \ref{cap:12-directory} \\
+出口中继 & 电路的最后一跳，代表客户端连接最终目的地。 & \ref{cap:06-architettura} \\
+中继家族 & 由同一运营者管理、不能同时出现在同一电路中的中继集合。 & \ref{cap:13-percorso} \\
+标志（flag） & 由目录权威节点赋予中继的属性，例如 \texttt{Guard}、\texttt{Exit} 和 \texttt{Stable}。 & \ref{cap:12-directory} \\
+前向保密 & 即使长期密钥以后遭到泄露，也不能据此解密过去流量的安全属性。 & \ref{cap:05-crittografia} \\
+入口守卫（guard） & 客户端电路的第一跳中继，被持久选中并在较长时间内重复使用。 & \ref{cap:13-percorso} \\
+握手（handshake） & 双方交换消息并协商密钥的过程，例如 ntor 或 ntor-v3。 & \ref{cap:09-circuiti} \\
+隐藏服务目录（HSDir） & 存储并提供洋葱服务描述符的中继。 & \ref{cap:14-onion-services} \\
+中间中继 & 位于电路中间、不知道最初客户端和最终目的地的中继。 & \ref{cap:06-architettura} \\
+流隔离 & 根据 SOCKS 凭据等条件，将不同应用流分配到不同电路。 & \ref{cap:18-stem} \\
+链路协议 & 通道上使用的带版本协议，通过 \cella{VERSIONS} cell 协商。 & \ref{cap:07-canali} \\
+relay 消息 & 发给特定跳点的 \cella{RELAY} cell 内部消息，例如 \texttt{BEGIN} 或 \texttt{DATA}。 & \ref{cap:08-celle} \\
+微描述符 & 只包含客户端所需中继信息的精简描述符。 & \ref{cap:12-directory} \\
+威胁模型 & 明确描述系统旨在抵御哪些攻击者和威胁的文档。 & \ref{cap:04-modello-minaccia} \\
+不可关联性 & 观察者无法判断两项活动是否来自同一个主体的性质。 & \ref{cap:01-anonimato} \\
+洋葱服务（旧称隐藏服务） & 可通过 Tor 访问、其地址编码了公钥的服务，过去称为隐藏服务。 & \ref{cap:14-onion-services} \\
+填充（padding） & 在 cell 或通道中加入额外数据，用于掩盖长度和时间特征。 & \ref{cap:07-canali} \\
+带宽权重 & 共识中用于平衡不同电路位置的中继选择概率的系数。 & \ref{cap:13-percorso} \\
+可插拔传输（PT） & 转换 Tor 流量以抵御识别或封锁的独立程序，例如 obfs4、Snowflake 和 WebTunnel。 & \ref{cap:16-censura} \\
+出口策略 & 按顺序指定出口中继允许访问哪些目的地的规则集合。 & \ref{cap:22-relay} \\
+工作量证明（PoW） & 客户端为获得遭受攻击的洋葱服务优先处理权而求解的计算难题。 & \ref{cap:15-dos} \\
+提案（proposal） & 用于讨论和设计 Tor 协议变更的编号文档。 & \ref{cap:31-futuro} \\
+假名 & 不同于真实姓名的标识符，能够关联活动但不必披露真实身份。 & \ref{cap:01-anonimato} \\
+引介点 & 洋葱服务指定的、用于接收首次联系请求的中继。 & \ref{cap:14-onion-services} \\
+汇合点 & 客户端选择的中继，客户端与洋葱服务的电路在此连接。 & \ref{cap:14-onion-services} \\
+中继（洋葱路由器） & Tor 网络中负责转发 cell 的节点。 & \ref{cap:06-architettura} \\
+SENDME & 确认已经收到电路数据、并重新打开流量控制窗口的消息。 & \ref{cap:11-stream} \\
+子协议 & 中继和客户端声明支持的带版本功能族，例如 \texttt{Link} 或 \texttt{Relay}。 & \ref{cap:30-arti} \\
+流（stream） & 通过电路承载的应用程序数据流，例如一条 TCP 连接。 & \ref{cap:11-stream} \\
+Vanguard & 在一段时间内保持不变、用于保护洋葱服务入口守卫的中间层中继。 & \ref{cap:13-percorso} \\
+网站指纹识别 & 仅根据加密流量的大小和时间特征识别访问的网页。 & \ref{cap:26-attacchi} \\
+\end{longtable}
+}

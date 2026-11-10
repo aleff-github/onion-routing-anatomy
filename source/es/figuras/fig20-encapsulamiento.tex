@@ -1,0 +1,21 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{Vista simplificada de Tor sobre TCP y TLS. Un observador externo ve direcciones IP, puertos, volúmenes, tiempos y longitudes de registros TLS, pero no puede leer las celdas sin las claves de sesión TLS. Un registro TLS puede contener varias celdas y una celda puede dividirse entre varios registros: los límites no tienen por qué coincidir. Con la versión v4 o superior del protocolo de enlace, las celdas de longitud fija miden 514 bytes, con cabecera de 5 bytes y cuerpo de 509; también hay celdas de longitud variable. Solo los cuerpos de las celdas RELAY se cifran en capas mediante las claves del circuito: PADDING y VPADDING no son mensajes RELAY. Las claves TLS permiten examinar las celdas, pero no descifran automáticamente sus cuerpos RELAY.}
+% Esquema de encapsulación: registros TLS y celdas no necesitan alinearse.
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  liv/.style={draw,rounded corners=2pt,minimum height=0.85cm,align=center},
+  cel/.style={draw,fill=torviola!12,minimum height=0.7cm,minimum width=1.5cm,font=\sffamily\tiny}]
+  \node[liv,fill=torgrigio!10,minimum width=10.6cm] (tcp) at (0,2.6) {TCP: segmentos de tamaño variable};
+  \node[liv,fill=torverde!12,minimum width=9.4cm] (tls) at (0,1.35) {TLS: límites distintos de las celdas};
+  \foreach \i/\x in {1/-3.6,2/-1.8,3/0,4/1.8,5/3.6} \node[cel] (c\i) at (\x,0) {514\,B};
+  \node[anchor=west,font=\sffamily\tiny,text=torgrigio] at (4.6,0) {fijas v4+};
+  \node[liv,fill=avviso!10,minimum width=4.6cm] (rel) at (-1.7,-1.4) {RELAY: cuerpo de 509\,B\\cifrado por capas};
+  \node[liv,fill=torgrigio!8,minimum width=4.6cm] (pad) at (3.3,-1.4) {PADDING / VPADDING\\no son RELAY};
+  \draw[torgrigio] (c1.south west) -- (rel.north west); \draw[torgrigio] (c3.south east) -- (rel.north east);
+  \node[anchor=west,align=left,font=\sffamily\tiny,text=torgrigio] at (5.8,2.6) {IP, puertos, volumen\\y tiempos visibles};
+  \node[anchor=west,align=left,font=\sffamily\tiny,text=torgrigio] at (5.8,1.35) {longitud de registros\\TLS visible};
+  \node[anchor=west,align=left,font=\sffamily\tiny,text=torgrigio] at (5.8,0) {celdas visibles tras\\descifrar TLS};
+  \node[anchor=west,align=left,font=\sffamily\tiny,text=torgrigio] at (5.8,-1.4) {RELAY necesita\\claves del circuito};
+  \node[font=\sffamily\tiny,text=torgrigio,align=center] at (0,-2.55) {Esquema: los límites de TLS y de las celdas no tienen que coincidir.};
+\end{tikzpicture}

@@ -1,0 +1,14 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
+-- Copyright (C) 2026 Alessandro Greco
+-- Файл сборки для tex4ebook/make4ht: запускает biber для библиографии.
+Make:add("biber", "biber ${input}")
+Make:htlatex {}
+Make:biber {}
+Make:htlatex {}
+Make:htlatex {}
+Make:htlatex {}
+
+-- Альтернативный текст выключных формул: ../shared/epub/epub-filters.lua.
+local filters = dofile("../shared/epub/epub-filters.lua")
+Make:match("html$", filters.display_math_alt("ru"))
+Make:match("opf$", filters.without_build_date)

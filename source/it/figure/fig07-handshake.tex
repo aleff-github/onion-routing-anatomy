@@ -1,0 +1,25 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Sequenza semplificata di apertura di un canale Tor moderno: l'iniziatore avvia il TLS, che cifra i messaggi successivi, poi entrambe le parti inviano VERSIONS. Il rispondente invia nell'ordine CERTS, AUTH\_CHALLENGE e NETINFO. Se l'iniziatore è un relay pubblico deve autenticarsi e invia CERTS e AUTHENTICATE (passi nel riquadro tratteggiato); un client o bridge non invia questi due messaggi. L'iniziatore conclude in entrambi i casi con NETINFO, che termina l'handshake. Sono possibili celle VPADDING omesse per semplicità; le direzioni delle frecce distinguono iniziatore e rispondente.}
+% Handshake di canale
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth]
+  \node[client] (i) at (0,0) {Iniziatore};
+  \node[relay,minimum size=1.3cm] (r) at (7,0) {\scriptsize Rispondente};
+  \draw[torgrigio] (i.south) -- ++(0,-8.4);
+  \draw[torgrigio] (r.south) -- ++(0,-8.4);
+  \draw[<->,thick,torgrigio] (0,-1.1) -- node[above]{handshake TLS} node[below,font=\scriptsize]{da qui in poi tutto è cifrato} (7,-1.1);
+  \newcommand{\av}[2]{\draw[cellaf] (0,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (7,#1);}
+  \newcommand{\ind}[2]{\draw[risposta] (7,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (0,#1);}
+  \av{-2.3}{VERSIONS}
+  \ind{-3.0}{VERSIONS}
+  \ind{-3.7}{CERTS}
+  \ind{-4.4}{AUTH\_CHALLENGE}
+  \ind{-5.1}{NETINFO}
+  \draw[dashed,torgrigio,rounded corners] (-0.4,-5.55) rectangle (7.4,-7.05);
+  \node[font=\scriptsize,text=torgrigio,anchor=east,align=right] at (-0.5,-6.45) {solo relay\\pubblici};
+  \av{-6.1}{CERTS}
+  \av{-6.8}{AUTHENTICATE}
+  \av{-7.8}{NETINFO}
+  \node[font=\scriptsize,text=torgrigio,anchor=west] at (7.5,-7.8) {canale aperto};
+\end{tikzpicture}

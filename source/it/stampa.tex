@@ -1,0 +1,146 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% ===========================================================================
+% Formato 7x10 in per chi vuole stampare una copia personale del libro.
+%
+% Riusa gli STESSI capitoli, figure, bibliografia e macro dell'edizione A4 (una
+% sola fonte di verita'). Rispetto a main.tex cambia soltanto:
+%   - il formato pagina e i margini (adatti a una rilegatura);
+%   - le pagine iniziali (occhietto, frontespizio, colophon) di un libro stampato.
+% Non tocca main.tex ne' preambolo.tex: l'edizione A4 resta identica.
+%
+% Build:  make book-print   ->   book/it/anatomia-di-tor_it_7x10.pdf
+% ===========================================================================
+\documentclass[11pt,openright,twoside]{book}
+\input{preambolo}
+\input{macro}
+\input{diritti}
+% Metadati XMP del PDF: licenza e collegamento al testo della GPL.
+\usepackage{hyperxmp}
+\hypersetup{pdfcopyright={Copyright (C) 2026 Alessandro Greco. GNU General Public License v3.0 or later (GPL-3.0-or-later).},
+  pdflicenseurl={https://www.gnu.org/licenses/gpl-3.0.html},
+  pdfauthor={Alessandro Greco}, pdftitle={Anatomia di Tor}, pdflang={it-IT},
+  pdfsubject={Il protocollo dell'anonimato, byte per byte}}
+% Con hyperxmp l'autore finisce solo nei metadati XMP: lo si scrive anche nel dizionario Info.
+% Qui hyperref e' in modalita' draft e non scrive titolo e soggetto: li scriviamo noi.
+\AtBeginDocument{\pdfextension info{/Author (Alessandro Greco) /Title (Anatomia di Tor) /Subject (Il protocollo dell'anonimato, byte per byte)}}
+
+% --- Adattamento delle figure alla colonna piu' stretta del 7x10 ------------
+% Le figure TikZ sono tarate per il testo A4 (piu' largo); nel 7x10 alcune
+% sforano il margine. Le riduciamo automaticamente a \linewidth (max width:
+% rimpicciolisce solo quelle troppo larghe, lascia intatte le altre). Vale solo
+% per questa edizione: i file dei capitoli e l'edizione A4 non cambiano.
+\usepackage{etoolbox}
+\usepackage{adjustbox}
+\BeforeBeginEnvironment{tikzpicture}{\begin{adjustbox}{max width=0.96\linewidth}}
+\AfterEndEnvironment{tikzpicture}{\end{adjustbox}}
+\lstset{numbersep=6pt,xleftmargin=15pt,xrightmargin=16pt,breakatwhitespace=false,frame=none,framerule=0pt}  % niente bordo (sfondo rientrato): evita il filetto che sporgeva
+
+% --- Testatina adatta alla colonna stretta ---------------------------------
+% I titoli di capitolo lunghi, in maiuscolo, sforavano la testatina nel 7x10.
+% Qui la rendiamo piu' piccola e senza maiuscolo (solo questa edizione).
+\usepackage{fancyhdr}
+\microtypesetup{protrusion=false}
+\hypersetup{draft}  % nessun collegamento cliccabile nella stampa (inutili su carta); il testo resta
+\pagestyle{fancy}
+\AtBeginDocument{\setlength{\headwidth}{\textwidth}}  % dopo geometry: testatina = larghezza del testo
+\fancyhf{}
+\fancyhead[LE,RO]{\footnotesize\thepage}
+\fancyhead[RE]{\footnotesize\nouppercase{\slshape\leftmark}}
+\fancyhead[LO]{\footnotesize\nouppercase{\slshape\rightmark}}
+\renewcommand{\headrulewidth}{0pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\footnotesize\thepage}\renewcommand{\headrulewidth}{0pt}}
+% \pagestyle{fancy} ridefinisce \chaptermark senza distinguere \frontmatter: la seconda
+% pagina della Prefazione portava "Capitolo 0. Prefazione". Qui si ripristina il test
+% \if@mainmatter della classe book: numero solo nel corpo del libro, \@chapapp
+% (Capitolo/Appendice) come prima.
+\makeatletter
+\renewcommand{\chaptermark}[1]{\markboth{\MakeUppercase{\ifnum\c@secnumdepth>\m@ne\if@mainmatter\@chapapp\ \thechapter. \ \fi\fi #1}}{}}
+\makeatother
+
+% --- Formato pagina 7 x 10 in ----------------------------------------------
+% 7x10 in (17,78 x 25,40 cm), un formato comune per i libri tecnici. Margine interno
+% 0,875 in (spazio per la rilegatura di un volume di oltre 300 pagine), esterno
+% 0,375 in per tenere la colonna larga; superiore e inferiore ampi. Nessun vivo:
+% l'interno e' solo testo e grafica vettoriale.
+\geometry{
+  paperwidth=7in, paperheight=10in,
+  inner=0.875in, outer=0.375in,
+  top=0.75in, bottom=0.75in,
+  headsep=10pt, footskip=26pt,
+  marginparwidth=0pt, marginparsep=0pt,
+}
+% Un filo di elasticita' in piu' per la giustificazione sulla colonna stretta,
+% cosi' l'algoritmo preferisce allargare gli spazi anziche' sforare il margine.
+\setlength{\emergencystretch}{4em}
+% Spaziatura fra colonne leggermente ridotta (default 6pt): sulla colonna piu'
+% stretta del 7x10 evita che le tabelle a larghezza fissa (tarate per l'A4)
+% sforino il margine esterno. Vale solo per questa edizione.
+\setlength{\tabcolsep}{4pt}
+
+% Per la stampa i collegamenti restano neri e senza bordo: hidelinks e' gia'
+% impostato in preambolo.tex, quindi non serve altro.
+
+% Le pagine bianche inserite da \cleardoublepage (verso del frontespizio, verso
+% prima di un capitolo con openright) devono essere del tutto vuote, senza numero
+% ne' testatina: piu' pulito per un libro stampato.
+\makeatletter
+\def\cleardoublepage{\clearpage\if@twoside\ifodd\c@page\else
+  \hbox{}\thispagestyle{empty}\newpage\if@twocolumn\hbox{}\newpage\fi\fi\fi}
+\makeatother
+
+\begin{document}
+\frontmatter
+
+% --- Occhietto (half-title) ------------------------------------------------
+\thispagestyle{empty}
+\null\vfill
+\begin{center}
+  {\LARGE\bfseries Anatomia di Tor\par}
+\end{center}
+\vfill\vfill
+\cleardoublepage   % il frontespizio cade sul recto (dispari)
+
+% --- Frontespizio ----------------------------------------------------------
+\thispagestyle{empty}
+\begin{center}
+  \vspace*{2.5cm}
+  {\Huge\bfseries Anatomia di Tor\par}
+  \vspace{0.9cm}
+  {\Large Il protocollo dell'anonimato,\\[0.2em]byte per byte\par}
+  \vspace{3.5cm}
+  {\Large Alessandro Greco\par}
+  \vfill
+\end{center}
+\clearpage   % il colophon cade sul verso, a tergo del frontespizio
+
+% --- Colophon / pagina dei diritti -----------------------------------------
+\thispagestyle{empty}
+\null\vfill
+{\footnotesize
+\noindent \textit{Anatomia di Tor --- Il protocollo dell'anonimato, byte per byte}\par
+\smallskip
+\noindent Prima edizione, versione 1.0.0.\par
+\medskip
+\DirittiLicenza
+\medskip
+\DirittiMarchi
+\bigskip
+\noindent Composto con \LaTeX{} (LuaLaTeX); testo in TeX Gyre Pagella,
+titoli in TeX Gyre Heros, codice in DejaVu Sans Mono.\par
+\smallskip
+\noindent Formato \SI{7}{in} \texttimes{} \SI{10}{in} per la stampa personale.\par
+}
+\cleardoublepage   % l'indice inizia sul recto
+
+\tableofcontents
+\include{capitoli/00-prefazione}
+\input{capitoli/00-nota-edizioni-tradotte}
+
+\mainmatter
+\input{struttura}
+
+\backmatter
+\printbibliography[heading=bibintoc,title={Bibliografia}]
+\printindex
+\end{document}

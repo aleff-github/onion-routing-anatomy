@@ -1,0 +1,21 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{Defensa PoW opcional para servicios onion. Si se activa, el servicio publica en pow-params una semilla y un esfuerzo sugerido; el cliente elige el esfuerzo real E y busca nonce y solución Equi-X que superen la condición R por E no superior a 2^32−1. La prueba va cifrada en una extensión de INTRODUCE1 y el punto de introducción la retransmite como INTRODUCE2. El servicio verifica semilla, nonce repetido, solución Equi-X y esfuerzo, y rechaza pruebas inválidas. Solicitudes válidas entran en una cola por esfuerzo descendente; sin prueba E=0. Si la cola se desborda, la implementación descarta la mitad de menor esfuerzo. Los valores 900, 400, 120, 40 y 0 son ilustrativos.}
+% Prueba de trabajo de servicios onion: del descriptor a la cola de prioridad
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  box/.style={draw,rounded corners=2pt,align=center,minimum height=1cm}]
+  \node[box,fill=torgrigio!8,text width=2.2cm] (d) at (0,0) {descriptor:\\\texttt{pow-params}\\semilla, esfuerzo sugerido};
+  \node[box,fill=torviola!10,text width=3.2cm] (c) at (3.8,0) {cliente: elige $E$, busca nonce y\\solución Equi-X con\\$R \cdot E \le 2^{32}-1$};
+  \node[box,fill=torgrigio!8,text width=2.2cm] (i) at (8.4,0) {punto de\\introducción\\(límite de tasa)};
+  \node[box,fill=torverde!12,text width=2.2cm] (s) at (8.4,-2.2) {servicio:\\verifica la prueba\\(rápido)};
+  \draw[->] (d) -- (c);
+  \draw[->] (c) -- node[below,pos=0.45] {\texttt{INTRODUCE1}} (i);
+  \draw[->] (i) -- node[right] {\texttt{INTRODUCE2}} (s);
+  \foreach \k/\e/\c in {0/900/torverde!45,1/400/torverde!35,2/120/torverde!25,3/40/torverde!15,4/0/torgrigio!10}
+    \node[draw,minimum width=1.1cm,minimum height=0.55cm,fill=\c] (q\k) at (1.2+1.1*\k,-2.2) {$E{=}\e$};
+  \draw[->] (s) -- (q4.east);
+  \node[above=0.1cm of q2] {cola de prioridad por esfuerzo (sin prueba: $E=0$)};
+  \node[below=0.1cm of q0,align=center] {atendido primero};
+  \node[below=0.1cm of q4,align=center] {cola llena: descartar mitad\\de menor esfuerzo};
+\end{tikzpicture}

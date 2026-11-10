@@ -1,0 +1,153 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{第 \ref{cap:07-canali} 章：通道与链路协议}
+
+\begin{soluzione}{es:07-ruoli}
+客户端总是主动发起连接，包括连接自己的入口守卫和提供目录信息的中继。没有人需要主动联系客户端，监听端口反而会让它更容易被识别。中继主要在收到 \texttt{EXTEND2} 请求、需要连接电路下一跳时主动建立通道；此外，也会像其他节点一样，为下载目录文档或检查自身可达性建立电路。
+\end{soluzione}
+
+\begin{soluzione}{es:07-scadenza}
+$\texttt{0x000772F7} = 488183$ 小时，对应 UTC 时间 2025 年 9 月 9 日 23:00。以 32 位无符号整数计数秒，会在 2106 年溢出；改为计数小时则可覆盖数十万年，而精确到小时已经足以表示有效期为数天或数周的证书。规范中有一处需要注意：\texttt{cert-spec} 声称四字节可以使用到 10136 年。这是 \proposta{338} 明确指出的错误，原因是把计数器误解成按\emph{分钟}计数，因为 $2^{32}$ 分钟大约是 8\,166 年。
+\end{soluzione}
+
+\begin{soluzione}{es:07-authchallenge}
+$38 = 32 + 2 + 2 \times 2$ 对应一种包含两种方法的挑战。如果 N\_Methods 为 2，消息体就必须包含 $32+2+4=38$ 字节。长度为 36 字节的消息体声明的方法数量多于实际包含的数量，因此格式不正确，必须拒绝。规范允许忽略\emph{多余}字节，却不允许缺少必要字节。
+\end{soluzione}
+
+\begin{soluzione}{es:07-impostore}
+类型 5 证书认证的公钥，与攻击者 TLS 证书的 SHA-256 指纹之间的比较会失败：攻击者的证书不同于真实中继的证书。如果攻击者提供完全相同的真实 TLS 证书，没有对应私钥就无法完成 TLS 握手。
+\end{soluzione}
+
+\begin{soluzione}{es:07-netinfo}
+\texttt{695661c0}（UTC 时间 2026 年 1 月 1 日 12:00:00）；\texttt{04 04 c6336407}（客户端地址 198.51.100.7）；\texttt{01}；以及 \texttt{04 04 cb007105}（中继地址 203.0.113.5），之后填充零字节，直到消息体达到 509 字节。
+\end{soluzione}
+
+\begin{soluzione}{es:07-client-auth}
+首先，当用户在家庭、工作单位和移动网络之间切换时，入口守卫始终看到同一个身份，因此能够关联这些环境中的会话与 IP 地址。其次，客户端向某些中继获取目录信息时，也会提供这个身份。串通的中继，或者同时观察它们的攻击者，便能将用户在不同中继上的活动关联起来。两种情况都会让持久标识符破坏 Tor 所追求的不可关联性。
+\end{soluzione}
+
+\begin{soluzione}{es:07-rsa}
+思路：使用 \texttt{cryptography.x509} 等 X.509 库解析类型 2 证书，提取 RSA 公钥，验证证书自签名，并检查公钥指数为 65537。然后按照格式解析类型 7 交叉证书，确认被认证的 Ed25519 公钥与已验证的身份一致，再使用 PKCS\#1 v1.5 验证 RSA 签名；签名针对规定前缀与字段的 SHA-256 哈希，不携带哈希算法 OID。中继指纹是 RSA 公钥按 PKCS\#1 格式 DER 编码后的 SHA-1 摘要。
+\end{soluzione}
+
+\begin{soluzione}{es:07-padding}
+不能。客户端 \texttt{test008c} 的流量经过的是\emph{它自己}与守卫之间的通道，而不是我们的通道。我们的通道还没有承载过电路，因此 \file{channelpadding\_decide\_to\_pad\_channel} 决定不添加填充。要观察通道填充，必须让多跳电路经过我们自己的通道，如 \cref{cap:10-cifratura-relay} 所示。
+\end{soluzione}
+
+\begin{soluzione}{es:07-mitm}
+TLSSECRETS 根据 $A$ 与中间人的 TLS 会话秘密派生，$A$ 的签名也涵盖它。$B$ 则根据\emph{自己}与中间人的 TLS 会话秘密重新计算 TLSSECRETS。两组秘密不同，因此即使中间人忠实转发每条信元，使 SLOG 与 CLOG 相同，验证也会失败。如果没有 TLSSECRETS 和 SCERT，中间人就能在 $B$ 面前冒充 $A$ 并转发 $A$ 的签名，误导 $B$ 相信自己已经与 $A$ 建立了经过认证的通道。
+\end{soluzione}
+
+\section*{第 \ref{cap:08-celle} 章：信元}
+
+\begin{soluzione}{es:08-lunghezze}
+\cella{CREATE2} 是定长信元：在使用两字节 CircID 的链路协议版本 3 中总长 512 字节；在使用四字节 CircID 的版本 5 中总长 514 字节。\cella{VERSIONS} 始终采用两字节 CircID，因此总长为 $2+1+2+4=9$ 字节。
+\end{soluzione}
+
+\begin{soluzione}{es:08-formato}
+命令 0（\cella{PADDING}）是定长；7（\cella{VERSIONS}）是变长；9（\cella{RELAY\_EARLY}）是定长；12（\cella{PADDING\_NEGOTIATE}）是定长；129（\cella{CERTS}）是变长。按照命令编号 $\ge 128$ 的规则，200 应当采用变长格式，但它未定义，因此不允许使用。接收方可以丢弃它并关闭通道。
+\end{soluzione}
+
+\begin{soluzione}{es:08-circid}
+只有 \texttt{0x92345678} 合法。CircID 零值保留给不属于任何电路的信元。在链路协议版本 $\ge 4$ 中，发起通道的一方（此处为客户端）必须选择最高有效位为 1 的 CircID；而 \texttt{0x12345678} 的最高有效位为 0。
+\end{soluzione}
+
+\begin{soluzione}{es:08-hex}
+第一个信元：CircID 为 \texttt{00000000}，命令 \texttt{0x81}=129（\cella{CERTS}），因此采用变长格式；长度为 \texttt{0003}，消息体为 \texttt{aa bb cc}。第二个信元：CircID 为 \texttt{0x80000007}，命令 \texttt{0x04}（\cella{DESTROY}），属于定长格式，消息体包含 509 字节。消息体的第一个字节 \texttt{00} 对应 NONE 原因码。\texttt{aabbcc} 本身不是有效的 CERTS 对象：本题只讨论信元的外层封装格式。
+\end{soluzione}
+
+\begin{soluzione}{es:08-relay}
+\texttt{02 0000 0005 00000000 012c}：DATA 命令（2）、Recognized 为 0、StreamID 为 5、Digest 暂时为零，数据长度 $300=\texttt{0x012c}$。剩余 $509-11-300=198$ 字节为填充：前四字节为零，其余 194 字节为随机数据。
+\end{soluzione}
+
+\begin{soluzione}{es:08-recognized}
+对于仍受到另一层加密的信元，Recognized 恰好为零的概率是 $2^{-16}$，因此平均每一百万个这样的信元中约有 $10^6/65536\approx15$ 个。只检查 Recognized 不够，因为存在误判。只有进一步比较运行中的摘要才能确认中继是该信元的目标；非目标中继想碰巧匹配摘要，还需要额外的 $2^{-32}$ 概率。
+\end{soluzione}
+
+\begin{soluzione}{es:08-destroy}
+假设攻击者控制入口守卫与出口。当出口希望标记一条电路时，可以用 \texttt{NOSUCHSERVICE} 等罕见原因码关闭它。如果中间中继和守卫把该原因值原样转发给客户端，守卫就能在同一时刻于自己的某条电路上看到这一不寻常的值，将守卫已知的客户端与出口已知的目的地关联起来。如果所有中继只传输和传播 NONE，原因字节就无法承载这样的信号。通过电路关闭时间进行关联仍有可能，但这种信道的噪声大得多。
+\end{soluzione}
+
+\begin{soluzione}{es:08-efficienza}
+传统格式：$\lceil1048576/498\rceil=2106$ 个信元，在通道上占 $2106\times514=\num{1082484}$ 字节，开销约为 3.2\%。CGO：$\lceil1048576/488\rceil=2149$ 个信元，占 \num{1104586} 字节，开销约为 5.3\%。这里没有计入 SENDME 和流建立消息。
+\end{soluzione}
+
+\begin{soluzione}{es:08-lab-fuzz}
+思路：使用 Hypothesis 生成由 CircID、命令和消息体组成的元组列表。从 \texttt{CellCommand} 中选择命令，将定长信元的消息体限制在 509 字节以内。将 \texttt{encode} 的输出拼接起来，再切分为随机长度的碎片，逐个送入缓冲区。反复调用 \texttt{decode} 提取信元，直到缓冲区不再包含完整信元。检查定长信元的消息体是否正确补零至 509 字节。
+\end{soluzione}
+
+\begin{soluzione}{es:08-arti}
+在 Arti 2.6.0 中，通道编解码器为 \file{crates/tor-cell/src/chancell/codec.rs} 中的 \texttt{ChannelCodec}，通过 \texttt{ChannelCodec::new} 以链路协议版本初始化。它的 \file{write\_cell} 和 \file{decode\_cell} 方法分别序列化和提取信元。与我们的 \texttt{decode} 一样，\file{decode\_cell} 在收到不完整信元时不会报错，而是返回 \texttt{Ok(None)}，直到收到足够字节，并且只在获得完整信元时消耗缓冲区数据。不同之处在于，Arti 使用可变的 \texttt{BytesMut} 缓冲区，并以通道消息类型 \texttt{M: ChanMsg} 为泛型，因此可以限制允许的消息集合。另一个显著区别是，\file{decode\_cell} 从偏移 4 处读取命令，并假设定长信元为 514 字节，也就是使用四字节 CircID。Arti 只支持链路协议版本 4 和 5，见 \file{crates/tor-proto/src/channel/handshake.rs} 中的 \file{LINK\_PROTOCOLS}；首次握手阶段的两字节 CircID \cella{VERSIONS} 信元会单独处理。
+\end{soluzione}
+
+\section*{第 \ref{cap:09-circuiti} 章：电路建立}
+
+\begin{soluzione}{es:09-dimensioni}
+ntor 需要 $20+32+32=84$ 字节。带三字节消息的 ntor-v3 需要 $32+32+32+3+32=131$ 字节。HDATA 最多包含 $509-4=505$ 字节，因此 $CM$ 最多可占 $505-128=377$ 字节。
+\end{soluzione}
+
+\begin{soluzione}{es:09-fast}
+\cella{CREATE\_FAST} 的秘密是 $X\|Y$，在通道内部以明文形式发送。如果用于第二跳，$X$ 和 $Y$ 就必须穿过第一台中继。该中继知道自己那一层的密钥，因此能够读取这些值、派生第二跳的密钥，并解密客户端与第二跳交换的一切数据，破坏不同跳点之间的隔离。
+\end{soluzione}
+
+\begin{soluzione}{es:09-direzioni}
+AES-CTR 将明文与只由密钥和计数器决定的密钥流进行 XOR。如果两个方向使用相同密钥，客户端发送的第 $n$ 个信元和中继发送的第 $n$ 个信元就会使用相同密钥流。观察两份密文的中间中继，可以将它们异或，得到两份明文的异或值，往往足以恢复两条消息。
+\end{soluzione}
+
+\begin{soluzione}{es:09-extend2}
+中继 \texttt{test004r} 的 ORPort 为 5104，即 \texttt{0x13f0}。\texttt{03} 表示有三个链路说明符；IPv4 地址与端口说明符为 \texttt{00 06 7f000001 13f0}。全部消息包含 $1+(2+6)+(2+20)+(2+32)=65$ 字节说明符、$2+2=4$ 字节 HTYPE 与 HLEN，以及 $32\cdot3+1+32=129$ 字节 HDATA。总共 198 字节，远低于中继消息 498 字节的容量上限。
+\end{soluzione}
+
+\begin{soluzione}{es:09-ds}
+缺少 $\mathrm{EXP}(B,x)$ 时，中继身份就得不到认证。转发握手的中间中继可以使用自己的 $y$ 生成 $Y$ 和 $\mathit{AUTH}$，冒充下一跳，读取后续发往该跳的流量，即实施\emph{中间人攻击}。缺少 $\mathrm{EXP}(Y,x)$ 时，前向保密就会丧失。以后获得长期洋葱密钥 $b$ 的任何人，都能根据保存的握手重新计算 $\mathrm{EXP}(X,b)$，并派生全部会话密钥。
+\end{soluzione}
+
+\begin{soluzione}{es:09-ver}
+\texttt{VER} 把握手与使用场景绑定；Tor 的值是 \texttt{"circuit extend"}。由于所有派生都加入了这一值，一个上下文中生成的握手，不会在另一个上下文中产生有效密钥或 $\mathit{AUTH}$。如果缺少 \texttt{VER}，不同协议使用相同计算时，攻击者可能把其他协议的握手消息重放给 Tor 中继，或者反过来。这属于\emph{跨协议攻击}。
+\end{soluzione}
+
+\begin{soluzione}{es:09-cc}
+在实验网络中，支持 \texttt{Relay=2-6} 的 \texttt{test003r} 会拒绝仅包含 \texttt{[02 06]} 的请求，并发送原因码为 \texttt{PROTOCOL} 的 \cella{DESTROY}。包含 \file{CC\_FIELD\_REQUEST} 的组合请求则会被接受，中继返回 \file{CC\_FIELD\_RESPONSE}。tor 源码只会在同时启用拥塞控制的跳点启用 CGO：\file{src/core/or/extendinfo.c} 中写着 \file{enable\_cgo = supports\_cgo \&\& use\_congestion\_control}。\proposta{359} 解释了原因：新中继消息格式只有部分命令带 StreamID，因此与旧的流级 SENDME 流量控制不兼容。它要求使用 \proposta{324} 的流量控制，即 \texttt{FlowCtrl=2}。
+\end{soluzione}
+
+\begin{soluzione}{es:09-ntor-ref}
+这是动手练习。\file{ntor\_ref.py} 包含客户端与服务器端函数。使用固定密钥而不是每次随机生成新密钥，可以得到可复现的结果，并与 \file{ntor.py} 比较。
+\end{soluzione}
+
+\begin{soluzione}{es:09-relay}
+思路：\file{server\_part1} 接收 HDATA，验证 \texttt{ID} 与 $B$，计算 $X_b=\mathrm{EXP}(X,b)$，派生第一阶段密钥，验证 MAC 并解密 $CM$。随后 \file{server\_part2} 生成 $(y,Y)$，计算 $\mathit{key\_seed}$ 和 $\mathit{verify}$，派生 $SM$ 使用的密钥并计算 $\mathit{AUTH}$。如果把 $y$ 固定为提案测试向量中的值，那么回应必须与 \file{server\_handshake} 一致。
+\end{soluzione}
+
+\section*{第 \ref{cap:10-cifratura-relay} 章：洋葱式加密}
+
+\begin{soluzione}{es:10-ordine}
+客户端更新第二跳的正向运行摘要，使用 Kf$_2$ 加密，再使用 Kf$_1$ 加密。第三跳不会看到该信元：第二跳识别后就不会继续转发它。
+\end{soluzione}
+
+\begin{soluzione}{es:10-contatore}
+每条信元消耗 509 字节密钥流。发送 1\,000 个信元后，密钥流位置为 $509\times1000=\num{509000}$ 字节，已超过 AES 的第 \num{31812} 个 16 字节数据块。如果为新电路重复使用该密钥，却将计数器重置为零，就会重复使用密钥流；异或两份用相同密钥流加密的密文，会暴露明文的异或值。因此，每条电路都必须通过包含临时随机值的握手派生新密钥。
+\end{soluzione}
+
+\begin{soluzione}{es:10-falso}
+中继的运行摘要将加入一条客户端并未计入该跳的信元。此后双方的摘要状态会分离，后续信元都无法被识别，电路最终失效。对于每个经过该中继、却不是发给它的信元，发生这种情况的概率为 $2^{-16}$；平均约每 \num{65536} 个信元出现一次，相当于约 33\,MB 的流量。
+\end{soluzione}
+
+\begin{soluzione}{es:10-tag}
+攻击者应修改明文预期内容已知或可猜测的字节，以便出口处的同伙识别特定变化，例如中继消息命令（\texttt{DATA} 为 \texttt{02}）、StreamID，或填充开头的四个零字节。在检查摘要前，串通的出口会先判断这些字节是否符合预期的修改；诚实的出口则只会发现摘要无效并销毁电路。
+\end{soluzione}
+
+\begin{soluzione}{es:10-cgo-tag}
+在 CGO 中，出口去掉自己的加密层后，被篡改的信元会产生伪随机的标签与内容，不存在可识别的标记：修改会以不可预测的方式扩散至整个信元。由于标签还会影响下一条信元的处理，电路后续的信元也无法解密，电路只能被丢弃。因此，攻击者至多能破坏电路，而不需要这种机制也能做到。
+\end{soluzione}
+
+\begin{soluzione}{es:10-padding}
+实际观测间隔为 4.1、3.0、5.7、8.7 和 6.8 秒，平均为 5.7 秒。如果取区间 $[a,b]$ 上两个独立均匀随机变量的最大值，其期望为 $a+\tfrac{2}{3}(b-a)=1.5+\tfrac{2}{3}\cdot8\approx6.8$ 秒。仅有五个样本，观测均值与期望存在这种差异并不意外。还要注意，每当\emph{任何}信元经过通道时，计时器都会重新开始，而不只是填充信元。
+\end{soluzione}
+
+\begin{soluzione}{es:10-drop}
+在实验网络中，中间中继不会回应 \texttt{DROP}：消息被识别后直接丢弃。电路仍可正常使用是间接证据：发送两条 \texttt{DROP} 后，客户端依然可以把电路扩展到出口。如果中间中继没有识别这些信元，那么它当时作为电路的终点，会销毁电路。如果客户端与中间中继对信元的计数不同，双方运行摘要会失去同步，后续扩展也会失败。
+\end{soluzione}
+
+\begin{soluzione}{es:10-alterazione}
+在私有网络测试中，客户端修改一条发给守卫的 \texttt{EXTEND2} 信元中的一个比特，而守卫当时是电路的唯一一跳，摘要检查因此失败。作为电路终点，守卫返回原因码为 1（\texttt{PROTOCOL}）的 \cella{DESTROY}。在较长电路上，客户端若修改发往第三跳的信元，修改后的信元会先经过前两跳，直到第三跳才被检测到。
+\end{soluzione}

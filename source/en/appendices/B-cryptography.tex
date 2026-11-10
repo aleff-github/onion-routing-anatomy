@@ -1,0 +1,94 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Further Cryptography}\label[appendice]{cap:B-crittografia}
+\aggiornatoal{23 September 2026}{dir-spec and tor-spec (torspec commit \texttt{8e1f245}); the \texttt{cryptography} library; laboratory network}
+
+\Cref{cap:05-crittografia} introduced Tor's cryptographic building blocks with minimal mathematical background. This appendix goes into three topics only briefly mentioned there, using runnable examples throughout: X25519 keys and their clamped bits, conversion between the Montgomery and Edwards forms of the same curve, verified against an actual certificate, and stream-cipher malleability, which enables the marking attack described in \cref{sec:tor1-debolezze}.
+
+% ---------------------------------------------------------------------------
+\section{One Curve, Two Forms}\label{sec:B-curve}
+
+X25519 and Ed25519 use the \emph{same} elliptic curve over the field of integers modulo $p = 2^{255} - 19$, expressed in two forms:
+\begin{description}
+  \item[Montgomery form] $v^2 = u^3 + 486662\,u^2 + u$. X25519 uses this form: a public key consists only of a point's $u$ coordinate, encoded in 32 little-endian bytes. This form permits a straightforward, fast scalar-multiplication algorithm, the \enquote{Montgomery ladder}, with execution time independent of the secret key.
+  \item[Twisted Edwards form] $-x^2 + y^2 = 1 + d\,x^2y^2$, where $d = -121665/121666$. Ed25519 uses this form for signatures: a public key is the $y$ coordinate, with the sign of $x$ stored in the highest bit of the final byte.
+\end{description}
+An explicit transformation relates the two forms; we use it in \ref{sec:B-conversione}.
+
+\subsection{X25519 Key Clamping}
+
+An X25519 private key begins as 32 bytes, but the implementation forces certain bits to specified values before using it: it clears the three least-significant bits, clears the highest bit, and sets the next-highest bit. Clearing the three low bits makes the scalar a multiple of 8, the curve's \emph{cofactor}, so that small-order components of a received point do not leak information about the scalar. Fixing the high bits also fixes the number of Montgomery ladder steps. We can verify this with the same library used in the laboratories:
+\begin{lstlisting}[language=Python,numbers=none]
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives import serialization as s
+import os
+def public_key(k):
+    return X25519PrivateKey.from_private_bytes(k).public_key().public_bytes(
+        s.Encoding.Raw, s.PublicFormat.Raw)
+a = bytearray(os.urandom(32)); b = bytearray(a)
+b[0] ^= 0x07                     # only the three low bits change
+print(public_key(bytes(a)) == public_key(bytes(b)))      # True
+\end{lstlisting}
+Two private-key byte strings differing only in bits overwritten during clamping produce the same public key.
+
+\subsection{The Point at Infinity}
+
+In an ntor handshake, both client and relay check that none of their $\mathrm{EXP}()$ operations produces the point at infinity. The specification notes that, for Curve25519, this check adequately replaces validating that $Y$ belongs to the group~\spec{tor-spec}{The "ntor" handshake}. Without it, an adversary supplying a small-order public point could produce a predictable shared secret, such as an all-zero string. The \texttt{cryptography} library performs this check itself: calling \texttt{exchange} with an all-zero 32-byte public key raises an exception (\texttt{Error computing shared key}) instead of returning a zero secret.
+
+% ---------------------------------------------------------------------------
+\section{From Montgomery to Edwards: The ntor Cross-Certificate}\label{sec:B-conversione}
+
+Each relay publishes its ntor public key, an X25519 key, in its descriptor and proves possession of the associated private key with \texttt{ntor-onion-key-crosscert}: a type-\texttt{0a} Ed25519 certificate certifying the relay's main Ed25519 identity, but \emph{signed with the ntor key}~\spec{dir-spec}{ntor-onion-key-crosscert}. That raises a problem: the ntor key uses Montgomery form, whereas Ed25519 signatures need Edwards form. The specification defines a conversion~\spec{dir-spec}{Converting a curve25519 public key to an ed25519 public key}:
+\[ y = \frac{u - 1}{u + 1} \bmod p . \]
+The $u$ coordinate determines $y$ but not the sign of $x$: two symmetric Edwards public keys correspond to each Montgomery coordinate. That sign cannot be recovered from the public Montgomery key, so the descriptor supplies it explicitly as the cross-certificate field's first argument: 0 for positive and 1 for negative. The relay computes it from its private key.
+
+The \file{labs/en/code/torlab/conversion.py} module implements the conversion in a few lines:
+\begin{lstlisting}[language=Python,numbers=none]
+P = 2**255 - 19
+def montgomery_to_edwards(u_bytes, sign):
+    u = int.from_bytes(u_bytes, "little") & ((1 << 255) - 1)
+    y = (u - 1) * pow(u + 1, P - 2, P) % P      # division via the inverse modulo p
+    compressed = bytearray(y.to_bytes(32, "little"))
+    compressed[31] |= (sign & 1) << 7          # x-coordinate sign in the high bit
+    return bytes(compressed)
+\end{lstlisting}
+It then verifies the cross-certificate with the certificate decoder from Laboratory~1. Applied to the laboratory network's descriptors (key abbreviated for readability; keys change with every new network):
+\begin{lstlisting}[numbers=none]
+$ PYTHONPATH=labs/en/code python3 -m torlab.conversion labs/en/lab/net/nodes/000a/cached-descriptors test004r
+test004r: ntor-onion-key DaxPE+Grnjex2Hmv+5qutl5dIX4La2jF6MIL7IK6+3E
+  Edwards key (sign 0): c369d08f8083002a15fe22f65dca14bf...
+  valid crosscert; certified identity: kjPIgDB2OFsGJzuwsT+KMS/El9qrlE2/4P5WvIvmzC8
+\end{lstlisting}
+In the reference transcript, the signature is valid and the certified identity matches the one recorded in the relay's \file{fingerprint-ed25519} file. The same applies to the other laboratory relays. Verification fails if we supply the wrong sign, one of the module's automated negative tests. Division modulo $p$ is calculated using Fermat's little theorem, by multiplying by $(u+1)^{p-2}$.
+
+% ---------------------------------------------------------------------------
+\section{Stream-Cipher Malleability}\label{sec:B-malleabilita}
+
+AES in counter mode (\cref{sec:cripto-cifrari}) generates a byte stream combined with the message using XOR. Anyone changing a ciphertext bit changes \emph{the corresponding plaintext bit} without knowing the key; they need only know or guess the original content. Here is a Python example:
+\begin{lstlisting}[language=Python,numbers=none]
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import os
+k, n = os.urandom(16), bytes(16)
+cipher = lambda d: Cipher(algorithms.AES(k), modes.CTR(n)).encryptor().update(d)
+c = bytearray(cipher(b"BEGIN www.example.org:443"))
+delta = bytes(x ^ y for x, y in zip(b"www.example.org", b"www.example.net"))
+for i, d in enumerate(delta):
+    c[6 + i] ^= d                 # targeted modification, without the key
+print(cipher(bytes(c)))            # b'BEGIN www.example.net:443'
+\end{lstlisting}
+Tor's original layered relay encryption, tor1, uses AES-CTR with integrity checked only at the circuit's endpoint by a four-byte digest. A malicious relay may therefore alter a cell predictably and have an accomplice further along the route recognize the alteration. This is the marking attack discussed in \cref{sec:tor1-debolezze}, and one motivation for CGO (\cref{sec:cgo}), whose design makes an altered cell, and subsequent cells, unrecoverable.
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:B-bit}
+How many distinct values can an X25519 private scalar take after its bits have been clamped? Compare the answer with $2^{256}$.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:B-inversa}
+Derive and implement the inverse transformation from an Ed25519 public key's $y$ coordinate to the Montgomery $u$ coordinate. Preserve the original Ed25519 key's $x$-sign bit; then use \texttt{montgomery\_to\_edwards} from \file{conversion.py} to check that the two conversions recover the original Ed25519 public key (for $y \neq 1$).
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:B-digest}
+In tor1, a cell has a four-byte digest and a two-byte all-zero \texttt{recognized} field. What is the probability that a randomly modified cell is accepted as valid by its final hop? Why can marking nevertheless succeed?
+\end{esercizio}

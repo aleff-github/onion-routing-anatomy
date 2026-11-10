@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Alessandro Greco
+# Private book network (Chapter 19): 3 directory authorities, 3 middle relays,
+# 2 exits, 1 client, and 1 v3 onion service. Everything runs on 127.0.0.1.
+Authority = Node(tag="a", authority=1, relay=1)
+Middle    = Node(tag="r", relay=1)
+Exit      = Node(tag="e", relay=1, exit=1)
+Client    = Node(tag="c", client=1, launch_phase=2)
+Onion     = Node(tag="h", hs=1, launch_phase=2)
+
+NODES = (Authority.getN(3) + Middle.getN(3) + Exit.getN(2)
+         + Client.getN(1) + Onion.getN(1))
+
+ConfigureNodes(NODES)

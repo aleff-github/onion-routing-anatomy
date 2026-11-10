@@ -1,0 +1,51 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Русское издание: точка входа EPUB.
+\documentclass[11pt]{book}
+\input{преамбула}
+\input{макросы}
+\input{права}
+\AtBeginDocument{\renewcommand{\guillemotleft}{«}\renewcommand{\guillemotright}{»}}
+\makeatletter
+\@ifundefined{Configure}{}{\renewcommand{\altfig}[1]{\Configure{Picture-alt}{#1}}}
+\makeatother
+
+% Только EPUB (tex4ht). Постоянный идентификатор, обложка в OPF, иллюстрации и длинные
+% строки в пределах узкого экрана, метаданные о правах и доступности только о том, что в
+% книге действительно есть (сборка передаёт daisy-). \mathit заменяется на \textit:
+% tex4ht превращает курсивную поправку в пробел («KEY _SEED»).
+\makeatletter
+\@ifundefined{Configure}{}{\AtBeginDocument{%
+  \renewcommand{\mathit}[1]{\textit{#1}}%
+  \Configure{UniqueIdentifier}{urn:uuid:7aa8495e-9889-4a75-a947-9ced1422b9cd}%
+  \Configure{CoverMimeType}{image/jpeg}%
+  \CoverMetadata{epub-cover.jpg}%
+  \Css{img{max-width:100\%;height:auto;}}%
+  \Css{p,li,dd,td,pre,code{overflow-wrap:anywhere;}}%
+  \Configure{OpfMetadata}{\HCode{<dc:publisher>Alessandro Greco</dc:publisher>}}%
+  \Configure{OpfMetadata}{\HCode{<dc:rights>Copyright 2026 Alessandro Greco. Стандартная общественная лицензия GNU версии 3 или более поздней (GPL-3.0-or-later). Исходники: https://github.com/aleff-github/onion-routing-anatomy</dc:rights>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessMode">textual</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessMode">visual</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">alternativeText</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">tableOfContents</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">readingOrder</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityHazard">none</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilitySummary">Текст разделён на главы с навигационным оглавлением; иллюстрации и формулы — изображения SVG с альтернативным текстом. Проверка соответствия WCAG не проводилась.</meta>}}%
+}}
+\makeatother
+
+\title{Анатомия Tor: протокол анонимности побайтно}
+\author{Alessandro Greco}
+\date{}
+\begin{document}
+\frontmatter
+\maketitle
+\Colophon
+\tableofcontents
+\include{главы/00-предисловие}
+
+\mainmatter
+\input{структура}
+\backmatter
+\printbibliography[heading=bibintoc,title={Литература}]
+\end{document}

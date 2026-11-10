@@ -1,0 +1,97 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Capítulo \ref{cap:19-rete-privata}: una red Tor privada}
+
+\begin{soluzione}{es:19-porte}
+\texttt{test006e} es el nodo número 6, así que su ORPort es 5106 y su ControlPort es 8006. \texttt{test009h} no tiene ORPort: un servicio onion no es un repetidor y no acepta conexiones iniciadas por otros nodos de la red. Construye circuitos salientes hacia sus puntos de introducción y encuentro.
+\end{soluzione}
+
+\begin{soluzione}{es:19-guard}
+La opción es \opt{TestingDirAuthVoteGuard}~\texttt{*} en los archivos torrc de las autoridades. En la red pública, el indicador Guard exige demostrar estabilidad y ancho de banda a lo largo del tiempo (\cref{cap:12-directory}). En el laboratorio, cualquier repetidor puede actuar como guardia. Por tanto, las estadísticas de selección de primeros saltos no representan las de la red pública.
+\end{soluzione}
+
+\begin{soluzione}{es:19-socks}
+Con \texttt{--socks5}, \texttt{curl} resuelve \texttt{localhost} por su cuenta y entrega una dirección IP al cliente Tor. Con \texttt{--socks5-hostname}, transmite el nombre para que lo resuelva la salida. En la red pública, con un dominio de Internet ordinario, la resolución local revelaría los sitios visitados al resolvedor DNS del cliente y a quien lo observe, aunque la conexión posterior utilizara Tor. Es una filtración DNS clásica.
+\end{soluzione}
+
+\begin{soluzione}{es:19-consenso}
+Cada veinte segundos, según \opt{V3AuthVotingInterval}. Por tanto, un día contiene $86400/20=4320$ consensos de laboratorio, frente a los 24 de la red pública, donde las autoridades votan cada hora.
+\end{soluzione}
+
+\begin{soluzione}{es:19-autorita}
+Con una autoridad detenida, la red puede seguir produciendo consensos porque basta una mayoría de las tres, o dos firmas. Con dos detenidas, la restante no puede generar por sí sola un consenso nuevo válido. Sin embargo, los clientes pueden continuar utilizando el anterior como \emph{razonablemente vigente} durante unas 24 horas después de su caducidad (\cref{cap:12-directory}), de modo que aún pueden construir circuitos durante algún tiempo. El consenso de laboratorio solo es válido durante 40 segundos, pero el margen de vigencia razonable sigue siendo de 24 horas.
+\end{soluzione}
+
+\begin{soluzione}{es:19-stem}
+Esquema: \file{c.get\_network\_status(fingerprint)} devuelve la entrada correspondiente del consenso con sus atributos \texttt{address} y \file{or\_port}. Llámalo para cada huella presente en \texttt{circ.path}, tomando el primer elemento de cada tupla.
+\end{soluzione}
+
+\begin{soluzione}{es:19-rete}
+Utiliza la misma estructura de definición de red del libro y sustituye los números de nodos por \texttt{getN(5)}, \texttt{getN(10)} y \texttt{getN(4)}. El tiempo de arranque depende del equipo. Conforme crece la red, buena parte del tiempo adicional se dedica a esperar que los repetidores aparezcan en el consenso y que los clientes descarguen sus microdescriptores.
+\end{soluzione}
+
+\begin{soluzione}{es:19-log}
+Es un ejercicio exploratorio. Busca mensajes de registro sobre selección de rutas, envío de \cella{CREATE2} y \texttt{EXTEND2}, recepción de sus respuestas y finalización del circuito. El nivel \emph{info} no muestra cada celda. Activa registros \emph{debug} para ámbitos concretos en el torrc del cliente para observar más detalles.
+\end{soluzione}
+
+\begin{soluzione}{es:19-cattura}
+No. Una vez terminada la negociación TLS, las celdas Tor viajan cifradas y \cmd{tcpdump} solo puede observar registros TLS. Siguen siendo visibles direcciones, puertos, tamaños y tiempos de registros. Son precisamente las clases de información aprovechadas por ataques de análisis de tráfico (\cref{cap:26-attacchi}).
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:21-onion-pratica}: publicar un servicio onion}
+
+\begin{soluzione}{es:21-vanity}
+Un prefijo de seis caracteres requiere aproximadamente $32^6\approx1{,}07\times10^9$ intentos, unos 107 segundos a diez millones por segundo. Ocho caracteres requieren $32^8\approx1{,}1\times10^{12}$ intentos, unos $1{,}1\times10^5$ segundos, algo más de treinta horas. Cada carácter adicional multiplica por 32 el esfuerzo esperado.
+\end{soluzione}
+
+\begin{soluzione}{es:21-fuga}
+La página de error revela el programa y versión del servidor web, información potencialmente útil para identificar vulnerabilidades, y especialmente una dirección IP, 192.0.2.10, que podría corresponder a la dirección pública real del servidor. Así podría localizarse el servicio. Desactiva las firmas del servidor en cabeceras y páginas de error, vincula el servidor únicamente a localhost o a un socket Unix e inspecciona sus respuestas con un cliente de laboratorio.
+\end{soluzione}
+
+\begin{soluzione}{es:21-revoca}
+Elimina \file{alice.auth} y recarga la configuración. El servicio publica un descriptor nuevo sin la entrada de Alice, cifrado mediante una \emph{cookie de descriptor} nueva que ella no puede descifrar. Los clientes que conserven el descriptor anterior pueden seguir utilizando los puntos de introducción conocidos mientras sigan siendo válidos. Para una revocación más completa, rota los puntos de introducción, por ejemplo reiniciando el servicio. Atención al caso límite: si Alice era la única cliente autorizada, queda un directorio vacío y los HSDir rechazan el descriptor (\cref{sec:onionp-ristretta}). Para desactivar por completo el descubrimiento restringido, elimina \file{authorized\_clients/} y recarga la configuración.
+\end{soluzione}
+
+\begin{soluzione}{es:21-socket}
+Configura \texttt{HiddenServicePort 80 unix:/path/socket} y haz que el servidor web escuche en ese socket Unix. Además de evitar un puerto TCP abierto, un socket del sistema de archivos puede protegerse con permisos, no resulta accesible desde una interfaz de red e impide exponer accidentalmente el servicio en una interfaz pública.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:20-traffico}: observar el tráfico}
+
+\begin{soluzione}{es:20-dimensioni}
+TLS no alinea registros con celdas Tor. tor escribe celdas en un búfer y la biblioteca TLS las agrupa en registros de hasta 16\,KB, tamaño relacionado con el valor \texttt{sendme\_inc} de 31 celdas (\cref{sec:cc}). TLS añade sus propias cabeceras y etiquetas de autenticación. A su vez, TCP puede dividir o combinar registros TLS en segmentos diferentes. La longitud fija se aplica a celdas Tor, no a paquetes de red.
+\end{soluzione}
+
+\begin{soluzione}{es:20-relay}
+Esquema: después de \cella{CREATED2}, descifra las celdas \cella{RELAY\_EARLY} y \cella{RELAY} del circuito quitando sus capas en el orden correcto, con las claves de los saltos almacenadas en \file{circuit.py}. El estado de la secuencia de AES-CTR debe avanzar exactamente en el orden en que se utilizó. Durante la construcción del circuito pueden verse \texttt{EXTEND2} y \texttt{EXTENDED2}, seguidos eventualmente por \texttt{BEGIN}, \texttt{CONNECTED}, \texttt{DATA} y \texttt{SENDME}.
+\end{soluzione}
+
+\begin{soluzione}{es:20-padding}
+En un canal de cliente que transporta circuitos de varios saltos pueden aparecer registros TLS cada pocos segundos aun sin tráfico de aplicación. Contienen celdas \cella{PADDING} de canal, enviadas a intervalos aleatorios entre 1,5 y 9,5 segundos (\cref{sec:lab-cifratura}). Por el contrario, un canal que nunca haya transportado circuitos de varios saltos no muestra ese tráfico.
+\end{soluzione}
+
+\begin{soluzione}{es:20-dissector}
+Es un ejercicio de programación. Un analizador Lua registrado como \emph{disector heurístico} para datos TLS descifrados puede leer los dos primeros bytes del CircID de la celda \cella{VERSIONS} inicial, o cuatro bytes posteriormente. Después lee el comando y, para celdas variables, el campo de longitud. Mantén estado separado para cada conexión y dirección, como en \file{traffic.py}.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:22-relay}: administrar un repetidor o puente}
+
+\begin{soluzione}{es:22-ordine}
+Sí. La primera regla coincidente, \texttt{accept *:80}, acepta la conexión y las siguientes ya no se consideran. Invierte las dos primeras: \texttt{reject 192.0.2.0/24:*}, \texttt{accept *:80}, \texttt{reject *:*}.
+\end{soluzione}
+
+\begin{soluzione}{es:22-riassunto}
+El resumen enumera únicamente puertos, no direcciones, y por fuerza es aproximado. Incluye un puerto cuando la salida lo admite para \enquote{la mayoría} de direcciones, un umbral técnico preciso definido en dir-spec y no simplemente más del 50\%: la salida no debe bloquear más de $2^{25}$ direcciones IPv4, una red /7, o $2^{112}$ direcciones IPv6, una red /16, excluyendo direcciones no públicas. Cuando el cliente recibe \texttt{END} con razón \texttt{EXITPOLICY}, registra que esa salida rechaza la dirección y puerto indicados durante el TTL correspondiente y vuelve a intentar el flujo por otro circuito con otra salida.
+\end{soluzione}
+
+\begin{soluzione}{es:22-famiglia}
+Con \opt{MyFamily} solo cuentan las declaraciones recíprocas. Los cinco repetidores antiguos siguen formando una familia entre ellos, pero el sexto no forma parte porque ninguno de los anteriores lo enumera. Por tanto, los clientes pueden seleccionarlo junto con un miembro de la familia original. Con una clave de familia basta instalar esa misma clave en el repetidor nuevo: su certificado firmado lo vincula con la familia sin modificar los otros nodos.
+\end{soluzione}
+
+\begin{soluzione}{es:22-refused}
+Los registros muestran sucesivamente \enquote{in-progress connect failed \ldots (Connection refused)} y \enquote{Didn't recognize errno 115}. Si la razón de cierre del flujo utilizara el error devuelto por \texttt{getsockopt(SO\_ERROR)}, el cliente recibiría \texttt{CONNECTREFUSED}. Del mismo modo podrían comunicarse correctamente \texttt{TIMEOUT} para \texttt{ETIMEDOUT}, \texttt{NOROUTE} para \texttt{ENETUNREACH} o \texttt{EHOSTUNREACH}, y \texttt{CONNRESET}, en lugar de \texttt{MISC}, para conexiones que fallan después de \texttt{EINPROGRESS}. Para el cliente la diferencia práctica es moderada: cambia el mensaje de error, pero el procesamiento del fallo del flujo sigue siendo el mismo.
+\end{soluzione}
+
+\begin{soluzione}{es:22-accounting}
+A 10\,MB/s, el repetidor transfiere unos 864\,GB diarios, contando el máximo entre tráfico enviado y recibido. Una cuota mensual de 1\,TB se agotaría en poco más de un día. Un repetidor desconectado durante casi todo el mes pierde los indicadores \texttt{Stable} y \texttt{Guard} y rompe circuitos al apagarse. Uno más lento pero conectado todo el mes resulta mucho más útil: configura \opt{RelayBandwidthRate} para distribuir la cuota a lo largo de todo el período.
+\end{soluzione}

@@ -1,0 +1,19 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 替代文本。
+\altfig{图中同一条客户端—守卫—中间中继—出口中继电路经过三条通道，每条通道使用不同的非零局部 CircID：通道 1 为 0x8000A1C3，通道 2 为 0x0000712F，通道 3 为 0x93B40E07。守卫中继的转发表将第一条通道的标识符关联到第二条，中间中继则将第二条关联到第三条。链路协议 v4 及以上的 CircID 为 32 位，其最高位取决于谁发起通道连接，而不是电路跳数。仅比较 CircID 无法直接跨链路配对，但其他流量特征仍可能暴露关联。}
+% CircID 仅在通道内部有效。
+\begin{tikzpicture}[node distance=2.9cm]
+  \node[client] (cl) {客户端};
+  \node[relay,right=of cl] (g) {守卫};
+  \node[relay,right=of g] (m) {中间中继};
+  \node[relay,right=of m] (x) {出口};
+  \draw[thick,torgrigio] (cl) -- node[above,font=\sffamily\scriptsize]{通道 1} node[below,font=\ttfamily\scriptsize,text=torviola]{0x8000A1C3} (g);
+  \draw[thick,torgrigio] (g) -- node[above,font=\sffamily\scriptsize]{通道 2} node[below,font=\ttfamily\scriptsize,text=torviola]{0x0000712F} (m);
+  \draw[thick,torgrigio] (m) -- node[above,font=\sffamily\scriptsize]{通道 3} node[below,font=\ttfamily\scriptsize,text=torviola]{0x93B40E07} (x);
+  \node[below=0.9cm of g,draw=torgrigio,fill=white,font=\ttfamily\scriptsize,align=left] (tg)
+    {(通道1, 0x8000A1C3)\\\hspace*{1em}$\leftrightarrow$ (通道2, 0x0000712F)};
+  \node[below=0.9cm of m,draw=torgrigio,fill=white,font=\ttfamily\scriptsize,align=left] (tm)
+    {(通道2, 0x0000712F)\\\hspace*{1em}$\leftrightarrow$ (通道3, 0x93B40E07)};
+  \draw[dotted] (g) -- (tg); \draw[dotted] (m) -- (tm);
+\end{tikzpicture}

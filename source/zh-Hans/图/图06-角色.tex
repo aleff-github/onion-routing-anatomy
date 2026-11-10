@@ -1,0 +1,26 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 替代文本。
+\altfig{Tor 网络角色示意图：上方客户端通过守卫、中间中继和出口中继访问网站；三个权威节点图标代表九个目录权威，它们对网络共识进行投票并签名。面对审查时，网桥可作为入口节点。下方访问洋葱服务无需出口中继：客户端和洋葱服务各自建立通往汇合点的电路；虚线仅示意路径，不展示中间的所有中继。}
+% Tor 网络中的角色。
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  aut/.style={relay,fill=torviola!15,draw=torviola,font=\sffamily\scriptsize},
+  ex/.style={relay,fill=torverde!30}]
+  \node[client] (c) at (0,0) {客户端};
+  \node[relay] (g) at (2.8,0) {守卫};
+  \node[relay] (m) at (5.3,0) {中间中继};
+  \node[ex] (e) at (7.8,0) {出口};
+  \node[server] (s) at (10.6,0) {网站};
+  \draw[cellaf] (c) -- (g); \draw[cellaf] (g) -- (m); \draw[cellaf] (m) -- (e); \draw[->,thick,torgrigio] (e) -- (s);
+  \foreach \x/\n in {3.8/1,5.3/2,6.8/3} \node[aut] (a\n) at (\x,2.4) {权威};
+  \node[font=\sffamily\scriptsize,above=1pt of a2] {目录权威（9）：签名后的共识};
+  \draw[dotted,thick,torviola] (a2) -- node[font=\sffamily\scriptsize,right]{共识} (m);
+  \node[relay,fill=torgrigio!10,draw=torgrigio,font=\sffamily\scriptsize] (b) at (1.4,-2.2) {网桥};
+  \node[font=\sffamily\scriptsize,align=center] at (1.4,-3.1) {受审查时作为第一跳，\\代替公开守卫};
+  \draw[dashed,torgrigio,->] (c) -- (b);
+  \node[client,fill=torverde!15,draw=torverde!60!black] (o) at (8.8,-2.3) {洋葱服务};
+  \node[relay,fill=torverde!25,font=\sffamily\scriptsize,align=center] (rp) at (5.3,-2.3) {汇合点};
+  \draw[dashed,torverde!60!black,->] (o) -- node[font=\sffamily\scriptsize,below]{电路} (rp);
+  \draw[dashed,torverde!60!black,->] (c) to[bend right=18] node[font=\sffamily\scriptsize,above,pos=.68]{客户端电路} (rp);
+  \node[font=\sffamily\scriptsize,align=center] at (5.3,-3.35) {客户端与服务在此相遇，\\无需使用出口};
+\end{tikzpicture}

@@ -1,0 +1,228 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{审查、网桥与可插拔传输}\label{cap:16-censura}
+\aggiornatoal{2026 年 9 月 23 日}{tor 0.4.9.13；pt-spec v1；obfs4proxy 0.0.14（Debian）；Tor Project 文档}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 描述审查者可以通过哪些方式阻断 Tor；
+  \item 解释网桥是什么，以及为什么网桥分发十分困难；
+  \item 描述 tor 与可插拔传输程序之间的通信协议；
+  \item 区分 obfs4、meek、Snowflake、WebTunnel 和 Conjure 所采用的策略；
+  \item 在实验网络中运行 obfs4 网桥，并观察审查者能够看到什么（实验~10）。
+\end{itemize}
+\end{obiettivi}
+
+此前介绍的所有机制，都以客户端能够连接到 Tor 网络为前提。但在许多国家，这个前提并不成立：连接 Tor 的流量受到阻断，有时仅在政治紧张时期如此，有时则是长期限制。本章以\textbf{绕过网络审查}为主题，为第二部分画上句号。这也是近年来 Tor Project 最活跃的工作领域之一。
+
+% ---------------------------------------------------------------------------
+\section{Tor 如何遭到封锁}\label{sec:cens-blocco}
+
+审查者通常是能够控制一国互联网接入服务商的政府，其手段包括：
+\begin{description}
+  \item[封锁地址] 中继列表是公开的，来自网络共识（\cref{cap:12-directory}）。审查者可以下载共识并封锁所有中继的 IP 地址，也可以只封锁目录权威节点，以及客户端获取共识所依赖的中继。
+  \item[封锁网站] 即使 Tor 网络本身仍然可以连接，封锁 \texttt{torproject.org} 也会妨碍人们下载 Tor Browser。
+  \item[识别协议] \emph{深度包检测}（deep packet inspection，DPI）可以根据 TLS 握手、数据包大小或时间特征识别 Tor 连接，即使审查者尚不知道目的地址也一样。
+  \item[主动探测] 当 DPI 怀疑某服务器是未公开的中继时，审查者可以主动连接该服务器并尝试使用 Tor 协议通信。如果服务器响应，就将其封锁。
+  \item[白名单] 在极端情况下，审查者仅允许明确授权的协议或目的地，并阻断其他所有流量。
+\end{description}
+每种技术都有相应的反制措施，审查者与开发者之间的较量仍在继续。OONI 等项目则测量 Tor 在哪些地方、以何种方式遭到封锁（\cref{cap:24-metrics}）。
+
+% ---------------------------------------------------------------------------
+\section{网桥}\label{sec:cens-bridge}
+
+对抗地址封锁的方法是使用\textbf{网桥}（bridge）：一种不出现在公开共识中的中继。网桥扮演入口守卫的角色（\cref{sec:guard}）。客户端把它作为第一跳，随后电路正常进入 Tor 网络。由于网桥地址没有公开，审查者不能仅靠读取公开列表就将其封锁。网桥向\textbf{网桥权威节点}发布描述符，由后者检查可达性，并维护一份不公开的列表。在已发布的网桥统计中，系统使用身份摘要的\emph{二次摘要}，避免泄露身份。
+
+客户端通过一条\emph{网桥配置行}（bridge line）配置网桥。在实验网络中，客户端 \texttt{test011bc} 的 \file{torrc} 包含：
+\begin{lstlisting}[language=torrc,numbers=none]
+UseBridges 1
+Bridge obfs4 127.0.0.1:9909 2557828B596B33AB02075FE7EAD86F2DC3CEAFD5 cert=4sKDQih... iat-mode=0
+ClientTransportPlugin obfs4 exec /usr/bin/obfs4proxy
+\end{lstlisting}
+这一行包含传输类型、地址、网桥身份指纹（用于验证通信对端，参见 \cref{cap:07-canali}），以及传输参数。其中 \texttt{cert=4sKDQih...} 仅为排版而\emph{截断的示例}，不能直接复制使用；实际配置必须使用读者自己启动的网桥所生成的完整证书与身份指纹。
+
+\subsection{分发难题}
+
+只要审查者不知道网桥的地址，网桥就有用。但是要让用户使用网桥，就必须把地址交给他们；而审查者也可以假扮普通用户。因此不存在完美方案：分发系统既要让足够多的合法用户得到网桥，又要尽可能减少地址泄露给审查者的机会。Tor Project 通过多种渠道分发网桥，每种渠道都配有防止自动化收集地址的措施~\cite{torsupport}：
+\begin{itemize}
+  \item 网站 \url{https://bridges.torproject.org/}；
+  \item 发送邮件到 \texttt{bridges@torproject.org}；
+  \item Telegram 机器人 \texttt{@GetBridgesBot}；
+  \item 直接使用 Tor Browser：浏览器检测连接受阻后，会为用户所在国家请求合适的网桥（\emph{Connection Assist}，基于名为 \emph{moat} 的分发渠道）；
+  \item 由能够直接识别用户身份的组织运营的私人分发渠道。
+\end{itemize}
+多年来，负责把网桥分配给不同渠道的系统是 BridgeDB。随后它被 \textbf{rdsys} 取代，迁移于 2024 年 10 月完成~\cite{torblogrdsys}。网桥运营者可以通过 \opt{BridgeDistribution} 选项选择分发渠道。
+
+\subsection{Lox}
+
+\textbf{Lox}~\cite{tulloch2023lox} 利用\emph{信誉}机制解决分发问题。新用户收到一个网桥地址和一个匿名凭证。如果该网桥持续未被封锁，凭证的等级就会逐渐提高，最高达到 4 级；从 2 级开始，用户还可以邀请其他人。如果网桥被封锁，用户可以获取另一个网桥，但会失去信誉。其基本假设是：审查者如果封锁自己拿到的每一个网桥，就无法提升等级；诚实用户则可以。凭证采用密码学技术，使系统本身也无法知道谁邀请了谁，从而保护用户的\emph{社交关系图}（social graph）。Lox 正在 Tor Browser 的 alpha 版本中测试。
+
+% ---------------------------------------------------------------------------
+\section{可插拔传输}\label{sec:cens-pt}
+
+只隐藏地址，还不足以抵御协议识别：流量本身也必须表现得不同。Tor Project 没有选择在审查者每次识别出新特征时都修改 tor，而是为转换流量的外部程序定义了一个接口：\textbf{可插拔传输}（pluggable transports，PT）~\spec{pt-spec}{Architecture Overview}。
+
+\subsection{系统架构}
+
+PT 是由 tor 启动的独立进程，因此被称为\emph{托管}进程。在客户端一侧，它向 tor 提供本地 SOCKS 代理。tor 把需要发往网桥的连接交给 PT；PT 转换流量后再发送。在网桥一侧，另一个 PT 监听公开端口，逆向转换流量，再把它转发到 tor 的本地 ORPort。PT 还可以通过名为 \emph{Extended ORPort} 的附加协议，将客户端的实际地址告知 tor，用于统计。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图16-可插拔传输}
+\caption{可插拔传输的简化架构。在客户端一侧，tor 通过本地 SOCKS 代理与 PT 通信；在网桥一侧，PT 通过 ORPort 或配置后的 Extended ORPort 将还原的流量传给 tor。图中省略了 Snowflake 的志愿者中继代理。审查者在所监测的链路上看到转换后的流量，但仍有可能识别该流量。}
+\label{fig:pt}
+\end{figure}
+
+\subsection{tor 与 PT 之间的协议}
+
+tor 通过环境变量配置 PT，PT 则通过向标准输出写入文本行进行回应~\spec{pt-spec}{Specification}。我们可以在实验容器中像 tor 一样手动启动 \cmd{obfs4proxy}，验证这一机制。首先以客户端方式启动：
+\begin{lstlisting}[language=bash,numbers=none]
+$ env TOR_PT_MANAGED_TRANSPORT_VER=1 TOR_PT_STATE_LOCATION=/tmp/pt \
+      TOR_PT_EXIT_ON_STDIN_CLOSE=1 TOR_PT_CLIENT_TRANSPORTS=obfs4 obfs4proxy
+VERSION 1
+CMETHOD obfs4 socks5 127.0.0.1:40057
+CMETHODS DONE
+\end{lstlisting}
+PT 声明协议版本，并告知 tor：自己提供 \texttt{obfs4} 传输，访问入口是一个自行选定本地端口的 SOCKS5 代理。作为服务器运行时，则通过环境变量指定公开监听地址和 ORPort 目的地：
+\begin{lstlisting}[language=bash,numbers=none]
+$ env ... TOR_PT_SERVER_TRANSPORTS=obfs4 \
+      TOR_PT_SERVER_BINDADDR=obfs4-127.0.0.1:19999 \
+      TOR_PT_ORPORT=127.0.0.1:5104 obfs4proxy
+VERSION 1
+SMETHOD obfs4 127.0.0.1:19999 ARGS:cert=5W6vcbWbFGGZgabwm4C3WipezwnAfadoBhqfNVpY72xnkjB/Szczbxg8fLWJJ1uRlyjPSg,iat-mode=0
+SMETHODS DONE
+\end{lstlisting}
+\texttt{ARGS:} 后面的参数正是客户端需要知道的内容，它们会出现在网桥配置行中。PT 还会把这些参数写入状态目录内的 \file{obfs4\_bridgeline.txt}。环境变量 \file{TOR\_PT\_EXIT\_ON\_STDIN\_CLOSE} 要求 PT 在 tor 关闭输入流时终止，避免子进程比启动它的进程活得更久。（规范中的示例因一处笔误，称 PT 将消息写入 \enquote{stdin}；实际上，我们刚刚看到，它写入的是标准输出。）
+
+服务器示例中的 \texttt{env ...} 只是\emph{示意写法}：省略号代表其他必要的环境变量，不能原样输入执行。同样，客户端输出中的 SOCKS5 端口来自一次参考运行，并非固定端口。
+
+\subsection{Lyrebird}
+
+Tor Browser 使用的传输程序是 \textbf{lyrebird}，它源自早期的 \cmd{obfs4proxy}，并支持 obfs4、meek、Snowflake 和 WebTunnel~\cite{torsupport}。实验环境使用 Debian 软件包提供的 \cmd{obfs4proxy} 0.0.14，它仍与 obfs4 兼容。
+
+% ---------------------------------------------------------------------------
+\section{不同的规避策略}\label{sec:cens-strategie}
+
+当前使用的传输技术大致遵循两种相反的策略：\emph{让流量看起来不像任何可识别的协议}，或者\emph{让流量看起来像一种获准使用的协议}。
+
+\subsection{obfs4：看起来不像任何可识别的协议}
+
+由 Yawning Angel 设计的 \textbf{obfs4} 将流量转换为看似随机的字节序列：没有容易识别的头部、没有 TLS 握手，数据包长度也会变化。它的有效性主要来自三个设计选择：
+\begin{itemize}
+  \item 密钥交换采用 ntor 的一种变体（\cref{sec:ntor}），其中 Curve25519 公钥通过 Elligator2 编码，使椭圆曲线上的点看起来与随机字符串无异。
+  \item 客户端必须事先知道网桥的 \texttt{cert} 参数，其中包含其身份信息和公钥。没有该参数，观察者就无法构造有效握手，而网桥也不会回应。这能够抵御\textbf{主动探测}：好奇的审查者连接网桥时，不会得到可以识别的响应。
+  \item \texttt{iat-mode}（\emph{inter-arrival time}，包间到达时间）可以添加随机延迟和分片，以隐藏时间特征，但会牺牲一定性能。
+\end{itemize}
+obfs4 的局限也正来自它的优势：如果审查者实施白名单，或者封锁\enquote{任何看起来像随机数据的流量}，obfs4 就可能失效。一些国家确实采取了类似做法。
+
+\subsection{meek：隐藏在大型服务之后}
+
+\textbf{meek}~\cite{fifield2015fronting} 利用\emph{域名前置}（domain fronting）。客户端向大型内容分发服务建立 HTTPS 连接，在连接的可见部分使用一个无害的域名，而真正的目的地——通往 Tor 的网关服务器——只在加密数据中指定。要封锁 meek，审查者就必须封锁整个服务，并承担大量误伤其他流量的后果。但这一技术依赖服务提供商的许可；近年来，不少提供商已经禁止这种做法。此外，meek 所有流量都经过提供商的服务器，因此速度慢、成本高。
+
+\subsection{Snowflake：大量短暂存在的代理}
+
+\textbf{Snowflake}~\cite{bocovich2024snowflake} 依赖成千上万名志愿者运行小型代理，例如浏览器扩展或服务器上的程序。客户端先通过域名前置等难以封锁的渠道联系\emph{协调服务器}（broker），获得一个代理，然后通过 WebRTC 与代理连接。WebRTC 是浏览器视频通话所使用的协议。代理再把流量转发到 Tor Project 运营的 Snowflake 网桥。由于代理数量很多，地址又不断变化，封锁全部代理地址很不现实；而封锁 WebRTC，则意味着同时阻断视频通话。
+
+\subsection{WebTunnel：看起来像普通网站}
+
+Tor Project 于 2024 年 3 月宣布的 \textbf{WebTunnel}，把流量封装进行为类似 WebSocket 的 HTTPS 连接~\cite{torblogwebtunnel}。网桥可以隐藏在普通网站后面，与网站共用域名、IP 地址和端口。反向代理只把针对秘密路径的请求转发给网桥，其他请求则由普通网站处理。WebTunnel 主要针对实施白名单的审查者；在这种环境下 obfs4 可能失效，而 WebTunnel 的流量外形却类似被允许的协议。
+
+\subsection{Conjure：隐藏在地址空间中}
+
+\textbf{Conjure}~\cite{frolov2019conjure} 是一种\emph{折射网络}（refraction networking）系统。它不依赖具有固定公开地址的网桥，而是在合作的互联网接入服务商处安装站点。这些站点观察发往未使用地址范围的流量，并将其改道送往 Tor。客户端从数百万个可能的地址中选择一个\enquote{幻影}地址建立连接。要封锁 Conjure，审查者就需要阻断互联网地址空间中的大片区域。Tor Project 的文档指出，Conjure 已成功通过测试，但仍需要进行稳定性改进，目前只在 Tor Browser 的 alpha 版本和部分应用中提供~\cite{torsupport}。
+
+\begin{attenzione}[没有一种传输技术在任何地方都有效]
+所有传输技术都有弱点，而且效果会因国家和月份而变化。例如，2025 年 4 月有用户在 Tor Project 论坛报告称，obfs4、meek 和 Snowflake 在中国无法使用，而 WebTunnel 虽能连接，却很快遭到封锁~\cite{forumcina2025}。因此，Tor Browser 提供多种传输技术，并具有根据用户所在国家建议适当方式的功能。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{实验：从审查者的视角观察 obfs4 网桥}\label{sec:lab-censura}
+
+\begin{laboratorio}[10]{在实验网络中部署 obfs4 网桥}
+\textbf{目标。}启动包含 obfs4 网桥和使用该网桥的客户端的网络；捕获并比较普通 Tor 连接与 obfs4 连接的流量。\\
+\textbf{前置条件。}实验网络（\cref{cap:19-rete-privata}）。镜像包含 Debian 软件包中的 \cmd{obfs4proxy} 和 \cmd{snowflake-client}。\\
+\textbf{预计时间。}1--2 小时。
+\end{laboratorio}
+
+\paragraph{步骤 1：启动网桥网络。}文件 \file{labs/zh-Hans/实验室/chutney/networks/book-bridge} 在本书的测试网络中增加一台网桥权威节点（\texttt{test003ba}）、一台 obfs4 网桥（\texttt{test009br}），以及一台使用该网桥的客户端（\texttt{test011bc}）：
+\begin{lstlisting}[language=bash,numbers=none]
+$ make -C labs/zh-Hans/实验室 clean
+$ make -C labs/zh-Hans/实验室 start NETWORK=book-bridge
+\end{lstlisting}
+此前一次参考实验的客户端日志包含以下原始消息：
+\begin{lstlisting}[numbers=none]
+[notice] new bridge descriptor 'test009br' (fresh): $2557828B...~test009br
+[warn] Only one bridge (transport: 'obfs4') is configured. You should
+       have at least two for conflux, for any transport that is not 'snowflake'.
+[notice] Bootstrapped 100% (done): Done
+\end{lstlisting}
+这表明客户端通过网桥自身获得了网桥描述符，并完成了引导。警告信息提醒我们，Conflux（\cref{cap:31-futuro}）使用两条并行电路，只有一台网桥就无法做到这一点。通过此客户端的 SOCKS 端口（9011）发送网页请求，效果与普通客户端相同。
+
+\paragraph{步骤 2：审查者能够看到什么？}在容器内，我们用 \cmd{tcpdump} 分别捕获 obfs4 网桥端口（9909）和普通 ORPort（5104）的流量。在客户端访问网桥的同时，使用实验~1 向 \texttt{test004r} 建立一个通道。随后用 \cmd{tshark} 分析抓包结果。以下是我们一次会话的结果：
+\begin{lstlisting}[numbers=none]
+== ORPort 5104（TLS），客户端发送的最初字节 ==
+1533  16030105f8010005f403033e1234a0401520d1c52b...
+== obfs4 9909，客户端发送的最初字节 ==
+1957  b566475349099523c53005e1004a392160f15d473e...
+== 识别为 TLS 的数据包数量 ==
+端口 5104：83
+端口 9909：0
+== obfs4 数据段长度（客户端 -> 网桥）==
+1957 1677 1888 1891 1716 1716 3436 1395 1716 1748 1500 1194 ...
+\end{lstlisting}
+普通 ORPort 上的首字节十分鲜明：\texttt{16 03 01} 是 TLS 握手记录的开头，Wireshark 能把整段通信识别为 TLS。审查者可以检查这条 TLS 连接是否具有 Tor 特征，而中继地址本身也列在公开共识中。相比之下，发往 obfs4 网桥的字节没有可识别结构，没有数据包被识别为 TLS，数据段长度也不再直接对应 514 字节的信元（cell）。审查者只能看到发往未知地址的一条看似随机的数据流。
+
+\paragraph{步骤 3：主动探测网桥。}假设我们是怀疑该地址运行着中继的审查者，尝试使用实验~1 连接网桥的 9909 端口：
+\begin{lstlisting}[numbers=none]
+TimeoutError: The handshake operation timed out
+\end{lstlisting}
+网桥\emph{完全不作响应}：不发送错误消息，也不发送任何字节，直到我们的客户端在 15 秒后放弃。对于 obfs4 而言，TLS ClientHello 属于无效握手，而无效握手的响应就是保持沉默。探测该地址的审查者无法获知任何有用信息，甚至无法确认是否存在某个运行其他协议的服务。没有 \texttt{cert} 参数，它本来就无法构造有效的 obfs4 握手。
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item 审查者可以按地址封锁 Tor、识别协议、主动探测可疑服务器，或者只允许明确授权的流量。
+  \item 网桥是不在公开列表中的中继。当前的 rdsys 分发机制和仍在探索中的 Lox 信誉机制，都在用户可访问性与防止审查者发现之间寻找平衡。
+  \item 可插拔传输是转换流量的外部进程；tor 通过环境变量配置它们，并读取其响应（\texttt{CMETHOD}、\texttt{SMETHOD}）。
+  \item obfs4 使流量看起来像随机数据，并抵御主动探测；meek、Snowflake、WebTunnel 和 Conjure 则把流量隐藏在审查者很难封锁的服务、协议或地址后面。
+  \item 没有一种传输技术能在任何地点永久有效。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:16-guard}
+网桥与普通入口守卫有什么不同？为什么使用网桥的客户端不再另外使用公开入口守卫？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:16-strategie}
+根据策略（\enquote{看起来不像任何可识别的协议}或\enquote{看起来像允许使用的协议}）对 obfs4、meek、Snowflake、WebTunnel 和 Conjure 分类，并说明审查者要阻断每种传输技术需要封锁什么。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:16-sondaggio}
+假设审查者只能观察流量而不能主动探测，如何发现 obfs4 网桥？它可以利用哪些统计特征，\texttt{iat-mode} 又如何缓解这些特征？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:16-lox}
+在 Lox 中，为什么审查者无法通过不断封锁网桥来提升信誉等级？它可以尝试如何绕过机制？这样做的成本来自哪里？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:16-entropia}
+在实验中分别捕获 obfs4 连接和普通 TLS 连接的前 10\,KB，计算其香农熵（每字节的比特数）。你预期得到什么结果？为什么两者的差异可能很小？那么 TLS 究竟凭什么被识别？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:16-sondaggio-lab}
+尝试使用实验~1 访问自己的网桥的 obfs4 端口，会出现什么错误？随后以客户端身份运行 \cmd{obfs4proxy}，但提供一个错误的 \texttt{cert} 参数：你会在网桥日志中观察到什么？
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \titolo{Pluggable Transport Specification (Version 1)}（pt-spec）~\cite{torspec}。
+  \item L.~Tulloch 与 I.~Goldberg，\titolo{Lox: Protecting the Social Graph in Bridge Distribution}~\cite{tulloch2023lox}。
+  \item D.~Fifield 等，\titolo{Blocking-resistant communication through domain fronting}~\cite{fifield2015fronting}。
+  \item C.~Bocovich 等，\titolo{Snowflake, a censorship circumvention system using temporary WebRTC proxies}~\cite{bocovich2024snowflake}。
+  \item S.~Frolov 等，\titolo{Conjure: Summoning Proxies from Unused Address Space}~\cite{frolov2019conjure}。
+  \item Tor Project 关于 WebTunnel 的公告~\cite{torblogwebtunnel}，以及网桥支持文档~\cite{torsupport}。
+\end{itemize}

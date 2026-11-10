@@ -1,0 +1,160 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Tor Browser、Tails 与 Whonix}\label{cap:23-browser}
+\aggiornatoal{2026 年 9 月 23 日}{Tor Browser 设计文档（2018）；Tor Browser 手册；Tails 与 Whonix 文档}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 解释为什么仅把普通浏览器配置为使用 Tor 仍然不够；
+  \item 列出 Tor Browser 设计所依据的安全与隐私要求；
+  \item 将 Tor Browser 的按站点隔离机制与 tor 的流隔离关联起来；
+  \item 比较 Tor Browser、Tails 和 Whonix 分别提供哪些保护，以及各自的代价。
+\end{itemize}
+\end{obiettivi}
+
+2004 年的威胁模型就明确指出，Tor 不会统一规范应用层协议（\cref{sec:minaccia-nonobiettivi}）。如果浏览器自己泄露了用户身份，洋葱路由也无能为力。本章介绍专为保护这一层而设计的工具：让浏览器行为与网络保护目标保持一致的 Tor Browser，以及把保护范围扩展到整个计算机的两个操作系统——Tails 和 Whonix。
+
+% ---------------------------------------------------------------------------
+\section{为什么只有代理还不够？}\label{sec:browser-proxy}
+
+让普通浏览器通过 tor 的 SocksPort 通信，虽然通常可以隐藏 IP 地址，但并非在所有情况下都有效，而且除此之外几乎不能隐藏其他信息：
+\begin{itemize}
+  \item 某些组件可能绕过代理直接联网，例如本地 DNS 解析、WebRTC、浏览器扩展或浏览器启动的外部程序。
+  \item Cookie 和其他浏览器状态可以将今天的访问与昨天的访问关联起来，即使昨天的访问没有通过 Tor。
+  \item 网站能够收集数十种浏览器特征，包括窗口尺寸、安装的字体、语言、时区和渲染细节，并将其组合为可以从数百万用户中辨认出某人的\textbf{指纹}。
+  \item 如果所有标签页共用一条电路，嵌入多个网站的跟踪器便可能同时观察到来自同一个出口的请求。
+\end{itemize}
+第一个问题威胁的是地址隐私；其他问题则威胁不同活动之间的\emph{不可关联性}，而这正是 Tor 的核心目标之一。
+
+% ---------------------------------------------------------------------------
+\section{Tor Browser}\label{sec:browser-tb}
+
+Tor Browser 是由 Tor Project 连同 tor 一起发布、基于 Mozilla Firefox 长期支持分支修改的浏览器。其设计原则记录在一份文档中。尽管文档的部分实现细节已经过时，它仍然是理解项目原则的重要资料~\cite{perry2018torbrowser}。文档把要求分为两组。
+
+\paragraph{安全要求。}这些要求保障 Tor 的安全使用，违反其中任何一项，都可能立即暴露用户：
+\begin{description}
+  \item[遵守代理设置] 任何内容都不能绕过 tor 发送。
+  \item[状态分离] 不得与 Tor 之外的其他浏览器或会话共享信息。
+  \item[不留下持久痕迹] 除非用户明确选择保留，否则会话结束后不应在磁盘或内存中遗留能暴露浏览活动的信息。
+  \item[应用隔离] 浏览器在系统中留下的所有数据，都应能够通过删除被清除。
+\end{description}
+
+\paragraph{隐私要求。}这些要求旨在防止不同活动被关联起来，其核心是\textbf{地址栏所显示的站点}——即用户正在访问的网站：
+\begin{description}
+  \item[标识符] 当用户浏览某个网站时，嵌入其中的第三方（例如跟踪器）保存的数据，不应在同一第三方出现在另一个网站时继续供其访问。
+  \item[浏览器指纹] 浏览器的可观察特征不应允许不同网站关联用户。
+  \item[长期不可关联性] 用户应能通过一个简单操作清除全部状态，并取得新身份。
+\end{description}
+文档还提出一条有用的设计原则：保护机制不应破坏用户对浏览器正常行为的预期。Tor Browser 的前身 Torbutton 扩展允许用户在同一浏览器内切换 Tor 的启用状态，用户很容易混淆在不同状态下打开的标签页。容易诱使用户犯错的界面，本身就是安全弱点。
+
+\subsection{每个网站使用独立电路}
+
+来源隔离也延伸到网络层。Tor Browser 在发送给 tor 的 SOCKS 凭据中标识地址栏中的网站。默认情况下，tor 利用 \opt{IsolateSOCKSAuth} 把携带不同凭据的流分配到不同电路。我们在实验~11（\cref{sec:lab-stem}）中验证了这一机制。按照用户手册的解释~\cite{tbmanual}，即使两个网站嵌入相同的跟踪器，它们也会使用不同电路，而同一网站的不同标签页则会共用一条电路。
+
+两个菜单命令可以改变这种安排：
+\begin{description}
+  \item[为此网站使用新电路（New Circuit for This Site）] 通过新电路重新加载当前网站，例如出口中继无法连接该网站时。此操作不会清除浏览器状态，也不会改变其他网站的电路。
+  \item[新身份（New Identity）] 关闭全部标签页，清除 Cookie、历史记录和其他状态，并为后续活动使用新电路，从而实现长期不可关联性的要求。
+\end{description}
+这两个操作都不会改变入口守卫；出于 \cref{sec:guard} 所解释的原因，守卫通常会稳定使用数月。
+
+按站点隔离的主要目标是\emph{隔离不同站点}，并不保证一个站点在整个会话中始终只有一条电路；电路会老化和更换。“为此网站使用新电路”会重新加载当前标签页；同一网站的其他标签页要等重新加载后才使用新电路，已有连接未必立即中断。“新身份”还会中止当前活动和下载。两种操作都不用于强制轮换入口守卫，守卫由 tor 另行管理。
+
+\subsection{抵御浏览器指纹识别}
+
+Tor Browser 的反指纹策略，并不是让每个用户显得不同，而是让用户尽可能\emph{相似}。如果所有 Tor Browser 用户都暴露相同的值，指纹最多只能说明\enquote{这是一名 Tor Browser 用户}。这种思路体现在多个可见的设计选择中：窗口采用标准化尺寸，调整窗口时会在页面内容周围增加留白，使网页报告的尺寸保持在标准间隔上（\emph{letterboxing}）；报告的时区为 UTC；许多暴露操作系统细节的接口被关闭或标准化。这也解释了为什么不鼓励安装扩展或随意更改设置：每个不同点都会缩小用户能够藏身的人群，即 \cref{cap:01-anonimato} 中介绍的匿名集原则。
+
+防指纹保护的目标是\emph{尽量减少可观察差异}，并非保证所有用户的指纹完全相同。平台、语言、安全级别等属性仍可能把用户分成可区分的群组；因此应把这种保护理解为降低独特性，而不是完全一致的保证。
+
+\subsection{安全级别}
+
+许多浏览器漏洞会利用 JavaScript 和复杂的网页功能。Tor Browser 提供三个安全级别~\cite{tbmanual}：
+\begin{description}
+  \item[Standard（标准）] 启用所有功能，为默认级别。
+  \item[Safer（更安全）] 在非 HTTPS 网站禁用 JavaScript；限制部分字体和数学符号；音频、视频需要点击后才能播放。
+  \item[Safest（最安全）] 在所有网站禁用 JavaScript，部分图片及其他内容也可能受到限制。静态网站通常仍可使用。
+\end{description}
+选择安全级别，就是在安全性与易用性之间取舍。所选级别本身也可能影响浏览器指纹，因为网站有时能够推断用户使用了哪个级别。
+
+\begin{approfondimento}[可复现构建]
+下载 Tor Browser 的用户需要确信，获得的二进制程序确实对应已公开的源代码。Tor Project 因此采用\emph{可复现构建}（reproducible builds）：在相同源码和构建环境下，应当得到逐比特一致的文件。设计文档介绍了为了消除不确定性而需要采取的措施，包括固定日期、文件路径和归档成员顺序~\cite{perry2018torbrowser}。独立重新构建并比较输出，可以发现有人在软件分发的构建环境中恶意插入的改动。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{浏览器之外的保护}\label{sec:browser-sistemi}
+
+Tor Browser 只保护它自己的流量，不能保护同一台计算机上其他应用程序的流量。那些应用仍可直接联网，用户失误或浏览器漏洞也可能泄露真实地址。两个操作系统采用不同的架构，把保护扩展到整台机器（\cref{fig:architetture}）。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图23-架构}
+\caption{三种路由和隔离方式，并非绝对匿名保证。（a）Tor Browser 只让自身流量经过 tor，宿主机的其他程序仍可能直接联网。（b）Tails 通常通过防火墙阻止应用程序绕过 Tor；用于 captive portal 的\emph{Unsafe Browser} 是明确的不匿名例外。Tails 从 USB 启动，主要运行在 RAM 中，可选择持久存储。（c）Whonix 使用彼此通过隔离虚拟网络连接的两台虚拟机：运行应用的 Workstation 和运行 tor 的 Gateway；宿主机或虚拟机管理程序遭到攻破仍可能破坏隔离。}
+\label{fig:architetture}
+\end{figure}
+
+\subsection{Tails}
+
+Tails 是一个从 USB 设备启动、基于 Debian 的操作系统~\cite{tailsabout}。它有两个关键特征：
+\begin{description}
+  \item[一切流量经过 Tor] 任何试图绕过 tor 连接互联网的应用程序都会被阻断。
+  \item[遗忘性（amnesia）] 系统在内存中运行，不向计算机硬盘写入数据，并在关机后忘记此前的状态。如果用户选择保存数据，可以把它们放在 USB 设备上可选的加密\emph{持久存储区}。
+\end{description}
+Tails 内置 Tor Browser 和其他经过谨慎配置的应用程序。该项目于 2024 年 9 月加入 Tor Project~\cite{torblogtails}。它的文档明确说明了局限：Tails 无法抵御遭到篡改的硬件，例如实体键盘记录器，也无法解决在已感染恶意软件的计算机上制作 USB 启动盘所带来的风险。
+
+这是 Tails 在通常运行条件下的性质，\emph{并不绝对保证}所有存储设备都不会留下痕迹。用户仍可能主动挂载磁盘或建立持久文件；恶意软件、受损硬件以及 Tails 之外的操作也不受这种保护保证。
+
+\subsection{Whonix}
+
+Whonix 把功能分离到两台虚拟机中。\textbf{Gateway} 运行 tor，并且是唯一连接外部网络的虚拟机；\textbf{Workstation} 运行应用程序，只能通过内部虚拟网络连接 Gateway。因此，Workstation 的所有流量都必须通过 tor：这种保证来自网络架构，而不只是各应用的代理配置。与 Tails 相比，Whonix 提供了更强的隔离：即使攻击者获得 Workstation 的管理员权限，也不能直接从该虚拟机获知真实地址，因为这台机器根本不知道它。代价是需要依赖虚拟化软件的安全性；此外，Whonix 不具备 Tails 式的遗忘性，除非在另一个提供该特性的系统内运行。
+
+Gateway 与 Workstation 的分离是重要的安全边界，但即使工作站被入侵，也\emph{不意味着绝对安全}。攻击者仍可能通过应用数据识别用户；若宿主机、虚拟化管理程序或网关失守，网络隔离也可能被突破。防火墙的完整性和环境的正确配置同样关键。
+
+\paragraph{经过过滤的控制端口。} Workstation 上的某些应用，包括 Tor Browser 的新身份功能，需要与 Gateway 上 tor 的 ControlPort 通信。但是，控制协议（\cref{sec:stem-protocollo}）还允许使用 \texttt{GETINFO address} 查询 tor 的公开地址，而这恰恰是 Workstation 不应该知道的信息。因此，Whonix 在两者之间放置了名为 \emph{onion-grater} 的代理，只允许明确批准的命令通过~\cite{whonixgrater}。某项功能在一种环境中无害，在另一种环境中却可能成为信息泄露渠道。
+
+\begin{attenzione}[工具不能取代良好的使用习惯]
+Tor Browser、Tails 和 Whonix 能减少技术性失误，却无法消除行为失误：登录个人账户、在受保护环境之外打开下载的文件，或者主动透露可识别身份的细节。\cref{cap:28-opsec} 将专门研究这些问题。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item 即使普通浏览器通过 Tor 代理联网，仍可能有流量绕过代理，更重要的是，不同活动可能通过共享状态、浏览器指纹或电路被关联起来。
+  \item Tor Browser 遵循明确的设计要求：强制遵守代理配置、分离状态、限制持久存储、隔离不同网站，并提供易于使用的新身份功能。
+  \item 按网站隔离依靠 SOCKS 凭据和 tor 的流隔离机制。
+  \item Tor Browser 通过标准化用户可观察特征来抵御指纹识别；安全级别则用于减小攻击面。
+  \item Tails 强制所有流量通过 Tor，并避免保留持久痕迹；Whonix 将应用限制在不知道真实网络地址的虚拟机中。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:23-identita}
+从电路和浏览器状态两个方面解释，\enquote{为此网站使用新电路}与\enquote{新身份}有什么不同？为什么这两种操作都不会更换入口守卫？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:23-estensioni}
+某用户认为广告拦截扩展能够提高隐私，于是在 Tor Browser 中安装了一个扩展。这可能给他带来哪些好处，又可能失去哪些保护？
+\end{esercizio}
+
+\textbf{实验方法说明：}实验~11 只模拟不同的 SOCKS 凭据，并不会真正打开三个 Tor Browser 标签页。相同凭据可能重用电路，但并非任何时刻都保证如此：电路会老化，其他隔离规则也可能起作用。
+
+\begin{esercizio}[2]\label{es:23-isolamento}
+使用实验网络与实验~11 的脚本模拟三个标签页：其中两个访问同一网站，第三个访问另一个网站，并把网站名称作为 SOCKS 凭据。通过 ControlPort 检查哪些流共用电路。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:23-scelta}
+对于以下情况，从 Tor Browser、Tails 和 Whonix 中选择最适合所述需求的工具，并说明理由：（a）在家用计算机上浏览遭到审查的网站的人；（b）在他人计算机上处理机密文件的记者；（c）运行多个长期在线程序，且这些程序必须全部通过 Tor 的研究人员。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:23-impronta}
+选出五种网站能够通过 JavaScript 读取的浏览器特征，估计普通浏览器中每种特征可能暴露多少比特信息。Tor Browser 如何将这些特征标准化？用户之间还有哪些差异？
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item M.~Perry、E.~Clark、S.~Murdoch、G.~Koppen，\titolo{The Design and Implementation of the Tor Browser}~\cite{perry2018torbrowser}。
+  \item Tor Browser 使用手册~\cite{tbmanual}。
+  \item Tails 文档~\cite{tailsabout} 和 Whonix 文档，特别是 onion-grater 页面~\cite{whonixgrater}。
+\end{itemize}

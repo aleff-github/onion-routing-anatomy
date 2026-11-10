@@ -1,0 +1,299 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{洋葱：RELAY 信元加密与 CGO}\label{cap:10-cifratura-relay}
+\aggiornatoal{2026 年 9 月 23 日}{torspec 提交 \texttt{8e1f245}；tor 0.4.9.13；提案 359}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 描述客户端如何为每一跳包上一层加密，以及中继如何逐层去除；
+  \item 解释 Recognized 与累积摘要的作用，以及为什么两者都需要；
+  \item 识别传统方案的弱点：可塑性与 \emph{tagging} 攻击；
+  \item 描述正在取代传统方案的 Counter Galois Onion（CGO）的基本工作方式；
+  \item 使用自己的代码把真实电路扩展到三跳（实验~4）。
+\end{itemize}
+\end{obiettivi}
+
+在 \cref{cap:09-circuiti} 中，客户端与电路中的每个中继分别协商出四个值：用于加密的 Kf、Kb，以及用于完整性检查的 Df、Db。本章让这些密钥真正开始工作。这就是“洋葱路由”名称的来源：一条消息会按中继数量包上多层加密，每个中继只去掉自己的一层，如同剥洋葱。
+
+% ---------------------------------------------------------------------------
+\section{传统方案}\label{sec:tor1}
+
+Tor 从早期一直使用的方案，在新代码中称为 \emph{tor1}。对每一跳、每个方向，它组合两种工具：
+\begin{itemize}
+  \item 使用 Kf 或 Kb 的 \textbf{AES-128-CTR} 流式加密；
+  \item 以 Df 或 Db 初始化的\textbf{累积 SHA-1 摘要}。
+\end{itemize}
+
+两者在整条电路生命周期内都保持\emph{状态}。AES-CTR 的计数器不会为每个信元重新从零开始：第一条信元消耗密钥流的前 509 字节，第二条接着使用后 509 字节，以此类推。摘要同样不是对单个信元单独计算，而是涵盖迄今为止与该跳交换过的\emph{所有}信元。因此客户端和中继必须以完全相同的顺序处理信元；若丢失或重复一条信元，两边的加密和摘要状态都会失去同步。底层 TLS 保证通道上的顺序和完整性，使这种状态机可行。
+
+\subsection{前向：从客户端进入电路}
+
+要向电路第 $d$ 跳发送消息，客户端按如下步骤处理~\spec{tor-spec}{Routing relay cells}：
+\begin{enumerate}
+  \item 构造 RELAY 消息明文载荷（\cref{sec:relay}），先把 Recognized 与 Digest 设为零；
+  \item 用该载荷更新第 $d$ 跳的 forward 摘要，并把结果的前 4 字节写入 Digest；
+  \item 先用第 $d$ 跳 Kf 加密，再用第 $d-1$ 跳 Kf 加密，依次回到第 1 跳；最外层属于守卫。
+\end{enumerate}
+
+每个中继收到信元后，都用自己的 Kf 解密一次，去掉一层，再判断信元是否以自己为目的地；如果不是，就继续转发。\cref{fig:cipolla} 展示了这一过程。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图10-洋葱}
+\caption{传统 tor1 RELAY 信元的分层加密：客户端应用 Kf$_3$、Kf$_2$、Kf$_1$，中继依次去除对应层。出口在 Recognized = 0 且运行摘要正确时识别协议消息；应用数据仍可能受到 HTTPS 保护。内部方框示意仍处于加密状态的数据。}
+\label{fig:cipolla}
+\end{figure}
+
+\subsection{反向：从电路返回客户端}
+
+反方向上角色相反。产生消息的中继先用自己的 backward 摘要对消息签名，并使用 Kb 加密。之后朝客户端方向经过的每个中继都会用自己的 Kb \emph{再加一层}。客户端掌握所有密钥，所以从第一跳开始依次去掉各层，并在每次去层后检查该信元是否由这一跳产生。
+
+\subsection{作为“漏水管道”的电路}
+
+客户端可以把消息发送到电路中的\emph{任意}一跳，而不仅仅是最后一跳：只需在目标跳停止继续增加加密层即可。发送给第二跳、要求扩展到第三跳的 \texttt{EXTEND2} 就是这样工作的。规范把这一结构称为 \emph{leaky pipe topology（漏水管道拓扑）}。Tor 原始论文~\cite{dingledine2004tor} 还提出一种防御用途：让一部分数据流从中间节点流出，可以增加出口观察者判断数据流属于哪条电路的难度。不过现实中的 tor 只让数据流从最后一跳退出。
+
+% ---------------------------------------------------------------------------
+\section{识别信元}\label{sec:riconoscere}
+
+中继去掉自己的一层后，怎样判断信元是否发给自己？它不能简单地\enquote{看看内容是否像正常消息}：对程序而言，仍被加密的信元和明文信元都只是字节串。传统方案按顺序做两项检查~\spec{tor-spec}{Relay cells}：
+
+\begin{enumerate}
+  \item \textbf{Recognized}：两个字节必须为零。仍处于加密状态时，这两字节近似伪随机，恰好为零的概率只有 $1/\num{65536}$。这项检查成本极低，可以立即过滤掉绝大多数经过的信元。
+  \item \textbf{Digest}：只有 Recognized 为零时，中继才暂时假设信元属于自己，把 Digest 字段清零后计算累积摘要，并把前四字节与信元内的 Digest 比较。匹配则说明信元\enquote{已识别}，此时中继正式更新摘要状态并处理消息。
+\end{enumerate}
+
+一个很容易忽略的细节是：如果 Recognized 为零但 Digest 不匹配，这只是一次误判（false positive），摘要状态\textbf{绝不能}改变。实验~4 会在临时副本上计算（\texttt{self.digest.copy()}），只有验证成功后才保存新状态。
+
+摘要覆盖完整载荷，包括填充，因此填充也必须使用随机数据（\cref{sec:relay}）。对于洋葱服务电路，客户端和服务之间存在一个共享密钥的\enquote{虚拟跳}（\cref{cap:14-onion-services}），该位置使用 SHA3-256 而不是 SHA-1。
+
+如果最终没有任何人识别信元会怎样？前向方向上，如果最后一个中继仍无法识别，就说明发生错误，它用 \cella{DESTROY} 销毁电路；反向方向上，如果客户端去掉所有跳的层后仍无人匹配，它也销毁电路。
+
+% ---------------------------------------------------------------------------
+\section{tor1 的弱点}\label{sec:tor1-debolezze}
+
+\subsection{可塑性}
+
+CTR 模式有一个不方便的性质：密文只是 $C=P\oplus S$，其中 $S$ 是密钥流。攻击者无需知道密钥，只要翻转 $C$ 中一位，就能让 $P$ 中对应位发生同样翻转。如果攻击者知道或能猜出某段明文，还可以把它替换为选择的内容：只需把密文 XOR 上两段明文的差值。实验~4 包含一个演示测试，把\enquote{支付 10 欧元}改成\enquote{支付 99 欧元}。
+
+在 tor1 中，完整性只在\emph{最终目标}处检查：目标中继验证摘要，中间中继并不会验证。因此被修改的信元可以一路无障碍传到目标，直到那里摘要才失败。
+
+\subsection{标记（tagging）攻击}
+
+这些性质组合起来，就允许一种特定的\emph{tagging} 攻击。假设攻击者同时控制某条电路的守卫和出口：
+\begin{enumerate}
+  \item 守卫按某种可识别模式修改经过信元的若干位，也就是加上\enquote{标记}（\emph{tag}）。
+  \item 信元经过中间中继；中间中继无法发现这项修改。
+  \item 出口在验证摘要之前，先检查预期标记是否出现在信元中。如果存在，它就知道这条电路经过与自己串通的守卫，于是可以把出口看到的目的地和守卫知道的客户端地址关联起来。
+\end{enumerate}
+
+如果出口并未串通，摘要会失败、电路被销毁，客户端随后新建电路。攻击者可以再次尝试，而每次失败也可能泄露信息。标记同样可以从出口向客户端的反方向施加。
+
+\begin{approfondimento}[Tagging 的实际重要性]
+同时控制守卫和出口的攻击者，即使不加任何标记，也已经可以通过流量时序和数据量进行关联（\cref{cap:26-attacchi}）。因此 Tor 设计者长期把 tagging 视为真实但优先级较低的问题~\cite{dingledine2004tor}。不过 tagging 比统计关联更可靠，而且极少流量也足以实施。十多年间出现过多种解决方案：提案 202、261（基于 AEZ 密码）、295、308，最终由引入 CGO 的 359 接续。
+\end{approfondimento}
+
+\subsection{其他限制}
+
+Digest 只有 4 字节，而且底层 SHA-1 已不再适合新的密码学设计。此外，传统方案不提供电路\emph{内部}的前向保密：如果攻击者在电路仍活动时得到某一跳的当前密钥，就可以解密此前记录过的全部信元，因为密钥流完全由初始密钥决定。
+
+% ---------------------------------------------------------------------------
+\section{Counter Galois Onion}\label{sec:cgo}
+
+\textbf{CGO}（\emph{Counter Galois Onion}）是 Degabriele、Melloni、Münch 与 Stam 设计并由 \proposta{359} 采用的 RELAY 信元加密方案。本章只介绍功能结构，完整密码学构造见提案及作者论文。
+
+\subsection{性质}
+
+根据提案，CGO 带来三项核心改进：
+\begin{itemize}
+  \item \textbf{不可塑}：任何形式的信元修改都会让当前信元以及电路后续所有信元无法正确解密。标记既不能被读取，也不能被清除，只能让电路失效。
+  \item \textbf{信元级前向保密}：处理完一条信元后，参与方不再保留再次解密它所需的旧材料。
+  \item 认证强度达到\textbf{128 位}，而不是依赖传统方案中很短的检查值。
+\end{itemize}
+
+CGO 也不再使用 SHA-1，因此整体性能预期更好。
+
+\subsection{高层工作原理}
+
+基础组件是 AES-128 和 POLYVAL；后者是一种通用哈希函数，与 AES-GCM-SIV 中使用的函数属于同一家族。提案用它们构造一种\emph{宽分组、可调整（wide-block, tweakable）}密码：把整个 509 字节信元看成一个整体分组。任意位置即使只改变一位，都会让整个结果不可预测地变化。解密后的信元由 16 字节\emph{认证标签}和 493 字节载荷构成，这一格式已经在 \cref{sec:nuovo-formato} 看到。
+
+对于每一跳和每个方向，客户端与中继共享：
+\begin{itemize}
+  \item 从电路握手派生出的 64 字节密钥 $K$ 和 16 字节值 $N$；
+  \item 上一条已处理信元的认证标签 $T'$，初始为零。
+\end{itemize}
+
+三项机制共同抵抗 tagging：
+\begin{description}
+  \item[基于认证标签的识别] 中继去掉自己的层之后，如果结果认证标签等于 $N$，说明信元属于它。这里用 16 字节检查，取代 Recognized 的两字节加四字节摘要。
+  \item[链式依赖] 前一条信元的认证标签会作为密码参数参与下一条信元。被修改的信元产生错误认证标签，随后每一条信元都将无法正确解密，电路无法继续运行。
+  \item[密钥更新] 每当某一跳识别或产生一条信元，就从原来的 $K$ 和 $N$ 派生新值，并擦除旧值，因此获得信元级前向保密。
+\end{description}
+
+信元的命令字节（\cella{RELAY} 或 \cella{RELAY\_EARLY}）也以\emph{关联数据（associated data）}参与计算；攻击者不能在两种类型之间转换而仍保持可解密性。
+
+\begin{attenzione}[两个方向不能随意互换]
+CGO 底层构造在一个方向上不可塑，而在另一个方向上是可塑的。提案精确规定客户端和中继分别应使用哪个方向，并明确警告实现者不能反过来。这说明一个看似只是实现细节的选择，也可能破坏整套密码学方案。
+\end{attenzione}
+
+\subsection{实际部署中的 CGO}
+
+\begin{itemize}
+  \item \textbf{密钥}：握手输出中，每个方向得到 64 字节 $K$ 和 16 字节 $N$，取代 Df、Db、Kf、Kb。
+  \item \textbf{SENDME}：\proposta{289} 的认证流量控制原本使用累积摘要来证明数据已被接收。CGO 不再有该摘要，因此 SENDME 改为携带最后一条被确认信元的认证标签（\cref{cap:11-stream}）。
+  \item \textbf{协商}：只有中继声明子协议 \texttt{Relay=6}，而客户端又在 ntor-v3 握手中提出请求时，才使用 CGO（\cref{sec:ntor3}）。\cref{cap:09-circuiti} 中已经看到，如果没有同时请求拥塞控制，中继会拒绝 CGO。
+  \item \textbf{部署}：tor 从 0.4.9 系列起支持 CGO，Arti 一直启用。同一条电路可以混合使用 CGO 与仍使用 tor1 的跳，因为选择是逐跳独立完成的。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{实验：三跳电路}\label{sec:lab-cifratura}
+
+\begin{laboratorio}[4]{分层加密与电路扩展}
+\textbf{目标。} 编写 \file{labs/zh-Hans/代码/torlab/encryption.py}，实现 tor1 客户端逻辑，并用它把真实电路一路扩展到出口。\\
+\textbf{前置条件。} 实验~1--3；正在运行的实验网络。\\
+\textbf{预计时间。} 3 小时。
+\end{laboratorio}
+
+\paragraph{步骤 1：某一跳的一个方向。} 实验核心是一个小类，把一个方向上的 AES-CTR 密码状态与 SHA-1 摘要组合起来：
+
+\begin{lstlisting}[language=Python]
+class Direction:
+    @classmethod
+    def new(cls, key, digest_seed):
+        d = hashlib.sha1(); d.update(digest_seed)
+        return cls(_aes_ctr(key), d)
+
+    def apply(self, data):             # 加密/解密：CTR 使用同一操作
+        return self.cipher.update(data)
+
+    def sign(self, body):              # 写入 Digest 字段
+        self.digest.update(_without_digest(body))
+        return body[:5] + self.digest.digest()[:4] + body[9:]
+
+    def recognizes(self, body):
+        if body[1:3] != b"\x00\x00":
+            return False
+        trial = self.digest.copy()
+        trial.update(_without_digest(body))
+        if trial.digest()[:4] != body[5:9]:
+            return False               # 误判：状态保持不变
+        self.digest = trial
+        return True
+\end{lstlisting}
+
+\texttt{cryptography} 提供的密码状态对象会在多次调用之间保留计数器状态，这正是协议需要的行为。
+
+\paragraph{步骤 2：客户端。} 对每一跳的两个方向各维护一个 \texttt{Direction} 后，加密和解密都变成循环：
+
+\begin{lstlisting}[language=Python]
+def encrypt(self, msg, destination):
+    body = self.hops[destination].forward.sign(encode_relay(msg))
+    for i in range(destination, -1, -1):
+        body = self.hops[i].forward.apply(body)
+    return body
+
+def decrypt(self, body):
+    for i, hop in enumerate(self.hops):
+        body = hop.backward.apply(body)
+        if hop.backward.recognizes(body):
+            return i, decode_relay(body)
+    raise CellError("没有任何一跳识别该 cell")
+\end{lstlisting}
+
+\paragraph{步骤 3：内存测试及其局限。} \file{labs/zh-Hans/代码/torlab/test/test\_encryption.py} 构造三跳模拟电路，验证每一跳只识别属于自己的信元、中间节点只能看到伪随机数据、修改会被最终目标检测，同时演示 AES-CTR 的可塑性。但这类测试有一个重要局限：模拟客户端和中继使用的是\emph{同一份代码}。如果摘要更新顺序写错，两端可能一起犯同样错误，测试仍然通过。最终验证必须与一个独立实现真正通信。
+
+\paragraph{步骤 4：扩展真实电路。} 先像实验~3 一样，通过 ntor-v3 向 \texttt{test003r} 建立第一跳，再扩展到 \texttt{test004r}，最后到出口 \texttt{test006e}。\file{labs/zh-Hans/代码/torlab/laboratory.py} 从实验网络文件读取中继身份和 ntor 密钥：
+
+\begin{lstlisting}[language=Python]
+for r, extensions in ((middle, []), (exit_, [(1, b"")])):
+    st, hd = ntor3_client_start(r.id_ed, r.ntor,
+                                encode_extensions(extensions))
+    body = extend2_body("127.0.0.1", r.port, r.id_rsa, r.id_ed,
+                        HTYPE_NTOR_V3, hd)
+    msg = RelayMessage(RelayCommand.EXTEND2, 0, body)
+    c.send(Cell(CIRC, CellCommand.RELAY_EARLY, circ.crypto.encrypt(msg)))
+    i, response = circ.crypto.decrypt(c.receive().body)
+    sm, k = ntor3_client_finish(st, hdata_created2(response.data))
+    circ.hops.append(Hop.from_keys(CircuitKeys.from_stream(k)))
+\end{lstlisting}
+
+\texttt{EXTEND2} 的 StreamID 为零，因为它属于控制消息，并且必须放进 \cella{RELAY\_EARLY}。和 tor 一样，对出口还会请求拥塞控制。运行结果如下：
+
+\begin{lstlisting}[numbers=none]
+第 1 跳：003r
+  <- CircID=0x80000100 RELAY 消息体=509 字节
+  来自第 1 跳 EXTENDED2，67 字节
+第 2 跳：004r  中继扩展： []
+  <- CircID=0x80000100 RELAY 消息体=509 字节
+  来自第 2 跳 EXTENDED2，70 字节
+第 3 跳：006e  中继扩展： [(2, b'\x1f')]
+\end{lstlisting}
+
+此时电路已经有三跳。每一行\enquote{来自第 n 跳}都证明：我们的代码针对正确中继完成了加密，而且该中继也能正确为我们返回数据。只要密钥、摘要中任意一字节错误，或者层次顺序错误，中继就会销毁电路。\texttt{EXTENDED2} 长度也与 \cref{sec:ntor3} 一致：2 字节 HLEN、32 字节 $Y$、32 字节 $\mathit{AUTH}$，再加 $SM$；中间节点没有扩展，因此 $SM$ 为 1 字节，出口返回一个单字节扩展，因此 $SM$ 为 4 字节。
+
+\paragraph{步骤 5：终于出现填充（PADDING）。} 电路扩展完以后继续监听通道：
+
+\begin{lstlisting}[numbers=none]
+  4.1 s  <- CircID=0x00000000 PADDING 消息体=509 字节
+  7.1 s  <- CircID=0x00000000 PADDING 消息体=509 字节
+ 12.8 s  <- CircID=0x00000000 PADDING 消息体=509 字节
+ 21.5 s  <- CircID=0x00000000 PADDING 消息体=509 字节
+ 28.3 s  <- CircID=0x00000000 PADDING 消息体=509 字节
+\end{lstlisting}
+
+这正是第~\ref{cap:07-canali} 章和第~\ref{cap:09-circuiti} 章中所预期的：现在通道上真正承载了一条继续延伸到守卫之外的多跳电路，守卫会把通道视为\enquote{正在使用}，并在空闲时随机发送 \cella{PADDING}。这里观察到的间隔在 3 到 8.7 秒之间，落入规范定义的 1.5--9.5 秒范围。
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item tor1 中，每一跳在每个方向都有一个 AES-128-CTR 密钥流状态和一份累积 SHA-1 摘要，两者贯穿电路生命周期。
+  \item 前向方向上，客户端从最后目标跳开始向第一跳逐层加密，每个中继去掉一层；反向方向上，中继逐层增加加密，客户端全部去除。
+  \item 客户端可以直接寻址电路中的任意一跳，即\emph{leaky pipe}。
+  \item 当 Recognized 为零且累积摘要匹配时，信元才被识别；Recognized 的误判（false positive）绝不能改变摘要状态。
+  \item AES-CTR 可塑，而且完整性只在目标端检查，因此传统方案允许 tagging。
+  \item CGO 让信元不可塑，通过认证标签把前后信元链接起来，每条消息后更新密钥，并提供 128 位认证；它通过 ntor-v3 对每一跳独立协商。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:10-ordine}
+拥有三跳电路的客户端想向第二跳发送消息。它使用哪些密钥，以什么顺序加密？第三跳会看到什么？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:10-contatore}
+客户端已经沿电路发送 1,000 个信元后，第一跳的 AES-CTR 密钥流已经消耗到哪里？为什么同一把密钥不能再用于第二条电路？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-falso}
+如果中继在 Recognized 为零但摘要不匹配时仍然更新累积摘要，会发生什么？平均处理多少个信元后会遇到这种问题？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-tag}
+一个串通的守卫希望给前向信元加标记，使串通出口能够识别。根据明文 \texttt{DATA} 消息的结构，修改哪些字节比较合适？如果出口是诚实的，它会看到什么结果？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-cgo-tag}
+使用 CGO 重复上一题场景。串通出口会看到什么？电路后续信元会发生什么？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-padding}
+计算实验步骤 5 中各个 \cella{PADDING} 的时间间隔。按照规范，等待时间来自两个均匀随机变量最大值的分布。对 1.5 到 9.5 秒区间，它的期望值是多少？与观测是否一致？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:10-drop}
+扩展实验，向第二跳发送一条 \texttt{DROP}（RELAY 命令 10，端到端填充）。中继会回复吗？怎样验证它确实识别了消息且没有销毁电路？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:10-alterazione}
+在实验中故意翻转一条包含 \texttt{EXTEND2} 的加密 \cella{RELAY\_EARLY} 中某一位。哪个中继会发现，如何响应？先预测，再实际验证。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification} 中的 \enquote{Relay cells} 和 \enquote{Routing relay cells}~\cite{torspec}。
+  \item 提案 359，\titolo{Counter Galois Onion, Updated}，以及其中引用的 Degabriele、Melloni、Münch、Stam 论文。
+  \item 提案 202、261、295、308：十多年来针对 tagging 的不同防御路线。
+  \item R.~Dingledine, N.~Mathewson, P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}，第 4 节：电路、leaky pipe 与完整性检查。
+\end{itemize}

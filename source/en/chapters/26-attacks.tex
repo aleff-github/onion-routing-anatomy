@@ -1,0 +1,152 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Traffic Correlation, Fingerprinting, and Sybil Attacks}\label{cap:26-attacchi}
+\aggiornatoal{23 September 2026}{papers cited in this chapter; tor 0.4.9.13; laboratory network}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item classify attacks against Tor anonymity by the adversary's vantage point;
+  \item explain end-to-end traffic correlation and measure it on your own traffic in the laboratory network (Laboratory~16);
+  \item describe website fingerprinting and the limitations of its evaluations;
+  \item recognize Sybil attacks and the network's defenses, from guards to bandwidth measurements.
+\end{itemize}
+\end{obiettivi}
+
+The threat model in \cref{cap:04-modello-minaccia} made clear that Tor does not withstand an adversary observing both ends of a communication. Twenty years of research have quantified that warning and demonstrated that observation points are more numerous and easier to reach than they might first appear. This chapter looks at attacks from the defender's perspective: what an attack requires, what it achieves, and which of the protocol mechanisms we have studied make it harder.
+
+% ---------------------------------------------------------------------------
+\section{The Adversary's Position}\label{sec:att-posizioni}
+
+It is useful to classify attacks according to what the adversary can observe:
+\begin{description}
+  \item[One end] The client-to-guard connection, observed by a connectivity provider, local network, or censor; or the exit-to-destination connection. On the client-to-guard link the adversary sees timing, volume, and direction of encrypted traffic. Between an exit and its destination, application-layer encryption depends on the protocol in use. Website fingerprinting can exploit client-side metadata without reading content.
+  \item[Both ends] An adversary observes both entry and exit, either by operating relays at both positions or by controlling networks on the paths between them. This enables correlation.
+  \item[Inside the network] Hostile relays, including middle relays, can measure, delay, mark, or discard cells.
+  \item[Above the network] The underlying Internet, including autonomous systems (ASes) and Internet exchange points (IXPs) traversed by relay connections.
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{End-to-End Correlation}\label{sec:att-correlazione}
+
+Tor deliberately avoids long mix-network-style delays or reordering of cells to remain usable (\cref{sec:radici-latenza}). Consequently, the \emph{shape} of traffic---how many bytes pass during each interval---often remains sufficiently recognizable at both ends despite network delay, buffering, multiplexing, and added traffic (\cref{fig:correlazione}). Someone observing both ends can compare the shapes and decide whether the flows match without breaking any encryption.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig26-correlation}
+\caption{Two \emph{synthetic} traces, not actual measurements, of traffic volume in one direction on client--guard and exit--server links. Bursts resemble one another but are not identical; the illustrated one-bin 250\,ms lag is not a fixed Tor delay. Encryption conceals content without necessarily concealing timing and volume. Buffering, overhead, multiplexing and competing traffic can change both patterns; statistical similarity alone does not prove a match.}
+\label{fig:correlazione}
+\end{figure}
+
+\paragraph{How Easy Is Matching?} In 2018, DeepCorr trained a neural network to recognize pairs of Tor flows. With around 900 packets per flow, it achieved 96\,\% accuracy compared with 4\,\% for the earlier statistical method under the same conditions~\cite{nasr2018deepcorr}. For the adversary, the hard part is usually not comparing flows but occupying the right vantage points.
+
+\paragraph{How likely is the adversary to observe both ends?} Johnson and colleagues simulated typical users for months with Tor's actual path-selection algorithm~\cite{johnson2013users}. With malicious relays of moderate bandwidth, 80\,\% of users across the user types they modeled were deanonymized at least once within six months. Against a single AS, users in some common locations approached 100\,\% within three months. These historical simulation results do not mean every connection is exposed; rather, opportunities accumulate over time. That reasoning motivated longer-lived guards and fewer guards per client (\cref{sec:guard}).
+
+\paragraph{The Internet as adversary.} RAPTOR identified three ways an AS can increase its opportunities~\cite{sun2015raptor}: exploiting asymmetric Internet routes, since observing \emph{one} direction at each end can suffice, including TCP acknowledgments; exploiting natural routing changes over time; and hijacking or intercepting prefixes with BGP. These techniques do not modify Tor. Defenses involve routing monitoring and potentially topology-aware path selection.
+
+\paragraph{Active attacks.} An adversary controlling one end can deliberately \emph{imprint} a distinctive traffic pattern by delaying or grouping packets and search for it at the other end. The marking attack discussed at the encryption layer in \cref{sec:tor1-debolezze} is an extreme form of this idea. As early as 2005, Murdoch and Danezis showed that observing the actual links is not always necessary. A malicious server imposes a rhythm on traffic toward a victim; the adversary measures latency on its own circuits through candidate relays, and those that slow with that rhythm may be on the victim's circuit~\cite{murdoch2005lowcost}.
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: Correlating Your Own Traffic}\label{sec:lab-attacchi}
+
+\begin{laboratorio}[16]{End-to-end correlation}
+\textbf{Objective.} Demonstrate on the laboratory network that a traffic pattern survives a circuit and can identify which exit-side flow corresponds to which client.\\
+\textbf{Prerequisites.} Laboratory~11; the laboratory network running. All flows are generated by the experiment's own script.\\
+\textbf{Estimated time.} 1 hour.
+\end{laboratorio}
+
+The \file{labs/en/lab/correlation.py} script launches a server on container port 8095 and six clients. Each client uses different SOCKS credentials: with \opt{IsolateSOCKSAuth} enabled, their streams cannot share a circuit (\cref{sec:lab-stem}). For 20 seconds, clients randomly alternate bursts of 2\,KB blocks with silence. Two \enquote{observers} record data:
+\begin{itemize}
+  \item The entry observer records when each client writes data. This idealizes what an observer on the link to the guard could see. There, data would be packaged into cells and TLS, but timing patterns needed for correlation survive both layers.
+  \item The exit observer, our server, records when bytes arrive on each connection and receives a four-byte evaluation identifier, excluded from the matching algorithm.
+\end{itemize}
+Both aggregate bytes into 250\,ms intervals. For each client, we calculate Pearson correlation against all six exit-side flows. The most correlated flow is the proposed match. The script knows the correct answer, supplied by the client in its first four bytes, but uses it only to evaluate matches, never to choose the most-correlated flow.
+
+\begin{lstlisting}[language=bash,numbers=none]
+$ docker exec -w /tmp torbook-network python3 /lab/correlation.py 1
+client 0: +0.79 -0.11 +0.12 +0.17 +0.11 -0.01  -> exit_flow 0 OK
+client 1: -0.11 +0.80 -0.02 +0.07 +0.18 +0.08  -> exit_flow 1 OK
+client 4: +0.13 +0.02 +1.00 +0.21 +0.10 +0.21  -> exit_flow 2 OK
+client 3: +0.21 +0.09 +0.33 +0.81 -0.07 +0.03  -> exit_flow 3 OK
+client 2: +0.17 +0.05 +0.10 -0.09 +0.85 -0.03  -> exit_flow 4 OK
+client 5: -0.00 +0.01 +0.23 +0.06 -0.13 +0.92  -> exit_flow 5 OK
+correct matches: 6/6
+\end{lstlisting}
+Columns identify exit-side flows in connection arrival order, which differs from client order. In this illustrative output, the correct correlation stands out in each row, between 0.79 and 1.00; connection order and coefficients may differ between runs. No decryption keys and no decrypted cells are needed, only data volume and timing. The laboratory network is small and lightly loaded, so delay is minimal. DeepCorr's historical results indicate that substantially more sophisticated classifiers can operate with a few hundred packets in the real network under the conditions studied. This is an excerpt from a reference run, not an exact prediction: some runs yield 5/6 correct matches. The laboratory is part of \texttt{make verifica-lab}.
+
+% ---------------------------------------------------------------------------
+\section{Website Fingerprinting}\label{sec:att-wf}
+
+An adversary observing only the client-to-guard link cannot perform end-to-end correlation, but may \emph{recognize} a website. Each web page generates a characteristic sequence of cells in both directions, including counts, order, and bursts. The adversary visits target websites through Tor, records their sequences, and trains a classifier. It then compares the victim's traffic with those learned patterns.
+
+Attack research has been a continuing contest between classifiers and defenses:
+\begin{itemize}
+  \item In 2011, Panchenko and colleagues used volume, timing, and directional features to improve recognition over a closed set of 775 sites from 3\,\% to 55\,\%. They also demonstrated an effective \emph{open-world} attack, where victims may visit sites outside the attacker's training set~\cite{panchenko2011website}.
+  \item In 2018, Deep Fingerprinting used a convolutional neural network to exceed 98\,\% accuracy across 95 undefended websites and 90\,\% against WTF-PAD, an adaptive-padding defense considered for Tor~\cite{sirinam2018deep}.
+\end{itemize}
+
+\begin{approfondimento}[The Base-Rate Fallacy]
+Extremely high accuracy figures require careful interpretation. Juarez and colleagues showed that many studies assumed favorable conditions: one page visited at a time, the same Tor Browser version for victim and adversary, and training data gathered shortly before an attack~\cite{juarez2014critical}. More fundamentally, in the open world, monitored websites represent a tiny fraction of all visits. Even a classifier with a low false-positive rate can produce more false alarms than correct identifications over millions of unrelated visits. This is the same statistical trap encountered in screening tests for rare medical conditions; real adversaries must contend with it.
+\end{approfondimento}
+
+\paragraph{Defenses.} Channel padding (\cref{cap:07-canali}) makes idle periods harder to identify but is not designed to defeat page fingerprinting. tor also implements the more general \emph{circuit padding} framework: state machines can schedule dummy cells. At the source's reference date, deployed machines help onion-service introduction and rendezvous circuits resemble ordinary circuits (\cref{cap:14-onion-services}, \proposta{302}). A broadly effective website-fingerprinting defense with acceptable bandwidth overhead remains an open research problem.
+
+% ---------------------------------------------------------------------------
+\section{Sybil: Multiplying Relay Identities}\label{sec:att-sybil}
+
+A \textbf{Sybil attack} introduces many identities into a network. In Tor, an adversary adds numerous relays in the hope of being selected frequently as guards and exits. Three defenses raise the cost:
+\begin{description}
+  \item[Measured bandwidth] A relay lying about its available bandwidth might attract too many clients. Bauer and colleagues demonstrated this descriptor-based deception in 2007~\cite{bauer2007lowresource}. Today, consensus weights rely on authority measurements rather than mere claims (\cref{sec:dir-voto}); attracting substantial traffic therefore requires providing real bandwidth.
+  \item[Path constraints] Two relays in the same family or IPv4 /16 network cannot appear on the same circuit (\cref{sec:percorso-vincoli}). Honest operators declare families; dishonest ones are at least constrained by their addresses.
+  \item[Network monitoring] Authorities can exclude relays or assign \texttt{BadExit}. Volunteers and researchers investigate groups with shared characteristics and monitor exit behavior. In 2014, for example, an exit scanner found 25 relays manipulating traffic or misconfigured, including HTTPS interception, DNS alteration, and \emph{sslstrip}~\cite{winter2014spoiled}.
+\end{description}
+\Cref{cap:27-casi-rete} examines malicious relay groups uncovered in later years and shows why monitoring is a continuing task.
+
+\paragraph{Sybil attacks against onion services.} Under v2, the positions of HSDirs responsible for a service were predictable. An adversary could generate relay identities selected to occupy those positions. Biryukov and colleagues used this in 2013 to measure service popularity, make services unreachable, or facilitate location attacks~\cite{biryukov2013trawling}. In v3, positions depend on blinded keys and a shared random value changing daily (\cref{cap:14-onion-services}), making targeted precomputation and advance placement substantially harder. Once a period's values are public, responsible HSDirs can still be calculated and malicious HSDirs remain possible.
+
+% ---------------------------------------------------------------------------
+\section{Discovering the Guard}\label{sec:att-guard}
+
+A guard protects the client but is also an attractive target: identifying it tells an adversary where to observe. Against an onion service, the adversary can trigger many circuit constructions, for example by requesting many connections, until an adversarial relay is selected as the middle adjacent to the guard. The first attack of this kind, published in 2006, helped motivate guards themselves~\cite{overlier2006locating}. Vanguards (\cref{sec:vanguards}) add a layer of middle relays kept fixed for a period. This slows attempts to work backward toward the actual guard but does not make guard discovery impossible.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item Attacks differ by vantage point: one end, both ends, inside the network, or the underlying Internet routes.
+  \item Correlation compares traffic shapes at both ends without breaking encryption. The adversary's challenge is occupying the right positions; opportunities accumulate over time.
+  \item Website fingerprinting identifies pages from encrypted traffic at one end. Evaluations must account for base rates and realistic conditions.
+  \item Sybil defenses include measured weights, families, /16 restrictions, and monitoring of exits and relay groups. Under v3, the selection is harder to manipulate far in advance, though responsible HSDirs can be calculated for the current period.
+  \item Guards and vanguards make discovering the first hop slower and more expensive.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:26-posizione}
+For each attack in this chapter, identify the minimum adversarial vantage point required and the Tor defense that makes the attack harder.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:26-base}
+A classifier recognizes a monitored website with probability 0.95 and mistakenly flags an unrelated visit with probability 0.001. If only one visit in 100\,000 actually goes to the monitored website, what fraction of alerts are correct?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:26-bin}
+Repeat Laboratory~16 using two-second bins, then with a duration of five seconds, and finally with all clients using the same traffic rhythm. Which modification degrades matching most, and why?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:26-difesa}
+Modify the Laboratory~16 clients to send blocks at a constant rate, including padding when they have no data. How much bandwidth does this cost, and what happens to correlation?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:26-probabilita}
+Using \file{path\_selection.py} and Laboratory~15's real consensus, calculate the probability that an adversary controlling 5\,\% of guard bandwidth and 5\,\% of exit bandwidth occupies both ends of at least one client circuit within six months. Compare a fixed guard with changing guards for every circuit. State an assumed number of circuits over six months; only in this simplified model, treat bandwidth-weighted draws as independent, and explain why it cannot predict real-world outcomes.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item A.~Johnson et al., \titolo{Users Get Routed}~\cite{johnson2013users}.
+  \item Y.~Sun et al., \titolo{RAPTOR: Routing Attacks on Privacy in Tor}~\cite{sun2015raptor}.
+  \item M.~Juarez et al., \titolo{A Critical Evaluation of Website Fingerprinting Attacks}~\cite{juarez2014critical}.
+  \item The \emph{Anonymity Bibliography}, \url{https://www.freehaven.net/anonbib/}, for later research.
+\end{itemize}

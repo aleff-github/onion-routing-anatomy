@@ -1,0 +1,7 @@
+# Sequenze che devono restare identiche alla fonte, con il motivo.
+# Il controllo di originalità (scripts/check_originality.py) le ammette; tutto il resto no.
+# Una riga = una sequenza (in minuscolo, senza punteggiatura), poi # e il motivo.
+
+codice in materia di protezione dei dati personali   # denominazione ufficiale del d.lgs. 196/2003
+della legge 20 novembre 2017 n 167                   # citazione di una legge: va indicata così
+servizi di comunicazione elettronica accessibili al pubblico su reti pubbliche di comunicazioni  # formula testuale dell'art. 132 del Codice privacy, citata tra virgolette

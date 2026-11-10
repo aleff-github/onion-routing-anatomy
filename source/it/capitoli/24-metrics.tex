@@ -1,0 +1,157 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Misurare la rete: Tor Metrics e OONI}\label{cap:24-metrics}
+\aggiornatoal{23 settembre 2026}{dati di Tor Metrics fino al 20 settembre 2026; consenso del 23 settembre 2026, ore 15; specifiche OONI ts-023 e ts-030}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item descrivere quali dati pubblica il Tor Project e da dove vengono;
+  \item spiegare come si stima il numero di utenti di una rete progettata per non conoscerli, e quanto è incerta la stima;
+  \item leggere un consenso reale per ricavarne statistiche sulla rete (Laboratorio~15);
+  \item spiegare come OONI misura il blocco di Tor dal punto di vista degli utenti.
+\end{itemize}
+\end{obiettivi}
+
+Una rete di anonimato pone un problema curioso a chi la gestisce: per migliorarla bisogna misurarla, ma misurarla significa raccogliere dati proprio su ciò che si vuole proteggere. La soluzione del Tor Project è misurare poco, in modo aggregato e pubblico, e documentare ogni passaggio perché chiunque possa rifare i conti~\cite{metricsreproducible}. Questo capitolo segue i dati dalla loro origine ai grafici, e poi guarda la rete dall'esterno, con le misure di OONI.
+
+% ---------------------------------------------------------------------------
+\section{Le fonti dei dati}\label{sec:metrics-fonti}
+
+Quasi tutto ciò che si sa della rete Tor viene da documenti che abbiamo già incontrato:
+\begin{description}
+  \item[Consenso e descrittori] (\cref{cap:12-directory}): elenco dei relay, flag, pesi di banda, versioni, politiche di uscita.
+  \item[Descrittori extra-info] che ogni relay pubblica accanto al proprio descrittore: storico dei byte trasferiti e statistiche aggregate, tra cui il numero di richieste di directory ricevute, suddivise per paese.
+  \item[Misure attive] del servizio OnionPerf, che scarica periodicamente file attraverso Tor da alcuni punti del mondo e ne registra tempi e fallimenti.
+\end{description}
+\textbf{CollecTor} archivia tutti questi documenti, fin dai primi anni della rete, e li rende scaricabili; \textbf{Tor Metrics} ne ricava grafici e tabelle, ciascuno con il file CSV dei dati e la descrizione del metodo; \textbf{Relay Search} permette di cercare un singolo relay. Il consenso usato nei laboratori del libro viene da CollecTor: \texttt{make -C labs/it data} lo scarica in \file{labs/it/dati/collector/}.
+
+% ---------------------------------------------------------------------------
+\section{Contare utenti anonimi}\label{sec:metrics-utenti}
+
+Tor non registra gli utenti, e nessun relay sa se due connessioni vengono dalla stessa persona. Come si stima, allora, che la rete abbia circa tre milioni di utenti? L'idea è indiretta (\cref{fig:stima}). Ogni client scarica periodicamente il consenso, e le richieste di directory sono contabili senza sapere chi le fa. I relay che servono le directory contano le richieste riuscite in un giorno, per paese di provenienza stimato dall'indirizzo, e pubblicano i totali nel descrittore extra-info, arrotondati per eccesso (a un multiplo di 8 quelli per paese) perché un conteggio piccolo e preciso non riveli troppo \spec{dir-spec}{Extra-info document format}.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig24-stima}
+\caption{Dalle richieste riuscite di directory alla stima indiretta dei \emph{client medi connessi}, non delle persone. Relay che forniscono directory e bridge producono serie distinte di statistiche aggregate in descrittori extra-info, tra cui \texttt{dirreq-v3-reqs}, con conteggi per paese arrotondati al multiplo di 8 superiore. CollecTor archivia i documenti; Metrics corregge l'arrotondamento (sottraendo 4 ai conteggi validi), stima la frazione di copertura $\mathit{frac}$ e applica $\lfloor r(R)/(\mathit{frac}\cdot10)\rfloor$, dove 10 è un'ipotesi sulle richieste giornaliere medie per client. I giorni con $\mathit{frac}<10\%$ o $\mathit{frac}>110\%$ sono scartati.}
+\label{fig:stima}
+\end{figure}
+
+Metrics raccoglie questi numeri e compie quattro passi~\cite{metricsreproducible}:
+\begin{enumerate}
+  \item toglie l'effetto dell'arrotondamento sottraendo metà del passo a ogni valore;
+  \item per le stime per paese, usa i conteggi geografici per ricavare la
+  proporzione delle richieste provenienti da ciascun paese, e applica
+  tale proporzione al totale delle richieste riuscite dello stesso relay:
+  non somma direttamente i conteggi per paese, perché amplificherebbe
+  l'errore di arrotondamento;
+  \item stima la \textbf{frazione} $\mathit{frac}$ delle richieste dell'intera rete che è coperta dai relay che hanno pubblicato statistiche, tenendo conto di quanto a lungo ciascuno è rimasto in servizio e di quanto traffico di directory ha servito;
+  \item divide le richieste per la frazione, per ottenere un totale di rete, e poi per 10:
+\[ r(N) = \left\lfloor \frac{r(R)}{\mathit{frac} \cdot 10} \right\rfloor. \]
+\end{enumerate}
+Il 10 è un'ipotesi: un client sempre acceso fa circa 15 richieste al giorno, ma molti sono accesi solo per una parte della giornata, e il Tor Project ha scelto 10 come media. Le stime con frazione inferiore al 10\% o superiore al 110\% vengono scartate.
+
+\begin{attenzione}[Che cosa significa \enquote{utenti}]
+Il numero è una stima di client \emph{connessi in media}, non di persone. Un client attivo per due ore al giorno genera normalmente meno richieste di uno attivo 24 ore su 24, ma il rapporto non è fisso; più programmi che usano Tor sullo stesso computer contano come più client; e un cambiamento nel comportamento del software (per esempio, scaricare il consenso meno spesso) cambia la stima senza che cambino gli utenti. I grafici vanno letti soprattutto per le \emph{variazioni}, non per i valori assoluti.
+\end{attenzione}
+
+\paragraph{I numeri, oggi.} Tra il 1\textsuperscript{o} agosto e il 20 settembre 2026 la stima giornaliera degli utenti collegati direttamente ai relay è oscillata tra 2,8 e 3,5 milioni, con una frazione tra il 57\% e il 73\%. Per l'Italia la media è di circa 60\,000, ma i dati riportano per ogni giorno un intervallo atteso molto ampio (per esempio tra 34\,000 e 111\,000 il 20 settembre): variazioni del genere non indicano da sole un evento. Per gli utenti dei bridge, lo stesso giorno, obfs4 contava circa 98\,000 utenti, Snowflake 60\,000 e WebTunnel 35\,000.
+
+\subsection{Rilevare la censura}
+
+Dalle stesse serie Metrics ricava un indicatore di possibili eventi di censura: per i paesi con più utenti confronta la variazione di ciascun paese rispetto alla settimana precedente con la variazione tipica degli altri, e segnala i giorni in cui un paese esce dall'intervallo atteso~\cite{metricsreproducible}. Un crollo improvviso degli utenti diretti, magari accompagnato da un aumento degli utenti dei bridge, è la firma tipica di un blocco. È un indizio, non una prova: va confermato con misure dall'interno del paese, che è ciò che fa OONI.
+
+% ---------------------------------------------------------------------------
+\section{Le prestazioni}\label{sec:metrics-prestazioni}
+
+OnionPerf misura, da alcuni punti fissi, il tempo per scaricare file di varie dimensioni attraverso Tor, i fallimenti, e la latenza di circuito: il tempo tra l'invio della richiesta HTTP e l'arrivo dell'intestazione della risposta~\cite{metricsreproducible}. Il 20 settembre 2026 la latenza mediana verso un server pubblico era di circa 110--140\,ms dal punto di misura tedesco, 280\,ms da quello statunitense e oltre 500\,ms da quello di Hong Kong: la distanza dal cuore della rete, che è concentrata in Europa e Nordamerica, si sente. Alcuni punti di misura usano Conflux, il multipercorso del \cref{cap:31-futuro}, e permettono di confrontare le due modalità nelle stesse condizioni.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: leggere un consenso reale}\label{sec:lab-metrics}
+
+\begin{laboratorio}[15]{Statistiche della rete da un consenso}
+\textbf{Obiettivo.} Ricavare da un consenso reale di CollecTor le statistiche principali della rete, con il nuovo modulo \file{labs/it/codice/torlab/metriche.py}.\\
+\textbf{Prerequisiti.} Laboratorio~6 (\file{directory.py}) e Laboratorio~7 (\file{percorso.py}); nessuna rete necessaria.\\
+\textbf{Tempo stimato.} 1 ora.
+\end{laboratorio}
+
+Il modulo aggiunge una funzione \texttt{riassunto}, che riusa l'analisi del consenso del Laboratorio~6, e le due funzioni della stima degli utenti. I conteggi sono ordinati anche per nome, a parità di valore: senza questo accorgimento l'ordine cambierebbe a ogni esecuzione, perché dipende da come Python itera gli insiemi. Applicato al consenso del 23 settembre 2026 alle 15:
+\begin{lstlisting}[language=bash,numbers=none]
+$ PYTHONPATH=labs/it/codice python3 -m torlab.metriche labs/it/dati/collector/consensus-microdesc-2026-09-23-15
+relay: 9358
+flag: {'Running': 9358, 'Valid': 9358, 'Fast': 8961, 'Stable': 8199,
+       'V2Dir': 7674, 'Guard': 5306, 'HSDir': 4050, 'Exit': 3177,
+       'BadExit': 32, 'MiddleOnly': 28, 'StaleDesc': 21, 'Authority': 10}
+banda_totale: 198927900
+quota_banda_exit: 0.3308947161257923
+quota_banda_guard: 0.7010271560701139
+versioni: [('Tor 0.4.9.12', 6027), ('Tor 0.4.9.11', 2520), ...]
+reti16: [('64.65', 771), ('192.42', 636), ('204.8', 598), ...]
+\end{lstlisting}
+
+Qualche osservazione:
+\begin{itemize}
+  \item i 9358 relay sono coerenti con il grafico di Metrics, che per il 20 settembre riporta 9416 relay e 2333 bridge;
+  \item i relay con flag \texttt{Exit} sono circa un terzo del totale e portano circa un terzo della banda misurata; i guard ne portano il 70\%. Le due quote si sovrappongono, perché un relay può avere entrambi i flag, ed è questo squilibrio che i pesi di banda della \cref{sec:percorso-pesi} compensano;
+  \item il flag \texttt{BadExit} (32 relay) e \texttt{MiddleOnly} (28) sono decisioni delle autorità contro relay sospetti o mal configurati;
+  \item i relay con flag \texttt{Authority} sono dieci, ma le autorità che votano il consenso sono nove (\cref{sec:arch-ruoli}): la decima è \texttt{Serge}, l'autorità dei bridge, che ha il flag ma non partecipa al voto;
+  \item quasi tutti i relay usano versioni 0.4.9 recenti;
+  \item alcune reti /16 ospitano centinaia di relay: sono tipicamente grandi operatori di exit, e il vincolo di un solo relay per /16 per circuito (\cref{sec:percorso-vincoli}) serve proprio a non dipendere troppo da un'unica rete.
+\end{itemize}
+La somma dei pesi del consenso è un numero in unità di banda misurata dalle autorità, non il traffico reale: per quest'ultimo Metrics usa gli storici dei byte dei descrittori extra-info.
+
+% ---------------------------------------------------------------------------
+\section{OONI}\label{sec:metrics-ooni}
+
+L'\emph{Open Observatory of Network Interference} (OONI) misura la censura di Internet dal punto di vista degli utenti: volontari di tutto il mondo installano OONI Probe, che esegue periodicamente dei test e ne pubblica i risultati in forma aperta. Tra i test ce ne sono alcuni dedicati a Tor~\cite{oonitor}:
+\begin{description}
+  \item[\texttt{tor}] verifica la raggiungibilità di alcune directory authority e di alcuni bridge, non limitandosi ad aprire una connessione TCP ma svolgendo operazioni specifiche per ciascuno, come l'handshake obfs4;
+  \item[\texttt{torsf}] prova ad avviare tor con Snowflake e registra se e in quanto tempo il bootstrap riesce.
+\end{description}
+Le specifiche dei test prevedono accorgimenti per non pubblicare gli indirizzi dei bridge privati: pubblicarli nei risultati li consegnerebbe ai censori. Metrics e OONI si completano: il primo vede un calo degli utenti da un paese, il secondo può dire se, in quel paese, i relay o i bridge erano davvero irraggiungibili e con quale tecnica venivano bloccati.
+
+\begin{approfondimento}[Misurare senza danneggiare]
+Ogni statistica pubblicata da un relay è un compromesso: più è dettagliata, più è utile e più rischia di rivelare qualcosa. Per questo i conteggi sono arrotondati, e aggregati per giorno e per paese. La ricerca sulla rete segue gli stessi principi (\cref{sec:rp-perche}): misurare il minimo necessario, aggregare prima di pubblicare, non conservare ciò che non serve.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item I dati sulla rete vengono da consenso, descrittori ed extra-info, archiviati da CollecTor, e dalle misure attive di OnionPerf; Metrics li elabora con metodi documentati e ripetibili.
+  \item Gli utenti si stimano dalle richieste di directory: richieste riportate, divise per la frazione coperta e per 10; il risultato è una stima di client medi, utile soprattutto per le variazioni.
+  \item Lo stesso dato serve a segnalare possibili eventi di censura, da confermare con misure locali.
+  \item Un consenso reale basta a ricavare numero di relay, flag, quote di banda, versioni e concentrazione per rete.
+  \item OONI misura dall'interno dei paesi la raggiungibilità di autorità e bridge e il funzionamento di Snowflake.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:24-dieci}
+Se tutti i client iniziassero a scaricare il consenso la metà delle volte, che cosa succederebbe alla stima degli utenti, a parità di persone? Come se ne accorgerebbe chi legge i grafici?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:24-frazione}
+Un giorno i relay che riportano statistiche hanno registrato 20 milioni di richieste, e la frazione stimata è del 60\%. Quanti utenti stima Metrics? E con una frazione dell'8\%?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:24-flag}
+Estendi \texttt{riassunto} perché calcoli la quota di banda dei relay con i flag \texttt{Guard} ed \texttt{Exit} insieme, e la probabilità complessiva, con i pesi del consenso, che un circuito abbia un exit in una delle cinque reti /16 più rappresentate.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:24-censura}
+Scarica da Metrics le serie degli utenti diretti e degli utenti dei bridge di un paese in cui sia stato documentato un blocco di Tor, e descrivi che cosa accade alle due serie nei giorni del blocco.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:24-privacy}
+I conteggi per paese sono arrotondati per eccesso a multipli di 8. Descrivi un attacco che l'arrotondamento rende più difficile, e discuti perché, invece, non protegge contro un avversario che controlla molti relay.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item La pagina \titolo{Reproducible Metrics} del Tor Project~\cite{metricsreproducible}, con il metodo di ogni grafico.
+  \item Le specifiche dei test di OONI~\cite{oonitor} e OONI Explorer, \url{https://explorer.ooni.org/}.
+  \item Il formato dei descrittori extra-info, \spec{dir-spec}{Extra-info document format}.
+\end{itemize}

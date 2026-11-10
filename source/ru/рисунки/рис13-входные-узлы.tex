@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Схема выбора сторожевых узлов Tor, а не цепь вложенных множеств. Узлы с флагом Guard в текущем консенсусе могут быть добавлены в постоянную выборку; выборка иногда хранит узлы, отсутствующие в новом консенсусе. FILTERED и CONFIRMED — разные, потенциально пересекающиеся подмножества выборки. Основные узлы (обычно три) берут только из FILTERED: сначала подтверждённые, затем при необходимости остальные отфильтрованные. Значения по умолчанию: до 60 узлов и порог 20\%; удаление через 120 дней для неподтверждённых, 60 дней после подтверждения либо 20 дней отсутствия в консенсусе. Основной узел может временно быть недоступен.}
+% Отношения множеств и списков сторожевых узлов
+\begin{tikzpicture}[font=\sffamily\scriptsize,>=Stealth,
+  guardbox/.style={draw=torviola,fill=torviola!6,rounded corners=4pt,align=center,minimum height=1.1cm},
+  guardarrow/.style={-Stealth,thick,torgrigio}]
+  \node[guardbox,draw=torgrigio,fill=torgrigio!6,text width=10.5cm] (cons) at (5.8,5.1) {\textbf{Узлы с флагом Guard}: кандидаты из консенсуса};
+  \node[guardbox,text width=10.5cm] (sample) at (5.8,3.7) {\textbf{SAMPLED}: сохранены; до 60, порог 20\,\%};
+  \node[guardbox,text width=4.4cm] (filtered) at (2.7,2.0) {\textbf{FILTERED}: в консенсусе, разрешены};
+  \node[guardbox,text width=4.4cm] (confirmed) at (8.9,2.0) {\textbf{CONFIRMED}: ранее использованы};
+  \node[guardbox,draw=torverde!60!black,fill=torverde!15,text width=10.5cm] (primary) at (5.8,0.2) {\textbf{PRIMARY}: обычно 3 из FILTERED};
+  \draw[guardarrow] (cons) -- (sample);
+  \draw[guardarrow] (sample.south west) to[out=235,in=90] (filtered.north);
+  \draw[guardarrow] (sample.south east) to[out=305,in=90] (confirmed.north);
+  \draw[guardarrow] (filtered.south) to[out=270,in=160] (primary.west);
+  \draw[guardarrow] (confirmed.south) to[out=270,in=20] (primary.east);
+  \node[align=center,text=torgrigio,font=\sffamily\tiny] at (5.8,-1.05) {сначала подтверждённые; сроки удаления 120/60/20 дней};
+\end{tikzpicture}

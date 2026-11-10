@@ -1,0 +1,107 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{源流：Mix 网络、Remailer、Crowds 与 Freedom}\label{cap:02-radici}
+\aggiornatoal{2026 年 9 月 23 日}{本章所引用的历史资料}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 解释 David Chaum 提出的 \emph{mix} 思想，以及它为何成为匿名系统的基础；
+  \item 区分适合电子邮件的高延迟系统与适合网页浏览的低延迟系统；
+  \item 梳理 remailer 从 anon.penet.fi 到 Mixminion 的演进；
+  \item 说明 Crowds、PipeNet 和 Freedom 在通向 Tor 的历史进程中所处的位置。
+\end{itemize}
+\end{obiettivi}
+
+Tor 并非凭空出现。至少就目前而言，它是四十多年研究与实际部署不断演进的最新阶段。有些系统取得了成功，更多系统最终失败，但每一个都留下了经验。本章将追踪其中最重要的发展脉络，直到洋葱路由出现。
+
+% ---------------------------------------------------------------------------
+\section{Chaum 的 Mix（1981）}\label{sec:radici-chaum}
+
+1981 年，David Chaum 发表了一篇仅五页的论文，却由此奠定了一个完整的研究领域：\titolo{Untraceable Electronic Mail, Return Addresses, and Digital Pseudonyms}~\cite{chaum1981untraceable}。论文研究的是电子邮件：即使整张网络都处于监控之下，怎样才能发送一封消息，而不让观察者把发送者和接收者联系起来？
+
+Chaum 的答案是 \textbf{mix（混合器）}：一种服务器，它接收用自身公钥加密的消息，将其解密，把多条消息收集成一批（\emph{batch}），然后以不同于到达顺序的次序一起转发。以下三种技术阻止观察者把某条输入消息与某条输出消息对应起来：
+\begin{itemize}
+  \item mix 去除一层加密后，输出消息的外观与对应的输入消息完全不同；
+  \item 所有消息长度相同；
+  \item 消息被打乱并成批同时释放，因此连时序也无法直接把它们对应起来。
+\end{itemize}
+\begin{figure}[htbp]
+\centering
+\input{图/图02-混合网络}
+\caption{Chaum 式 mix。即使观察者同时监视输入端和输出端，也难以把消息一一对应：所有消息长度相同，mix 去除一层加密后其外观发生变化，而且它们会以不同顺序成批离开。}
+\label{fig:mix}
+\end{figure}
+
+发送者不必只信任一个 mix，而可以让消息经过一条 \textbf{mix 链}，并用每个 mix 的密钥逐层加密。每个 mix 只去掉属于自己的那一层，并且只知道下一个 mix 的身份。只要链中至少有一个 mix 是诚实的，输入与输出之间的联系就仍然能够被隐藏。这里已经包含了洋葱路由思想的种子。
+
+在同一篇论文中，Chaum 还提出了\emph{匿名返回地址}，使接收者可以在不知道发送者身份的情况下回复，以及数字假名的概念。1988 年，他又提出另一种机制 \emph{DC-nets}~\cite{chaum1988dining}。它能够以极高成本提供无条件匿名性，因此主要产生了理论影响。
+
+% ---------------------------------------------------------------------------
+\section{高延迟与低延迟}\label{sec:radici-latenza}
+
+Chaum 的 mix 能提供很强的保护，但它\textbf{很慢}：一条消息在每个 mix 中都必须等待一批消息形成，最终可能需要几分钟甚至几小时才能到达。这对电子邮件尚可接受，却不适合网页浏览——网页通常必须在几秒内返回。
+
+这构成了匿名通信领域最根本的一条分界线：
+\begin{description}
+  \item[高延迟系统] mix、remailer 等系统会延迟并打乱消息，因此能够抵抗监视整张网络的强大观察者；但它们只适用于能够容忍延迟的通信。
+  \item[低延迟系统] 洋葱路由和 Tor 等系统会在数据到达后尽快转发，从而支持网页浏览、聊天和其他交互式连接；代价是同时观察通信两端的对手可能通过时间与流量大小进行关联。
+\end{description}
+Tor 有意识地选择了第二条路线：如果一个系统因为太慢而几乎没人使用，它也就无法保护任何人（\cref{sec:anon-utenti}）。
+
+% ---------------------------------------------------------------------------
+\section{Remailer}\label{sec:radici-remailer}
+
+20 世纪 90 年代，Chaum 的思想被实现为真实服务，通常称为 \textbf{remailer（匿名邮件转发器）}：服务器接收一封电子邮件，去除与发送者有关的信息后再将其转发。
+
+\paragraph{anon.penet.fi（1993--1996）。} 最著名的 remailer 由 Johan \enquote{Julf} Helsingius 于 1993 至 1996 年间在芬兰运营。它并不是 mix：系统为每个用户分配一个\emph{假名}，同时保存一张“假名到真实地址”的映射表，以便能够投递回复。后来，它每天处理数千封消息。最终，正是这张映射表导致服务关闭。1995 和 1996 年，山达基教会在芬兰警方协助下取得了一些曾传播该教会文档的用户身份。Helsingius 于 1996 年关闭服务，理由是当时芬兰针对互联网的法律环境存在不确定性。洋葱路由的设计者后来明确吸取了这一教训~\cite{syverson2011peel}：只要系统保存用户与真实身份之间的映射，就创造了一个单点故障；运营者可能被迫交出它。
+
+\paragraph{Cypherpunk、Mixmaster、Mixminion。} 与此同时，\emph{cypherpunk} 社区开发了不保存身份映射表的 remailer：发送者为一条服务器链逐层加密消息。后续几代系统——先是 Mixmaster，后是 Mixminion~\cite{danezis2003mixminion}——加入固定长度消息、真正的批处理，以及针对消息重放的防御。Roger Dingledine 和 Nick Mathewson 都是 2003 年发布的 Mixminion 的作者之一；几乎在同一时期，他们也在设计 Tor。
+
+% ---------------------------------------------------------------------------
+\section{走向低延迟}\label{sec:radici-bassa}
+
+\paragraph{PipeNet（1995）。} 1995 年 2 月，Wei Dai 在 cypherpunk 邮件列表中提出 PipeNet：一个低延迟系统，其中所有参与者持续以恒定速率发送流量，从而不给观察者留下可用于关联的变化。理论上它可以抵抗时序分析，但代价无法接受：只要一个参与者停止发送，整张网络都必须停下来~\cite{syverson2011peel}。PipeNet 从未真正实现，却一直是理解“要彻底击败流量关联，需要付出什么代价”的重要参照。
+
+\paragraph{洋葱路由（1996）。} 同一年，Naval Research Laboratory 正在形成洋葱路由方案。其历史将在 \cref{cap:03-nascita-tor} 中详细说明。
+
+\paragraph{Crowds（1998）。} Michael Reiter 和 Aviel Rubin 提出了 Crowds~\cite{reiter1998crowds}。用户组成一个\enquote{群体（crowd）}，每个网页请求都会先被转发给随机选中的成员。该成员以一定概率把请求发送到目标网站，否则继续转给另一名成员。网站看到请求来自某个任意成员，而任何成员也无法确定把请求传给自己的那个人究竟是原始发起者，还是又一个转发者。Crowds 不使用分层加密，而且只针对网站和其他成员提供保护，不能抵抗网络观察者。不过，它第一次以概率方式严格表达匿名性，并分析了多个恶意成员相互串通的攻击；这些分析预示了后来与守卫中继有关的问题。
+
+\paragraph{Freedom（1999--2001）。} Tor 之前规模最大的匿名网络是加拿大 Zero-Knowledge Systems 公司运营的 Freedom。它于 1998 年末公布，从 1999 年末持续运行到 2001 年末~\cite{syverson2011peel}。Freedom 是商业服务：用户支付订阅费，服务器由公司及其合作伙伴运营。最终，订阅收入不足以维持网络，服务因此关闭。它的经历至少说明了两点，而 Tor 后来实际上都吸取了这些经验：匿名网络由许多相互独立的主体运营，比由单一公司掌控更加稳健；同时，融资模式的重要性并不低于密码学本身（\cref{sec:nascita-comunita}）。
+
+\begin{approfondimento}[形形色色的“洋葱”]
+同一时期还出现了许多其他洋葱路由系统，例如完全去中心化的 Tarzan 和 MorphMix，以及 Cebolla。Tor 从 Cebolla 借鉴了“每一跳单独进行 Diffie--Hellman 交换、逐跳扩展电路”的思想~\cite{syverson2011peel}。还有一些项目与 Tor 同期出现，却走上了不同道路：主要面向内部服务、至今仍在运行的 I2P；以及在德累斯顿大学随 JAP 客户端诞生的 AN.ON（它也曾以 JonDonym 之名作为商业服务提供），后者使用由已知组织运营的固定 mix 链。不同项目在去中心化、信任和性能之间选择了不同平衡。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item Chaum 的 mix（1981）通过改变消息外观、统一长度并打乱顺序，隐藏输入消息与输出消息之间的关系。采用分层加密的 mix 链已经预示了“洋葱”结构。
+  \item 高延迟系统能抵抗更强的观察者，但速度慢；低延迟系统适用于交互式通信，却容易受到时序关联。
+  \item anon.penet.fi 展示了保存用户真实身份的危险；Mixmaster 和 Mixminion 则继续发展用于电子邮件的 mix 思路。
+  \item PipeNet、Crowds 和 Freedom 以不同取舍探索低延迟匿名通信。Freedom 尤其说明，多主体运营和可持续融资模式对匿名网络同样重要。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:02-mix}
+某个 mix 每批收集 100 条消息。观察者能看到全部 100 条消息进入，也能看到全部 100 条消息离开。如果观察者知道其中一条输入消息的发送者，并随机猜测其对应的输出消息，猜中的概率是多少？如果这 100 条消息中有 99 条都是观察者自己发送的，又会发生什么？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:02-penet}
+设计一个允许用户收到回复、但不保存“假名到真实地址”映射表的 remailer。你需要用到 Chaum 提出的哪些思想？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:02-crowds}
+在 Crowds 中，若继续转发的概率为 $p_f = 3/4$，一个请求在到达网站前平均会经过多少名成员？为什么收到请求的成员无法确定把请求交给自己的人就是原始发起者？
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item D.~Chaum, \titolo{Untraceable Electronic Mail, Return Addresses, and Digital Pseudonyms}~\cite{chaum1981untraceable}.
+  \item M.~Reiter, A.~Rubin, \titolo{Crowds: Anonymity for Web Transactions}~\cite{reiter1998crowds}.
+  \item G.~Danezis, R.~Dingledine, N.~Mathewson, \titolo{Mixminion: Design of a Type III Anonymous Remailer Protocol}~\cite{danezis2003mixminion}.
+  \item Free Haven 的 \emph{Anonymity Bibliography}，\url{https://www.freehaven.net/anonbib/}：该领域研究论文的重要参考集合。
+\end{itemize}

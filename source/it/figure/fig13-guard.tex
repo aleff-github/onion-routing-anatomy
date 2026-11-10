@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Schema delle relazioni, non di insiemi strettamente concentrici, nella selezione dei guard Tor. I relay con flag Guard nel consenso sono candidati al nuovo campionamento; il campione persistente può conservare temporaneamente nodi usciti dal consenso. FILTERED e CONFIRMED sono due sottoinsiemi del campione che possono sovrapporsi, ma non sono contenuti l'uno nell'altro. I PRIMARY, di norma tre, sono scelti fra i FILTERED: prima quelli anche CONFIRMED, poi altri filtrati se necessario. Parametri predefiniti: massimo 60 guard nel campione e soglia del 20\%, con scadenze 120 giorni per non confermati, 60 dalla conferma e 20 giorni di assenza dal consenso. La raggiungibilità condiziona l'uso, non necessariamente l'appartenenza ai primari.}
+% Relazioni tra insiemi e liste dell'algoritmo dei guard
+\begin{tikzpicture}[font=\sffamily\scriptsize,>=Stealth,
+  guardbox/.style={draw=torviola,fill=torviola!6,rounded corners=4pt,align=center,minimum height=1.1cm},
+  guardarrow/.style={-Stealth,thick,torgrigio}]
+  \node[guardbox,draw=torgrigio,fill=torgrigio!6,text width=10.5cm] (cons) at (5.8,5.1) {\textbf{Guard nel consenso}: candidati a nuovi campioni};
+  \node[guardbox,text width=10.5cm] (sample) at (5.8,3.7) {\textbf{SAMPLED}: su disco; max 60, soglia 20\,\%};
+  \node[guardbox,text width=4.4cm] (filtered) at (2.7,2.0) {\textbf{FILTERED}: nel consenso e compatibili};
+  \node[guardbox,text width=4.4cm] (confirmed) at (8.9,2.0) {\textbf{CONFIRMED}: usati per il traffico};
+  \node[guardbox,draw=torverde!60!black,fill=torverde!15,text width=10.5cm] (primary) at (5.8,0.2) {\textbf{PRIMARY}: 3 di norma, sottoinsieme FILTERED};
+  \draw[guardarrow] (cons) -- (sample);
+  \draw[guardarrow] (sample.south west) to[out=235,in=90] (filtered.north);
+  \draw[guardarrow] (sample.south east) to[out=305,in=90] (confirmed.north);
+  \draw[guardarrow] (filtered.south) to[out=270,in=160] (primary.west);
+  \draw[guardarrow] (confirmed.south) to[out=270,in=20] (primary.east);
+  \node[align=center,text=torgrigio,font=\sffamily\tiny] at (5.8,-1.05) {priorità: confermati filtrati, poi altri filtrati; scadenze 120/60/20 gg};
+\end{tikzpicture}

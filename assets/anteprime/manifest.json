@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "source_pdf": "book/it/anatomia-di-tor_it_A4.pdf",
+  "source_sha256": "cabfa92805a19192834713920473bda70ac7e75e490daf218769a0b7c3c8ec40",
+  "source_pages": 298,
+  "width_px": 840,
+  "samples": [
+    {
+      "file": "celle-formati.png",
+      "pdf_page": 63,
+      "title_it": "Formato delle celle Tor",
+      "title_en": "Tor cell wire format",
+      "sha256": "135d3ba6309352747e971f365aa90868e056af6511938f2b71c4b1e13b17ca49"
+    },
+    {
+      "file": "costruzione-circuito.png",
+      "pdf_page": 78,
+      "title_it": "Costruzione telescopica dei circuiti",
+      "title_en": "Telescopic circuit construction",
+      "sha256": "e40f8b9d1b2792fe7a4e250446df9b3ff4d0a7da2e38b6a723102f740246f5a1"
+    },
+    {
+      "file": "rendezvous-onion-service.png",
+      "pdf_page": 131,
+      "title_it": "Rendezvous degli onion service",
+      "title_en": "Onion service rendezvous",
+      "sha256": "fc6d970fd4ee2941aaaf204815a055f3577d5eef6c019b726d99f12592fdae81"
+    },
+    {
+      "file": "rete-privata.png",
+      "pdf_page": 170,
+      "title_it": "Topologia della rete Tor privata",
+      "title_en": "Private Tor network topology",
+      "sha256": "06d2631c7803312826a65d61e463655062bd1218d614bcfbefe5a91b3593dc5c"
+    }
+  ]
+}

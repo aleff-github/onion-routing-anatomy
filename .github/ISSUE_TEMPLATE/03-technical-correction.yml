@@ -1,0 +1,64 @@
+name: "Technical correction · Correzione tecnica"
+description: "A statement about Tor, cryptography or the protocol that is wrong, imprecise or out of date. · Un'affermazione tecnica sbagliata, imprecisa o non più attuale."
+title: "[Technical] "
+labels: ["technical", "status: to verify"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Technical corrections are accepted on the basis of a **primary source**: the Tor specifications (spec.torproject.org), the source code of tor or Arti (with version or commit), a Tor proposal, or the original paper.
+        Le correzioni tecniche si accettano sulla base di una **fonte primaria**: specifiche, codice di tor o Arti (con versione o commit), proposta, articolo originale.
+
+        If the error could lead readers into an unsafe practice and you prefer not to discuss it publicly, see SECURITY.md.
+  - type: dropdown
+    id: language
+    attributes:
+      label: "Edition · Edizione"
+      options:
+        - "Italiano (original)"
+        - "English"
+        - "Español"
+        - "Русский"
+        - "简体中文"
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: "Chapter, section, page · Capitolo, sezione, pagina"
+      placeholder: "e.g. 10.4, PDF A4 p. 131 / figure 12.2 / listing 9.3 / exercise 7.5"
+    validations:
+      required: true
+  - type: textarea
+    id: statement
+    attributes:
+      label: "What the book says · Che cosa dice il libro"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: "What is wrong · Che cosa non va"
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: "Primary source · Fonte primaria"
+      description: "Link and exact place: spec section, file and line at a given version, proposal number, paper. · Collegamento e punto esatto."
+      placeholder: "e.g. tor-spec, «Relay cells» / src/core/or/relay.c at tor-0.4.9.13 / proposal 359"
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: "Proposed correction · Correzione proposta"
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: "Versions concerned · Versioni interessate"
+      description: "The book refers to tor 0.4.9.13 and Arti 2.6.0. Is the behaviour current, deprecated or only proposed? · Comportamento attuale, deprecato o proposto?"
+    validations:
+      required: false

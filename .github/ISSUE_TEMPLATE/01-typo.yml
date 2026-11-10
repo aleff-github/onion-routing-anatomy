@@ -1,0 +1,54 @@
+name: "Typo or wording · Refuso"
+description: "A spelling mistake, a missing word, an unclear sentence. · Un errore di battitura, una parola mancante, una frase poco chiara."
+title: "[Typo] "
+labels: ["typo", "status: to verify"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you! You do not need Git or LaTeX: fill in the fields and submit.
+        Grazie! Non servono Git né LaTeX: compila i campi e invia.
+
+        Please do not include personal data. · Per favore non inserire dati personali.
+  - type: dropdown
+    id: language
+    attributes:
+      label: "Language · Lingua"
+      options:
+        - "Italiano (original)"
+        - "English"
+        - "Español"
+        - "Русский"
+        - "简体中文"
+        - "Website · Sito"
+        - "README / documentation"
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: "Chapter or section · Capitolo o sezione"
+      placeholder: "e.g. 8.3 «Celle a lunghezza fissa» / Laboratory 4 / website, page «Labs»"
+    validations:
+      required: true
+  - type: input
+    id: reference
+    attributes:
+      label: "Page or source reference · Pagina o riferimento al sorgente"
+      description: "Page number and format (PDF A4, EPUB, PDF 7×10), or the file in the repository. · Numero di pagina e formato, oppure il file nella repository."
+      placeholder: "e.g. PDF A4, p. 112 / source/it/capitoli/08-celle.tex"
+    validations:
+      required: false
+  - type: textarea
+    id: current
+    attributes:
+      label: "Current text · Testo attuale"
+      description: "Copy the sentence as it is now. · Copia la frase così com'è."
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: "Proposed correction · Correzione proposta"
+    validations:
+      required: true

@@ -1,0 +1,19 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{La figura compara el artículo 4 del DSA y la salida Tor, sin establecer automáticamente una exención legal. El cliente utiliza RELAY\_BEGIN para indicar el destino; la salida abre TCP, aplica su política y transmite bytes de RELAY\_DATA, no celdas Tor intactas.}
+% Condiciones de mera transmisión comparadas con el comportamiento de una salida
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.35cm,
+  cond/.style={draw,rounded corners=2pt,text width=4.2cm,align=left,minimum height=0.8cm},
+  tor/.style={draw=torviola,fill=torviola!8,rounded corners=2pt,text width=5.4cm,align=left,minimum height=0.8cm}]
+  \node[cond] (a) {(a) no inicia la transmisión};
+  \node[cond,below=of a] (b) {(b) no selecciona al destinatario};
+  \node[cond,below=of b] (c) {(c) no selecciona ni modifica la información};
+  \node[tor,right=1.2cm of a] (ta) {cliente envía \texttt{RELAY\_BEGIN}; salida abre TCP};
+  \node[tor,right=1.2cm of b] (tb) {cliente elige destino; la política puede rechazar};
+  \node[tor,right=1.2cm of c] (tc) {bytes de \texttt{RELAY\_DATA} al flujo TCP};
+  \foreach \x in {a,b,c} \draw[<->,torgrigio] (\x) -- (t\x);
+  \node[above=4pt of a,font=\sffamily\small] {Reglamento (UE) 2022/2065, art.~4};
+  \node[above=4pt of ta,font=\sffamily\small] {Salida Tor};
+  \node[font=\sffamily\tiny,text=torgrigio,align=center,below=0.5cm of c,xshift=3.3cm] {Exención sujeta al caso concreto};
+\end{tikzpicture}

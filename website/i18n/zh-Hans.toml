@@ -1,0 +1,373 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Alessandro Greco
+# 网站文本 — 简体中文。
+
+[meta]
+name = "简体中文"
+html_lang = "zh-Hans"
+hreflang = "zh-Hans"
+og_locale = "zh_CN"
+site_name = "Onion Routing Anatomy"
+chooser = "一本关于 Tor 协议的自由图书，逐字节解析"
+og_image_alt = "Onion Routing Anatomy：标题旁的洋葱剖面图。"
+
+[ui]
+skip = "跳到正文"
+lang_label = "语言"
+nav_label = "栏目"
+not_found = "此页面不存在。返回首页。"
+
+[nav]
+home = "首页"
+story = "项目由来"
+book = "图书内容"
+labs = "实验"
+languages = "语言"
+contribute = "参与贡献"
+ai = "AI 透明度"
+license = "许可证"
+independence = "独立性"
+
+[download]
+title = "下载"
+pending = """意大利语原版免费提供 A4 PDF（{{pages_a4}} 页）、EPUB 3 和用于打印的 7×10 英寸 PDF。<a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">A4 PDF</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it_7x10.pdf">打印版 PDF</a>。"""
+pdf = "A4 PDF（意大利语）"
+epub = "EPUB（意大利语）"
+published = """意大利语第一版，版本 {{version}}，共 {{pages_a4}} 页。<a href="{{releases}}/tag/{{tag}}">全部\
+文件及 SHA-256 校验和</a>，包括用于打印个人副本的 7×10 英寸 PDF。"""
+
+[footer]
+edition = """第一版，版本 {{version}}（意大利语）· tor {{tor}}、Arti {{arti}} · <a href="{{gh}}">项目源文件</a> · <a href="{{p:license}}">GPL-3.0-or-later</a>"""
+independent = """本书为独立作品，未获 Tor Project 认可或赞助，与其亦无隶属关系。\
+<a href="{{p:independence}}">详情</a>。"""
+privacy = "本站不使用 Cookie、脚本、网络字体或任何跟踪工具。"
+
+# --------------------------------------------------------------------------------------
+
+[pages.home]
+title = "Onion Routing Anatomy — 一本逐字节解析 Tor 协议的自由图书"
+description = "Anatomia di Tor：一本免费、自由的 Tor 协议技术书，从信元（cell）、电路讲到攻击，并配有在私有 Tor 网络上进行的 20 个实验。"
+body = """
+<div class="hero">
+<img src="{{asset:copertina.png}}" width="1600" height="2560" alt="《Anatomia di Tor》封面：一个洋葱的剖面，有同心圆环、一道径向切口和紫色的内核。">
+<div>
+<h1>Onion Routing Anatomy</h1>
+<p class="subtitle"><span lang="it">Anatomia di Tor</span>——逐字节解析 Tor 协议</p>
+<p>这是一本讲解 Tor 工作原理的技术书：从两个中继之间交换的字节出发，一直讲到设计决策、
+真实攻击和尚未解决的问题。每一种机制都会在实验中重建和验证，实验运行在一台普通电脑上的
+私有 Tor 网络中。</p>
+<p>本书以意大利语写成。它是<strong>免费</strong>的，其源文件——文字、插图、代码和实验——
+都以 GNU GPL 许可证向所有人开放。</p>
+</div>
+</div>
+{{download}}
+<section aria-labelledby="liulan">
+<h2 id="liulan">浏览</h2>
+<ul class="cards">
+<li><a href="{{p:story}}"><strong>项目由来</strong><span>从一篇本科毕业论文到一本书。</span></a></li>
+<li><a href="{{p:book}}"><strong>图书内容</strong><span>31 章，从信元讲到前沿研究问题。</span></a></li>
+<li><a href="{{p:labs}}"><strong>实验</strong><span>在私有 Tor 网络上的二十个实验。</span></a></li>
+<li><a href="{{p:languages}}"><strong>语言</strong><span>意大利语原版与四种正在审校的译本。</span></a></li>
+<li><a href="{{p:ai}}"><strong>AI 透明度</strong><span>分工说明：人的指导与 AI 工具。</span></a></li>
+<li><a href="{{p:license}}"><strong>许可证</strong><span>GNU GPL 允许你做什么。</span></a></li>
+</ul>
+</section>
+<section class="callout" aria-labelledby="bangzhu">
+<h2 id="bangzhu">帮助改进本书</h2>
+<p>本书是一部自由作品，欢迎读者提出修改建议。无论是错别字、说明不清、技术错误，还是实验结果与描述不符，每一条反馈都能帮助改进本书。</p>
+<p><a class="button" href="{{p:contribute}}">如何参与</a>
+<a class="button secondary" href="{{choose}}">报告错误</a></p>
+</section>
+"""
+
+[pages.story]
+title = "项目由来 — Onion Routing Anatomy"
+description = "Onion Routing Anatomy 的由来：为本科毕业论文研究 Tor，此后多年持续深入，用实验验证每种机制，最终决定自由发布。"
+body = """
+<h1>项目由来</h1>
+<p class="lead">这个项目始于学习，随着时间推移，发展成为一本带有配套实验的技术书。本页讲述
+它的经过。</p>
+
+<h2 id="qiyuan">起源</h2>
+<p>在撰写本科毕业论文期间，我开始深入研究 Tor，深入到通常描述它的层面之下：关注的不是
+如何使用它，而是中继之间实际传输的内容——信元、电路、密钥，以及把它们组织在一起的算法。</p>
+<p>这份兴趣并没有随着毕业而结束。在随后的几年里，我不断深化、重新整理和扩充这些材料。</p>
+
+<h2 id="chengshu">从论文到图书</h2>
+<p>随着时间推移，目标发生了变化。对我来说，仅仅理解 Tor 已经不够了：目标变成了一部能够具体讲解 Tor
+的技术著作，深入到协议、信元、电路和算法，并让每一个论断都对应到规范和源代码。</p>
+
+<h2 id="shiyan">为什么要做实验</h2>
+<p>描述一种机制，并不能证明它真的按描述的方式运作。实验正是出于这一需要：在一台电脑上运行
+一个私有 Tor 网络，书中的每一个步骤都可以在其中复现、测量和验证。如今实验已是本书的一部分：
+共有二十个，每个实验都为一个小型教学用 Tor 客户端增加一个组件。</p>
+
+<h2 id="mianfei">为什么免费</h2>
+<p>我决定优先考虑知识的自由传播。整个项目——图书、LaTeX 源文件、代码和实验——都可以自由获取，
+让任何人都可以学习、复现和改进它。本书免费提供；可以如何使用它，由其许可证 GNU GPL 规定。</p>
+<p>现有文本是如何产生的，以及 AI 工具在其中起了什么作用，请见
+<a href="{{p:ai}}">AI 透明度</a>页面。</p>
+"""
+
+[pages.book]
+title = "图书内容 — Onion Routing Anatomy"
+description = "Anatomia di Tor 的内容：历史、Tor 协议底层细节、Tor 实践、攻击与防御、研究与 Arti。共 31 章、176 道习题。"
+body = """
+<h1>图书内容</h1>
+<p class="lead">31 章、4 个附录、176 道分级习题（附答案）、39 幅原创插图。参考版本：tor
+{{tor}} 和 Arti {{arti}}。</p>
+<p>本书面向具备网络（TCP/IP、TLS）和编程基础的大学生、安全从业者和研究人员。书中的技术论断
+都对应到一手资料——Tor 规范、tor 和 Arti 的源代码、Tor Project 的提案以及研究论文——并在
+正文中注明出处。</p>
+
+<h2 id="di1bufen">第一部分 — 历史与基础</h2>
+<p>匿名性与元数据；混合网络（mix network）与匿名转发邮件服务（remailer）；从美国海军研究
+实验室（NRL）的洋葱路由到 Tor Project；Tor 的威胁模型，以及它无法防范的情形。</p>
+
+<h2 id="di2bufen">第二部分 — 协议底层</h2>
+<p>Tor 中的密码学；网络架构；通道与链路协议（link protocol）；信元；电路建立（CREATE_FAST、
+ntor、ntor-v3）；RELAY 信元的分层加密与新的 CGO 方案；流（stream）；SENDME 与拥塞控制；
+目录系统；路径选择与入口守卫（guard）；v3 洋葱服务；DoS 防御；审查、网桥与可插拔传输。
+每章都以一个实验结束。</p>
+
+<h2 id="di3bufen">第三部分 — Tor 实践</h2>
+<p>用 torrc 配置 tor；控制端口与 Stem；搭建私有 Tor 网络；用 Wireshark 分析流量；运行洋葱
+服务、中继和网桥；Tor 浏览器、Tails 与 Whonix；Tor Metrics 与 OONI；意大利和欧盟的法律与
+伦理问题。</p>
+
+<h2 id="di4bufen">第四部分 — 攻击与防御</h2>
+<p>流量关联、网站指纹识别（website fingerprinting）、女巫攻击（Sybil）、真实案例和操作
+失误。本书采取分析与防御的视角：解释攻击为何有效、Tor 如何应对，不提供针对他人的操作
+指南。</p>
+
+<h2 id="di5bufen">第五部分 — 研究与未来</h2>
+<p>关于 Tor 的学术研究、Arti（用 Rust 实现的 Tor）、尚未解决的问题以及 Tor Project 当前的
+提案。</p>
+
+<h2 id="geshi">格式</h2>
+<p>A4 PDF（{{pages_a4}} 页）、EPUB 3，以及用于打印个人副本的 7×10 英寸 PDF（{{pages_7x10}}
+页）。PDF 和 EPUB 均由同一套 LaTeX 源文件通过 <code>make book</code> 生成。</p>
+"""
+
+[pages.labs]
+title = "私有 Tor 网络上的实验 — Onion Routing Anatomy"
+description = "二十个可复现的实验：一个用 Python 编写的教学用 Tor 客户端，在基于 Docker 和 Chutney 的私有 Tor 网络上测试，实机验证 53/53 项通过。"
+body = """
+<h1>实验</h1>
+<p class="lead">二十个实验逐步构建 <code>torlab</code>——一个用 Python 编写的小型教学用 Tor
+客户端：通道、信元、握手、加密、流、目录、路径选择、洋葱服务等等。</p>
+
+<h2 id="wangluo">私有 Tor 网络</h2>
+<p>代码运行在一台电脑上的私有 Tor 网络中：tor {{tor}} 和 Chutney 在 Docker 镜像中从源代码
+编译，所有服务只监听 127.0.0.1。任何流量都不会离开这台机器。</p>
+<p>这些实验只为这个私有网络而设计，绝不会针对公共中继或真实用户进行，遵循 Tor Research
+Safety Board 的原则。</p>
+
+<h2 id="yanzheng">经过验证，而不只是描述</h2>
+<p>2026 年 10 月 28 日，所有意大利语版实验都在私有网络上重新实机运行：<strong>53/53</strong>
+项检查通过，另外 obfs4 网桥实验 <strong>14/14</strong> 项通过。离线测试无需 Docker 或网络
+即可检查代码和脚本。<a href="{{tree}}/docs/it/validazione">验证摘要</a>保存在代码仓库中。</p>
+
+<h2 id="shishi">动手试试</h2>
+<pre><code>git clone {{gh}}
+cd onion-routing-anatomy
+make -C labs/it test       # 离线测试（Python 3.11 或更高版本）
+make -C labs/it immagine   # 构建包含 tor 和 Chutney 的 Docker 镜像
+make -C labs/it avvia      # 启动私有网络
+make verifica-lab          # 重新运行所有实验并检查结果</code></pre>
+<p>分步指南位于 <a href="{{tree}}/labs/it/wiki"><code>labs/it/wiki</code></a>（意大利语）。
+<code>labs/&lt;语言&gt;/wiki</code> 中的翻译版指南属于正在审校的译本。</p>
+<p>有地方与描述不符？<a href="{{new}}04-laboratory.yml">报告实验问题</a>。</p>
+"""
+
+[pages.languages]
+title = "语言与译本 — Onion Routing Anatomy"
+description = "意大利语 PDF 和 EPUB 原版，以及通过 AI 生成、以源文件形式提供的四种语言译本。"
+body = """
+<h1>语言</h1>
+<p class="lead">意大利语原版提供 PDF 和 EPUB。英语、西班牙语、俄语和简体中文译本可通过项目源文件查阅。</p>
+
+<table>
+<caption>各版本状态</caption>
+<thead><tr><th scope="col">语言</th><th scope="col">状态</th></tr></thead>
+<tbody>
+<tr><td lang="it">Italiano</td><td>意大利语原版，第一版，版本 {{version}}；提供 PDF 和 EPUB。</td></tr>
+<tr><td lang="en">English</td><td>第一版，版本 {{version}}。译本由人工智能生成，提供源文件，尚无独立审校。</td></tr>
+<tr><td lang="es">Español</td><td>第一版，版本 {{version}}。译本由人工智能生成，提供源文件，尚无独立审校。</td></tr>
+<tr><td lang="ru">Русский</td><td>第一版，版本 {{version}}。译本由人工智能生成，提供源文件，尚无独立审校。</td></tr>
+<tr><td>简体中文</td><td>第一版，版本 {{version}}。译本由人工智能生成，提供源文件，尚无独立审校。</td></tr>
+</tbody>
+</table>
+
+<h2 id="yiben">关于译本</h2>
+<p>英语、西班牙语、俄语和简体中文译本使用 AI 工具根据意大利语原版生成。源文件可在代码仓库中查看；译本 PDF 和 EPUB 尚未经过独立审校。</p>
+<p>自动检查不能替代母语人士审校或对译本实验的实际验证。意大利语原版仍是参考依据。</p>
+<p>详细信息见 <code>docs/translations/</code>。本网站提供五种语言。</p>
+
+<h2 id="shenjiao">帮助审校译本</h2>
+<p>如果中文是你的母语或你能熟练使用中文，哪怕只审校一章也很有帮助。不需要懂 LaTeX 或
+Git。</p>
+<p><a class="button" href="{{blob}}/docs/translation-review.md">参与译本审校</a>
+<a class="button secondary" href="{{new}}02-translation.yml">报告翻译问题</a></p>
+<p>意大利语文本是基准：修改译本绝不会悄悄改动意大利语原文。如果问题源自原文，会先在原文中
+报告并修正。</p>
+"""
+
+[pages.contribute]
+title = "参与贡献 — 帮助改进 Onion Routing Anatomy"
+description = "如何为 Onion Routing Anatomy 报告错误、修正译文、提出改进建议或贡献代码——无论你是否会用 Git 和 LaTeX。"
+body = """
+<h1>帮助改进本书</h1>
+<p class="lead">本书是一部自由作品，欢迎读者通过修改说明、代码或实验内容参与改进。</p>
+
+<h2 id="fangshi">参与方式</h2>
+<ul class="cards">
+<li><a href="{{new}}01-typo.yml"><strong>报告错别字</strong><span>拼写错误、漏字、表述不清的句子。</span></a></li>
+<li><a href="{{new}}02-translation.yml"><strong>修正译文</strong><span>译本中错误或不自然的段落。</span></a></li>
+<li><a href="{{new}}03-technical-correction.yml"><strong>技术勘误</strong><span>关于 Tor 的错误或过时的说法。</span></a></li>
+<li><a href="{{new}}04-laboratory.yml"><strong>实验问题</strong><span>与描述不符的实验。</span></a></li>
+<li><a href="{{new}}06-proposal.yml"><strong>提出改进</strong><span>新内容、更好的解释、一幅插图。</span></a></li>
+<li><a href="{{blob}}/docs/translation-review.md"><strong>译本审校</strong><span>审校你所用语言的某一章。</span></a></li>
+<li><a href="{{blob}}/CONTRIBUTING.md"><strong>贡献文字或代码</strong><span>提交一个 pull request。</span></a></li>
+<li><a href="{{new}}05-documentation.yml"><strong>改进文档</strong><span>README、指南、说明。</span></a></li>
+</ul>
+
+<h2 id="wu-git">不用 Git 和 LaTeX</h2>
+<p>你只需要一个 GitHub 账号。选择反馈类型，填写表单——语言、章节或页码、现有文字以及你建议
+的写法——然后提交即可。修改源文件的工作会由其他人完成。</p>
+<p>对于小的错别字，你也可以自己提出修改：在 GitHub 上打开文件，点击铅笔图标，修改文字，然后
+选择“Propose changes”。GitHub 会自动为你创建仓库副本和 pull request，无需编译本书。</p>
+
+<h2 id="yong-git">使用 Git</h2>
+<ol>
+<li>除非只是小修改，请先创建一个 issue。</li>
+<li>找到文件：意大利语正文在 <code>source/it/</code>，译本在
+<code>source/&lt;语言&gt;/</code>，实验代码在 <code>labs/</code>。</li>
+<li>fork 本仓库，创建分支并进行修改。</li>
+<li>运行与修改相应的检查：<code>make check</code> 和 <code>make test</code> 只需要
+Python；编译本书需要 Docker。</li>
+<li>提交 pull request，并回复审阅意见。</li>
+</ol>
+<p>详细说明见 <a href="{{blob}}/CONTRIBUTING.md">CONTRIBUTING.md</a>（英语和意大利语）。</p>
+
+<h2 id="houxu">之后会怎样</h2>
+<p>每一条反馈都会被阅读，并标记一个状态：<em>待核实</em>、<em>已确认</em>、<em>处理中</em>、
+<em>已提出修正</em>、<em>已解决</em>、<em>无法复现</em>或<em>重复</em>。涉及协议描述、
+密码学或实验的修改，需要一手资料或可复现的证明；错别字只需快速核对。被采纳的修正会进入本书
+的下一个版本，并列入<a href="{{blob}}/CHANGELOG.md">更新日志</a>。具体流程见
+<a href="{{blob}}/docs/editorial-process.md">docs/editorial-process.md</a>。</p>
+
+<h2 id="zhixie">致谢</h2>
+<p>修改被采纳的贡献者会列在 <a href="{{blob}}/CONTRIBUTORS.md">CONTRIBUTORS.md</a> 中，
+使用其 GitHub 用户名或其自选的名字。任何人都可以要求不被列出。这里没有排名。</p>
+
+<h2 id="xuzhi">须知</h2>
+<ul>
+<li>贡献内容按本项目的许可证 GPL-3.0-or-later 接受。</li>
+<li>请勿在公开的 issue 中发布个人数据、私钥、抓包文件或其他敏感材料。</li>
+<li>代码或实验中的安全问题请私下报告：见 <a href="{{blob}}/SECURITY.md">SECURITY.md</a>。</li>
+<li>所有人都应遵守简短的<a href="{{blob}}/CODE_OF_CONDUCT.md">行为准则</a>。</li>
+</ul>
+"""
+
+[pages.ai]
+title = "AI 使用透明度 — Onion Routing Anatomy"
+description = "Onion Routing Anatomy 的创作中如何使用了人工智能：人的指导与 AI 工具的分工、内部审阅，以及哪些经过验证、哪些尚未验证。"
+body = """
+<h1>AI 透明度</h1>
+<p class="lead">本页概述了本书创作中如何使用人工智能，内容仅以项目记录中有据可查的信息为
+依据。无法核实的地方，会明确说明。</p>
+<p>本书建立在我多年来撰写的学习笔记和研究资料之上。在我的指导下，人工智能工具实质性地
+参与了内容扩展、论证、结构整理和正文撰写。尽管已经进行内部审阅和技术检查，书中仍可能存在
+错误，欢迎<a href="{{p:contribute}}">报告问题并提出修正</a>。本项目遵循
+<strong>「diffusione dei saperi senza fondare poteri」</strong>——传播知识，而不建立权力中心。
+本书通过项目官方渠道免费提供，采用 GPL-3.0-or-later 许可证；按该许可证条款也可进行商业再分发。</p>
+
+<h2 id="zuozhe">我的部分</h2>
+<ul>
+<li>项目的起源：我为本科毕业论文开始研究 Tor，毕业后继续研究。论文本身不在代码仓库中，
+因此无法指出书中哪些段落源自论文。</li>
+<li>工作方向与决策：目标和范围、作为语气与深度样板的章节、书名、许可证、免费发布，以及对每次
+实验实机运行的授权。</li>
+<li>对作品的审阅与维护，以及对所发布内容的编辑责任。</li>
+</ul>
+
+<h2 id="gongju">AI 工具所做的工作</h2>
+<ul>
+<li>现有的正文、插图、习题和答案，自 2026 年 9 月起在与 AI 编程助手 Claude Code 的会话中，
+在我的指导下撰写。它们应被视为<strong>在人类指导下由 AI 生成</strong>的内容，而不是由我
+撰写、仅经 AI 润色的文字。</li>
+<li>实验代码、脚本和构建系统也是以同样方式编写的。</li>
+<li>译本由 AI 工具生成；其审校同样是在使用 AI 工具的会话中完成的。</li>
+<li>项目文档（包括本网站）是根据我提供的信息，借助 AI 起草的。</li>
+</ul>
+
+<h2 id="yanzheng">作品如何审阅，以及局限</h2>
+<p><strong>内部审阅。</strong>我亲自审阅并维护本作品，它会持续得到修正和改进。</p>
+<p><strong>自动化检查：</strong>在私有 Tor 网络上实机运行意大利语版实验（53/53 与 14/14 项
+检查），离线测试，以及带有程序化检查和 EPUBCheck 校验的 PDF、EPUB 构建。</p>
+<p><strong>独立审阅：</strong>目前尚无——没有同行评审或外部专家的验证，没有律师对法律章节的
+审阅，也没有母语人士对译本的审校。</p>
+<p>因此书中仍可能存在错误。如果你发现了错误，请<a href="{{p:contribute}}">告诉我们</a>。</p>
+
+<p><a class="button" href="{{blob}}/AI_DISCLOSURE.md">阅读完整声明</a>（英语和意大利语）</p>
+"""
+
+[pages.license]
+title = "许可证：GNU GPL v3 或更高版本 — Onion Routing Anatomy"
+description = "Onion Routing Anatomy 以 GPL-3.0-or-later 发布：你可以如何使用本书及其源文件、使用条件、译本以及第三方材料。"
+body = """
+<h1>许可证</h1>
+<p class="lead">正文、插图、封面、LaTeX 源文件、实验代码和文档均以 <strong>GNU 通用公共
+许可证第 3 版或（由你选择）任何更高版本</strong>（GPL-3.0-or-later）发布。Copyright © 2026
+Alessandro Greco。</p>
+
+<h2 id="keyi">你可以做什么</h2>
+<ul>
+<li>阅读、复制和分享本书，数量不限，可以免费，也可以收费。</li>
+<li>研究和修改本书，并发布修改后的版本。</li>
+<li>将其用于教学、课程和培训。</li>
+</ul>
+<p>本书免费提供。这是关于发行方式的选择；使用和再发布的权利来自许可证，它允许任何人再发布
+本书，包括用于商业目的，只要遵守 GPL 的条件。</p>
+
+<h2 id="tiaojian">条件</h2>
+<ul>
+<li>保留版权声明和许可证，并传递同样的权利：修改后的版本也必须以 GPL 发布。</li>
+<li>发布 PDF 或 EPUB 的人，也必须提供对应的源代码。对本书而言，源代码是
+<code>source/</code> 的内容以及用于生成文件的 <code>Makefile</code>。</li>
+<li>本作品不提供任何担保。</li>
+</ul>
+<p>具有法律效力的是 <a href="{{blob}}/LICENSE">LICENSE</a> 文件中的文本；本页只是摘要。</p>
+
+<h2 id="yiben">译本</h2>
+<p>译本由 AI 工具生成，目前正在审校。在译本享有权利的范围内，它们以同一许可证发布。</p>
+
+<h2 id="disanfang">第三方材料</h2>
+<p>部分材料保留其自身的条款：GPL 文本本身；对 Chutney 的一行补丁和对 tor 的一个补丁
+（BSD 3 条款许可证）；取自 Tor 规范的测试向量；作为示例使用的 Tor 网络公开文档；嵌入 PDF
+的字体；对其他作品的简短引用。完整清单见 <a href="{{blob}}/NOTICE.md">NOTICE.md</a>。</p>
+"""
+
+[pages.independence]
+title = "独立性 — Onion Routing Anatomy"
+description = "Onion Routing Anatomy 是一部独立作品，未获 Tor Project 认可，与其亦无隶属关系。没有广告、赞助或跟踪。"
+body = """
+<h1>独立性</h1>
+<p class="lead">本书是一部独立作品，未获 Tor Project 认可或赞助，与其亦无隶属关系。</p>
+
+<h2 id="tor-project">关于 Tor Project</h2>
+<p>本书研究 Tor 软件、其规范及相关研究。它不代表 Tor Project 发言，书中的观点也不代表 Tor
+Project 的观点。如需使用 Tor，请从 Tor Project 的官方渠道获取。</p>
+<p>“Tor”和 Tor 洋葱标志是 The Tor Project, Inc. 的商标。本书未使用该标志；封面上的洋葱
+剖面图是原创作品。</p>
+
+<h2 id="wu-guanggao">没有广告，没有跟踪</h2>
+<p>本书没有赞助商，也不含广告。本站不使用 Cookie、脚本、网络字体、统计分析或第三方服务。
+本站托管于 GitHub Pages；与任何网络服务器一样，GitHub 可能会记录访问者的 IP 地址，详见其
+隐私声明。</p>
+
+<h2 id="kanwu">勘误</h2>
+<p>独立也意味着没有任何机构代表读者审阅过本书：勘误来自阅读它的人。如果你发现了错误，请
+<a href="{{p:contribute}}">告诉我们</a>。</p>
+"""

@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible para el EPUB.
+\altfig{Cuerpo descifrado de una celda RELAY en el formato tradicional tor1: cabecera de 11 bytes con Cmd (1, desplazamiento 0), Recognized (2, desplazamiento 1), StreamID (2, desplazamiento 3), Digest (4, desplazamiento 5) y Length (2, desplazamiento 9). Desde el desplazamiento 11 hay Length bytes de datos, como máximo 498, y relleno opcional hasta el límite 509. Al enviar se pone Recognized a cero, y el resumen progresivo tradicional incluye también el relleno. La especificación recomienda hasta cuatro bytes iniciales a cero y después bytes aleatorios; si quedan menos de cuatro bytes, todos son cero, y con Length igual a 498 no hay relleno. El receptor no debe depender de su contenido.}
+% Cuerpo descifrado de una celda RELAY de formato tradicional.
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\scriptsize,inner sep=1pt,align=center}]
+  \node[campo,fill=torviola!35,minimum width=1.2cm] (a) {Cmd\\(1)};
+  \node[campo,fill=torviola!15,minimum width=1.6cm,right=0pt of a] (b) {Recognized\\(2)};
+  \node[campo,fill=torviola!15,minimum width=1.4cm,right=0pt of b] (c) {StreamID\\(2)};
+  \node[campo,fill=torviola!15,minimum width=1.4cm,right=0pt of c] (d) {Digest\\(4)};
+  \node[campo,fill=torviola!15,minimum width=1.3cm,right=0pt of d] (e) {Length\\(2)};
+  \node[campo,fill=torverde!15,minimum width=3.2cm,right=0pt of e] (f) {Data\\(Length)};
+  \node[campo,fill=torgrigio!10,minimum width=2cm,right=0pt of f] (g) {Padding\\ceros + aleatorios};
+  \foreach \n/\o in {a/0,b/1,c/3,d/5,e/9,f/11} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (g.north east) {509};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]a.south west) -- ([yshift=-2pt]e.south east)
+    node[midway,below=6pt,font=\sffamily\small] {cabecera: 11 bytes};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]f.south west) -- ([yshift=-2pt]g.south east)
+    node[midway,below=6pt,font=\sffamily\small] {498 bytes};
+\end{tikzpicture}

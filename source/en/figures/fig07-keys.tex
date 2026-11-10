@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Alternative text for accessibility (EPUB only).
+\altfig{Tor relay authentication chain: Ed25519 identity key KP\_relayid\_ed certifies signing key KP\_relaysign\_ed (CertType 4). The signing key certifies the SHA-256 digest of the responder's TLS certificate (CertType 5), or KP\_link\_ed for an initiator that authenticates (CertType 6). The legacy RSA identity KP\_relayid\_rsa signs the RSA-to-Ed25519 cross-certificate (type 7) and also has a self-signed X.509 identity certificate (type 2). The diagram's 30-day and 2-day values refer to example certificate validity, not universal key lifetimes; not every arrow signs one Ed25519 key with another.}
+% Relay certificate chain
+\begin{tikzpicture}[font=\sffamily\small,node distance=1.1cm,
+  chiave/.style={draw=torviola,fill=torviola!10,rounded corners,minimum width=3.6cm,minimum height=0.9cm,align=center},
+  legacy/.style={draw=torgrigio,fill=torgrigio!8,rounded corners,minimum width=3.4cm,minimum height=0.9cm,align=center},
+  cert/.style={-{Stealth[length=2.5mm]},thick,torverde!60!black},
+  etich/.style={font=\sffamily\scriptsize,fill=white,inner sep=1pt}]
+  \node[chiave] (id) {\texttt{KP\_relayid\_ed}\\Ed25519 identity (permanent)};
+  \node[chiave,below=of id] (sign) {\texttt{KP\_relaysign\_ed}\\signing key (30-day cert.)};
+  \node[chiave,below left=1.1cm and -1.2cm of sign] (tls) {TLS certificate\\SHA-256 (2-day cert.)};
+  \node[chiave,below right=1.1cm and -1.2cm of sign] (link) {\texttt{KP\_link\_ed}\\authentication (2-day cert.)};
+  \node[legacy,right=2.2cm of id] (rsa) {\texttt{KP\_relayid\_rsa}\\RSA identity (legacy)};
+  \draw[cert] (id) -- node[etich,right] {4 \texttt{IDENTITY\_V\_SIGNING}} (sign);
+  \draw[cert] (sign) -- node[etich,left] {5 \texttt{SIGNING\_V\_TLS\_CERT}} (tls);
+  \draw[cert] (sign) -- node[etich,right] {6 \texttt{SIGNING\_V\_LINK\_AUTH}} (link);
+  \draw[cert,torgrigio] (rsa) -- node[etich,above] {7} (id);
+  \draw[cert,torgrigio] (rsa.north east) to[out=60,in=0,looseness=4] node[etich,right] {2 (self-signed)} (rsa.east);
+  \node[font=\sffamily\scriptsize,text=torgrigio,below=2pt of tls] {sent by the responder};
+  \node[font=\sffamily\scriptsize,text=torgrigio,below=2pt of link] {sent by an authenticating initiator};
+\end{tikzpicture}

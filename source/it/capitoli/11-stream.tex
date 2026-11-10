@@ -1,0 +1,265 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Stream, SENDME e controllo della congestione}\label{cap:11-stream}
+\aggiornatoal{23 settembre 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; proposte 289, 324}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item aprire, usare e chiudere uno stream TCP attraverso un circuito, con BEGIN, CONNECTED, DATA ed END;
+  \item spiegare perché la risoluzione dei nomi avviene all'exit e come funziona RESOLVE;
+  \item descrivere il controllo di flusso originale di Tor, con le finestre di circuito e di stream e i SENDME;
+  \item capire perché i SENDME sono autenticati e che cosa dimostrano;
+  \item descrivere il controllo della congestione della proposta 324 e il ruolo di XON e XOFF;
+  \item scaricare un file attraverso un circuito di tre salti costruito da te e misurare le finestre di un exit reale (Laboratorio~5).
+\end{itemize}
+\end{obiettivi}
+
+Il circuito del \cref{cap:10-cifratura-relay} è un condotto cifrato fino all'exit, ma non trasporta ancora nulla di utile. In questo capitolo lo usiamo per il suo scopo: portare connessioni TCP verso Internet, gli \textbf{stream}. Vedremo poi un problema che ogni rete deve risolvere, e che in Tor ha una forma particolare: evitare che chi invia dati più velocemente di quanto la rete o il destinatario riescano ad assorbirli riempia le code dei relay.
+
+% ---------------------------------------------------------------------------
+\section{Gli stream}\label{sec:stream}
+
+Uno stream è una connessione TCP del client, per esempio verso un server web, trasportata attraverso un circuito. Un circuito può trasportare molti stream contemporaneamente, distinti dallo \textbf{StreamID} dei messaggi relay (\cref{sec:relay}), scelto dal client e diverso da zero. Il ciclo di vita di uno stream è mostrato nella \cref{fig:stream}.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig11-stream}
+\caption{Ciclo di vita di uno stream verso un server web. I messaggi tra client ed exit viaggiano nel circuito, cifrati a strati; tra exit e server c'è una normale connessione TCP, in chiaro se l'applicazione non usa TLS. Il client può inviare dati prima di ricevere CONNECTED (\emph{optimistic data}).}
+\label{fig:stream}
+\end{figure}
+
+\subsection{Aprire uno stream: BEGIN e CONNECTED}
+
+Per aprire uno stream il client invia all'exit un messaggio \texttt{BEGIN} (comando relay 1) con un nuovo StreamID e un corpo che indica la destinazione~\spec{tor-spec}{Opening streams and transmitting data}:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Campo & Lunghezza & Contenuto \\
+\midrule
+ADDRPORT & variabile & \texttt{indirizzo:porta}, terminato da un byte zero \\
+FLAGS & 4 (facoltativo) & preferenze su IPv4 e IPv6 \\
+\bottomrule
+\end{tabular}
+\end{center}
+L'indirizzo può essere un nome DNS, un indirizzo IPv4 o un indirizzo IPv6 tra parentesi quadre. Due regole minori sono rivelatrici dello spirito del protocollo: la stringa va inviata \textbf{in minuscolo}, per non creare differenze che permettano di distinguere un client dall'altro, e il campo FLAGS va \textbf{omesso} quando vale zero. I bit di FLAGS dicono se il client accetta IPv6 (bit 1), se rifiuta IPv4 (bit 2) e se preferisce IPv6 (bit 3).
+
+Ricevuto \texttt{BEGIN}, l'exit:
+\begin{enumerate}
+  \item controlla di non essere il primo salto del circuito, cioè che il canale da cui arriva il circuito sia stato aperto da un relay autenticato presente nel consenso. Tor non deve funzionare come proxy a un solo salto, che renderebbe gli exit bersagli più appetibili: un tentativo del genere va respinto con un \cella{DESTROY};
+  \item applica la propria \emph{exit policy}, l'elenco di indirizzi e porte verso cui accetta di collegarsi (\cref{cap:22-relay});
+  \item risolve il nome, se necessario, e apre la connessione TCP.
+\end{enumerate}
+Se tutto va bene risponde con \texttt{CONNECTED} (comando relay 4), il cui corpo contiene di solito l'indirizzo IPv4 raggiunto (4 byte) e per quanti secondi il client può ricordarlo (TTL, 4 byte); per IPv6 il formato è un po' diverso, e un corpo vuoto è ammesso. Il client \emph{può} ignorare l'indirizzo, e se lo memorizza non deve riusarlo su altri circuiti: un exit disonesto potrebbe mentire, o restituire un indirizzo unico per riconoscere il client in seguito.
+
+\subsection{Trasferire dati: DATA}
+
+I dati dell'applicazione viaggiano in messaggi \texttt{DATA} (comando relay 2), fino a 498 byte ciascuno nel formato tradizionale. L'exit copia il contenuto sulla connessione TCP e viceversa. Il client può inviare \texttt{DATA} subito dopo \texttt{BEGIN}, senza attendere \texttt{CONNECTED}: l'exit li mette in coda e li inoltra appena la connessione è aperta. Questi \emph{optimistic data} risparmiano un intero giro di andata e ritorno attraverso il circuito, che in Tor costa facilmente qualche centinaio di millisecondi.
+
+\subsection{Chiudere: END}
+
+Chi chiude la connessione, o incontra un errore, invia \texttt{END} (comando relay 3) con un byte di motivo~\spec{tor-spec}{Closing streams}. I motivi più comuni sono \texttt{DONE} (6, chiusura normale), \texttt{CONNECTREFUSED} (3), \texttt{RESOLVEFAILED} (2), \texttt{TIMEOUT} (7) ed \texttt{EXITPOLICY} (4), quest'ultimo seguito dall'indirizzo rifiutato e da un TTL. Il client, per gli stream che ha originato, dovrebbe inviare solo \texttt{MISC} (1): come per \cella{DESTROY}, non c'è motivo di dare all'altra parte più informazioni del necessario.
+
+\subsection{Il DNS all'exit}\label{sec:stream-dns}
+
+Nel \texttt{BEGIN} il client può indicare un \emph{nome} anziché un indirizzo: la risoluzione avviene all'exit. Non è una comodità, è una scelta di sicurezza. Se il client risolvesse i nomi da sé, chiederebbe al proprio resolver DNS, fuori da Tor, l'indirizzo di ogni sito che sta per visitare: chiunque osservi quelle richieste, dal fornitore di connettività in poi, saprebbe dove sta andando. È la classica \enquote{fuga DNS}, che l'esercizio~\ref{es:19-socks} fa provare e che il Laboratorio~18 osserva dal punto di vista di tor (\cref{sec:lab-opsec}).
+
+Quando serve solo un indirizzo, senza aprire una connessione, il client usa \texttt{RESOLVE} (comando relay 11), con il nome terminato da zero. L'exit risponde con \texttt{RESOLVED} (12), che contiene una o più risposte nel formato tipo, lunghezza, valore e TTL: tipo \texttt{0x04} per IPv4, \texttt{0x06} per IPv6, \texttt{0x00} per un nome (nelle risoluzioni inverse), \texttt{0xF0} e \texttt{0xF1} per un errore temporaneo o permanente~\spec{tor-spec}{Remote hostname lookup}. È il meccanismo che sta dietro alla porta DNS che un client tor può offrire alle applicazioni locali (opzione \opt{DNSPort}).
+
+\subsection{Stream verso le directory: BEGIN\_DIR}
+
+\file{BEGIN\_DIR} (comando relay 13) apre uno stream non verso Internet, ma verso il servizio di directory del relay stesso: è così che i client scaricano consenso e descrittori (\cref{cap:12-directory}) senza aprire connessioni in chiaro. Il corpo è vuoto e la exit policy non si applica, perché lo stream non lascia il processo tor.
+
+% ---------------------------------------------------------------------------
+\section{Il controllo di flusso originale}\label{sec:flusso-classico}
+
+\subsection{Il problema}
+
+Immaginiamo un exit con un collegamento veloce verso Internet e un client lento. Se l'exit leggesse dal server e inviasse nel circuito tutto ciò che riceve, i dati si accumulerebbero nelle code dei relay intermedi, consumando la loro memoria e rallentando gli altri circuiti. TCP risolve il problema su ogni singolo collegamento, ma il circuito è una catena di collegamenti TCP diversi: la contropressione di TCP tra middle e client non arriva all'exit. Serve un meccanismo \emph{da estremo a estremo}.
+
+\subsection{Finestre e SENDME}
+
+Il meccanismo originale di Tor usa delle \textbf{finestre}, contate in celle \texttt{DATA}~\spec{tor-spec}{Flow control}:
+\begin{itemize}
+  \item a livello di \textbf{circuito}, chi invia ha una \emph{package window} che parte da 1000 celle (o dal parametro di consenso \texttt{circwindow}); ogni cella \texttt{DATA} inviata la decrementa, e a zero smette di inviare. Chi riceve tiene una \emph{deliver window} simmetrica e, ogni 100 celle ricevute, invia un messaggio \texttt{SENDME} (comando relay 5) con StreamID zero, che restituisce 100 celle alla finestra del mittente;
+  \item a livello di \textbf{stream}, le finestre partono da 500 celle e crescono di 50 per ogni \texttt{SENDME} con lo StreamID dello stream.
+\end{itemize}
+Poiché il client può scambiare dati con qualsiasi salto (\cref{sec:tor1}), tiene una coppia di finestre per ogni salto. Le finestre riguardano solo le celle originate e consumate, non quelle inoltrate.
+
+Il risultato è che in ogni momento non possono esserci in viaggio più di 1000 celle per circuito, e 500 per stream: circa 500\,KB e 250\,KB. È una garanzia di memoria per i relay, ma anche un limite di velocità: un circuito con un tempo di andata e ritorno di mezzo secondo non può superare 1000 celle ogni mezzo secondo, circa 1\,MB/s, qualunque sia la banda disponibile. E se la rete è congestionata, 1000 celle in volo sono troppe: le code crescono, e con esse la latenza.
+
+\subsection{SENDME autenticati}
+
+Un client malintenzionato potrebbe inviare \texttt{SENDME} senza aver ricevuto nulla: l'exit continuerebbe a inviare dati, che si accumulerebbero nella rete, e il client potrebbe così esaurire la memoria dei relay, o amplificare il traffico, con uno sforzo minimo. Dalla versione 0.4.1.1-alpha i \texttt{SENDME} di circuito sono \textbf{autenticati} (\proposta{289}): nello schema tradizionale tor1, il corpo contiene una versione (1), una lunghezza (20) e il \textbf{digest progressivo} della cella \texttt{DATA} che ha fatto scattare il \texttt{SENDME}. Chi riceve il \texttt{SENDME} conosce quel digest, perché lo ha calcolato inviando la cella, e lo confronta: se non coincide, il circuito viene chiuso.
+
+Il digest dipende dal contenuto di tutte le celle ricevute, ma un client potrebbe provare a prevederlo se conoscesse in anticipo il contenuto delle celle, per esempio scaricando un file noto. La specifica \spec{tor-spec}{Flow control} raccomanda quindi di introdurre byte casuali in almeno una cella \texttt{DATA} per incremento della finestra di ricezione (100 celle nello schema classico). È una delle motivazioni del padding casuale dei messaggi relay (\cref{sec:relay}); se una cella occupa tutti i 498 byte utili, però, non c'è spazio per il padding, e la casualità non può essere data per scontata.
+
+\begin{approfondimento}[Quale digest, esattamente?]
+La specifica parla del \enquote{digest della cella che precede il \texttt{SENDME}}. Nei circuiti ordinari con tor1 è il digest SHA-1 completo, di 20 byte, del flusso all'indietro dopo l'ultima cella riconosciuta, salvato nel campo \file{sendme\_digest} dalla funzione \file{tor1\_relay\_digest\_matches\_v0} (\file{src/core/crypto/relay\_crypto\_tor1.c}). Se il digest progressivo è più lungo, come lo SHA3-256 dei circuiti rendezvous con onion service, per un \texttt{SENDME} di versione 1 si trasmettono soltanto i \textbf{primi 20 byte}~\spec{tor-spec}{Flow control}. Con CGO il digest viene invece sostituito dal tag $T$ della cella confermata (\cref{sec:cgo}).
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Il controllo della congestione}\label{sec:cc}
+
+Le finestre fisse hanno due difetti opposti: sono troppo piccole per i circuiti veloci e troppo grandi per quelli congestionati. La \proposta{324}, di Mike Perry, ha introdotto in Tor un vero \textbf{controllo della congestione}, analogo a quello di TCP, adottato a partire da tor 0.4.7.7 (aprile 2022).
+
+\subsection{Il segnale: il tempo di andata e ritorno}
+
+Come si accorge l'exit che il circuito è congestionato? Usando i \texttt{SENDME} come orologio. L'exit annota quando invia la cella \texttt{DATA} che farà scattare un \texttt{SENDME}, e quando il \texttt{SENDME} arriva calcola il \textbf{tempo di andata e ritorno} (RTT) del circuito. Se l'RTT cresce rispetto al minimo osservato, le code lungo il circuito si stanno riempiendo: è il momento di rallentare. Il mittente regola una \emph{finestra di congestione} (\emph{cwnd}), cercando di mantenerla vicina al prodotto banda per ritardo del circuito, cioè alla quantità di dati che il circuito può contenere senza creare code.
+
+\subsection{Gli algoritmi}
+
+La proposta ne descrive tre, ispirati agli algoritmi di TCP: Tor Westwood, Tor Vegas e Tor NOLA. Dopo valutazioni in simulazione con Shadow (\cref{cap:19-rete-privata}) e sulla rete reale, quello predefinito in tor è \textbf{Vegas} (costante \file{CC\_ALG\_DFLT} in \file{src/core/or/congestion\_control\_common.c}). Come TCP Vegas, stima quante celle sono \enquote{in coda} confrontando la finestra attuale con quella che servirebbe al minimo RTT osservato, e aumenta o riduce la finestra per mantenere questa stima entro una soglia.
+
+\subsection{I parametri: perché 31}
+
+Il controllo della congestione si negozia salto per salto con ntor-v3 (\cref{sec:ntor3}): il client lo chiede con l'estensione \file{CC\_FIELD\_REQUEST}, e il relay risponde con \file{CC\_FIELD\_RESPONSE}, che contiene \file{sendme\_inc}, il numero di celle \texttt{DATA} dopo cui chiede un \texttt{SENDME}. Nel \cref{cap:09-circuiti} l'exit della rete di laboratorio ha risposto 31. Il valore non è arbitrario: nel codice di tor è definito come il numero di celle che stanno in un record TLS di dimensione massima,
+\[ \file{TLS\_RECORD\_MAX\_CELLS} = \left\lfloor \frac{16384}{514} \right\rfloor = 31, \]
+e la finestra iniziale vale $4 \times 31 = 124$ celle. SENDME più frequenti che in passato, uno ogni 31 celle invece di 100, significano misure di RTT più frequenti e reazioni più rapide.
+
+\subsection{Niente più finestre di stream: XON e XOFF}
+
+Con il controllo della congestione, i \texttt{SENDME} di stream scompaiono. Le finestre per stream imponevano un dilemma: se piccole, limitano la velocità di ogni download; se grandi, permettono a un client malintenzionato di far accumulare all'exit una finestra intera di dati per ciascuno dei tanti stream che apre. La \proposta{324} le sostituisce con due messaggi:
+\begin{description}
+  \item[XOFF] (comando relay 43): \enquote{smetti di inviare su questo stream}, inviato quando la coda verso l'applicazione supera una soglia;
+  \item[XON] (comando relay 44): \enquote{riprendi}, accompagnato dall'indicazione della velocità stimata a cui la coda si sta svuotando, così che l'altra parte possa adeguarsi.
+\end{description}
+
+La \proposta{324}, \emph{Stream Flow Control Without Windows}, definisce i corpi di questi messaggi byte per byte: \texttt{XOFF} contiene soltanto \texttt{VERSION} (1 byte, attualmente \texttt{0x00}); \texttt{XON} contiene \texttt{VERSION} (1 byte, \texttt{0x00}) seguito da \texttt{kbps\_ewma} (4 byte, big-endian). \textbf{La proposta specifica esplicitamente l'unità}: \num{1000} \emph{byte al secondo}, non \num{1000} bit. Il codice tor 0.4.9.13 la conferma in \file{src/core/or/congestion\_control\_flow.c}. Il nome \texttt{kbps} può indurre in errore: il valore 125 significa \num{125000} byte/s e un corpo \texttt{XON} corrispondente è \texttt{00 00 00 00 7d} (versione, poi il numero 125). Il valore zero del campo di velocità significa \emph{nessun limite}, non \enquote{non inviare dati}. Un \texttt{XON} può inoltre comunicare aggiornamenti di velocità senza che lo stream sia prima stato fermato da \texttt{XOFF}.
+
+I \texttt{SENDME} di circuito, invece, vengono inviati appena le celle sono decifrate e riconosciute, prima di consegnarle all'applicazione: misurano la rete, non l'applicazione.
+
+\begin{attenzione}[Controllo della congestione e anonimato]
+Qualsiasi meccanismo che reagisce al traffico può diventare un canale laterale: un avversario che osserva l'andamento di una finestra potrebbe dedurne qualcosa sul circuito. La \proposta{324} dedica una sezione a questi rischi e alle mitigazioni, per esempio limitando la frequenza dei messaggi XON e XOFF. È lo stesso genere di cautela che nel \cref{cap:08-celle} porta a inviare sempre il motivo NONE in una cella \cella{DESTROY}: ogni variazione osservabile che dipende dallo stato interno è informazione regalata. Gli attacchi che sfruttano gli indizi ricavabili dal traffico, e che questa cautela cerca di non alimentare, sono il tema del \cref{cap:26-attacchi}.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: scaricare un file attraverso Tor}\label{sec:lab-stream}
+
+\begin{laboratorio}[5]{Stream e controllo di flusso}
+\textbf{Obiettivo.} Scrivere \file{labs/it/codice/torlab/circuito.py}, che riunisce i laboratori precedenti in una classe \texttt{Circuito}, e \file{labs/it/codice/torlab/stream.py}, che apre stream e trasferisce dati; scaricare un file da un server web locale attraverso un circuito di tre salti; misurare le finestre dell'exit.\\
+\textbf{Prerequisiti.} Laboratori~1--4; la rete di laboratorio avviata; un server web locale (\cmd{python3 -m http.server 8080}).\\
+\textbf{Tempo stimato.} 3 ore.
+\end{laboratorio}
+
+\paragraph{Passo 1: un circuito in una riga.} La funzione \texttt{costruisci} apre il canale verso il guard, crea il primo salto ed estende il circuito, chiedendo il controllo della congestione solo all'ultimo salto, come fa tor:
+\begin{lstlisting}[language=Python]
+circ = costruisci([relay("003r"), relay("004r"), relay("006e")])
+print(circ.estensioni_exit)             # [(2, b'\x1f')]: sendme_inc = 31
+\end{lstlisting}
+
+\paragraph{Passo 2: aprire lo stream.}
+\begin{lstlisting}[language=Python]
+def corpo_begin(indirizzo, porta, flag=0):
+    corpo = f"{indirizzo.lower()}:{porta}".encode() + b"\x00"
+    return corpo + (struct.pack(">I", flag) if flag else b"")
+
+s = Stream(circ, 1)
+s.apri("127.0.0.1", 8080)       # BEGIN, poi attende CONNECTED o END
+\end{lstlisting}
+L'exit risponde con \texttt{CONNECTED} e un corpo di 8 byte, \texttt{7f000001 00000708}: l'indirizzo 127.0.0.1 e un TTL di \texttt{0x708} = 1800 secondi.
+
+\paragraph{Passo 3: i SENDME.} Per ogni cella \texttt{DATA} ricevuta dall'exit il circuito conta, e ogni \file{sendme\_inc} celle invia un \texttt{SENDME} autenticato:
+\begin{lstlisting}[language=Python]
+def conta_data_ricevuto(self):
+    est = dict(self.estensioni_exit)
+    sendme_inc = est[2][0] if 2 in est else 100
+    self.data_da_confermare += 1
+    if self.data_da_confermare == sendme_inc:
+        self.data_da_confermare = 0
+        digest = self.cripto.salti[-1].indietro.digest.digest()
+        corpo = struct.pack(">BH", 1, 20) + digest
+        self.invia(MessaggioRelay(ComandoRelay.SENDME, 0, corpo))
+\end{lstlisting}
+
+\begin{attenzione}[Un errore istruttivo]
+Nella prima versione di questo laboratorio il contatore era un attributo dello \emph{stream}. Il primo stream, una pagina di 2 celle, funzionava; il secondo, un file di 1\,MB, veniva interrotto dall'exit con un \cella{DESTROY}. Il motivo: il \texttt{SENDME} di circuito conta le celle \texttt{DATA} di \emph{tutti} gli stream del circuito. L'exit aveva già contato le 2 celle del primo stream e si aspettava il \texttt{SENDME} dopo la 29\textsuperscript{a} cella del secondo; noi lo inviavamo dopo la 31\textsuperscript{a}, con un digest diverso da quello atteso, e l'exit ha fatto esattamente ciò che la \proposta{289} prescrive: ha chiuso il circuito. Spostare il contatore nella classe \texttt{Circuito} ha risolto il problema.
+\end{attenzione}
+
+\begin{attenzione}[Limiti intenzionali del client didattico]
+Il codice \file{labs/it/codice/torlab/stream.py} trasferisce uno stream per volta,
+con l'exit della rete di laboratorio e il controllo della congestione negoziato.
+Non implementa la gestione concorrente degli stream, la finestra di invio
+del circuito né la verifica dei \texttt{SENDME} ricevuti in direzione opposta.
+Dimostra il formato dei messaggi e il conteggio dei \texttt{SENDME} in uscita,
+ma non va considerato un client Tor completo né usato come tale sulla rete pubblica.
+\end{attenzione}
+
+\paragraph{Passo 4: il download.} Inviamo una richiesta HTTP e leggiamo fino a \texttt{END}:
+\begin{lstlisting}[language=Python]
+s.invia(b"GET /grande.bin HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")
+risposta = s.ricevi_tutto()
+\end{lstlisting}
+Con un file casuale di \num{1048576} byte, in una nostra esecuzione:
+\begin{lstlisting}[numbers=none]
+stream 1: 209 byte in 0.05 s, celle DATA 2, SENDME del circuito finora 0,
+          altri ['END DONE']
+stream 2: 1048781 byte in 0.18 s, celle DATA 2120, SENDME del circuito
+          finora 68, altri ['END DONE']
+\end{lstlisting}
+L'impronta SHA-256 del file ricevuto coincide con quella dell'originale. I 68 \texttt{SENDME} sono esattamente $\lfloor (2 + 2120) / 31 \rfloor$: un conteggio per circuito, come abbiamo imparato. Le celle sono 2120 anziché le $\lceil 1048781 / 498 \rceil = 2106$ minime: l'exit non aspetta di avere 498 byte per spedire una cella, ma impacchetta i dati man mano che li legge dal server.
+
+\paragraph{Passo 5: vedere le finestre.} Ora un esperimento che nessun client normale può fare: scarichiamo lo stesso file \emph{senza mai inviare} \texttt{SENDME}, e contiamo quante celle l'exit invia prima di fermarsi. Lo ripetiamo con e senza controllo della congestione:
+\begin{lstlisting}[language=Python]
+circ = costruisci(percorso, cc=cc)
+circ.conta_data_ricevuto = lambda: None      # nessun SENDME
+\end{lstlisting}
+\begin{lstlisting}[numbers=none]
+controllo della congestione=True:  l'exit si ferma dopo 124 celle DATA
+controllo della congestione=False: l'exit si ferma dopo 500 celle DATA
+\end{lstlisting}
+Con il controllo della congestione l'exit si ferma a 124 celle: è la finestra di congestione iniziale, $4 \times 31$. Senza, si ferma a 500 celle, non a 1000: la finestra di \emph{stream} (500) si esaurisce prima di quella di circuito (1000), perché nel controllo di flusso originale un client deve inviare anche i \texttt{SENDME} di stream. In entrambi i casi l'exit si limita ad aspettare: i dati rimangono nel suo buffer, non nella rete.
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item Uno stream si apre con \texttt{BEGIN} (\texttt{indirizzo:porta}, in minuscolo), si conferma con \texttt{CONNECTED}, trasporta \texttt{DATA} e si chiude con \texttt{END}; il client può inviare dati prima di \texttt{CONNECTED}.
+  \item La risoluzione dei nomi avviene all'exit, per non rivelare le destinazioni al resolver locale; \texttt{RESOLVE} e \texttt{RESOLVED} permettono risoluzioni senza connessione.
+  \item Il controllo di flusso originale usa finestre di 1000 celle per circuito e 500 per stream, con \texttt{SENDME} ogni 100 e 50 celle.
+  \item I \texttt{SENDME} di circuito sono autenticati con il digest progressivo della cella che li fa scattare (\proposta{289}).
+  \item Con il controllo della congestione (\proposta{324}, algoritmo predefinito Vegas) la finestra si adatta all'RTT misurato con i \texttt{SENDME}; \file{sendme\_inc} vale 31, le celle di un record TLS, e la finestra iniziale 124.
+  \item Le finestre di stream sono sostituite da XON e XOFF.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:11-begin}
+Scrivi in esadecimale il corpo di un messaggio \texttt{BEGIN} verso \texttt{Example.COM} sulla porta 443, per un client che accetta anche IPv6.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:11-connected}
+Interpreta il corpo di \texttt{CONNECTED} \texttt{c0000201 0000012c}. Che cosa dovrebbe fare il client con questa informazione?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:11-optimistic}
+Stima il risparmio di tempo degli \emph{optimistic data} per un circuito con un RTT di 600\,ms e una pagina che richiede una sola richiesta HTTP. Perché l'exit deve scartare i dati in coda se la connessione fallisce?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:11-velocita}
+Con il controllo di flusso originale, qual è la velocità massima di un singolo stream su un circuito con RTT di 400\,ms? E di un circuito con più stream? Confronta con la finestra iniziale del controllo della congestione.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:11-sendme-falso}
+Descrivi un attacco alla memoria di un exit basato su \texttt{SENDME} non autenticati. Perché il padding casuale nelle celle \texttt{DATA} è necessario perché l'autenticazione funzioni?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:11-resolve}
+Estendi \file{stream.py} con una funzione \texttt{risolvi(nome)} che usi \texttt{RESOLVE} e interpreti \texttt{RESOLVED}. Provala nella rete di laboratorio con \texttt{localhost}. Che cosa risponde l'exit per un nome inesistente?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:11-policy}
+Prova ad aprire uno stream verso una porta che l'exit della rete di laboratorio non accetta, dopo aver modificato la sua exit policy (\file{torrc} di \texttt{test006e}, poi \cmd{chutney hup}). Quale motivo riporta \texttt{END}? Interpreta i campi aggiuntivi.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:11-rtt}
+Modifica il laboratorio per misurare, lato client, il tempo tra l'invio di ogni \texttt{SENDME} e l'arrivo della cella \texttt{DATA} successiva. Che cosa stai misurando? Confronta i valori con e senza un secondo download in parallelo sullo stesso circuito.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification}, capitoli \enquote{Opening streams and transmitting data}, \enquote{Closing streams}, \enquote{Remote hostname lookup} e \enquote{Flow control}~\cite{torspec}.
+  \item Proposta 289, \titolo{Authenticating sendme cells to mitigate bandwidth attacks}.
+  \item Proposta 324, \titolo{RTT-based Congestion Control for Tor}: motivazioni, algoritmi, parametri e analisi di sicurezza.
+\end{itemize}

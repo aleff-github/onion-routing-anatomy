@@ -1,0 +1,15 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible para el EPUB.
+\altfig{Formato de una celda Tor de longitud fija en el protocolo de enlace v4 o superior: CircID ocupa 4 bytes desde el desplazamiento 0, Command ocupa 1 byte desde el 4 y Body ocupa 509 bytes desde el 5; la celda termina en el desplazamiento exclusivo 514. El diagrama distingue esquemáticamente datos y espacio sobrante rellenado con ceros, obligatorio para muchos cuerpos de comandos de longitud fija. RELAY y RELAY\_EARLY son excepciones a nivel de canal: sus cuerpos cifrados ocupan siempre los 509 bytes. Las anchuras dibujadas no están a escala.}
+% Celda de longitud fija, protocolo de enlace >= 4 (anchuras no a escala).
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\small,inner sep=2pt}]
+  \node[campo,fill=torviola!15,minimum width=2.6cm] (c) {CircID (4)};
+  \node[campo,fill=torviola!35,minimum width=1.6cm,right=0pt of c] (k) {Cmd (1)};
+  \node[campo,fill=torverde!15,minimum width=5.2cm,right=0pt of k] (b) {Cuerpo: datos};
+  \node[campo,fill=torgrigio!10,minimum width=2.2cm,right=0pt of b] (p) {ceros};
+  \foreach \n/\o in {c/0,k/4,b/5} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (p.north east) {514};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]b.south west) -- ([yshift=-2pt]p.south east)
+    node[midway,below=6pt,font=\sffamily\small] {\texttt{CELL\_BODY\_LEN} = 509 bytes};
+\end{tikzpicture}

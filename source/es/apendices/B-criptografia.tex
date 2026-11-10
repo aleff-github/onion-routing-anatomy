@@ -1,0 +1,94 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Criptografía complementaria}\label[appendice]{cap:B-crittografia}
+\aggiornatoal{23 de septiembre de 2026}{dir-spec y tor-spec (commit de torspec \texttt{8e1f245}); biblioteca \texttt{cryptography}; red de laboratorio}
+
+\Cref{cap:05-crittografia} presentó los componentes criptográficos de Tor con los conocimientos matemáticos mínimos. Este apéndice profundiza en tres temas que allí solo se mencionaron brevemente, con ejemplos ejecutables: las claves X25519 y los bits que se ajustan obligatoriamente, la conversión entre las formas Montgomery y Edwards de la misma curva, comprobada contra un certificado real, y la maleabilidad de los cifrados de flujo, que posibilita el ataque de marcado descrito en \cref{sec:tor1-debolezze}.
+
+% ---------------------------------------------------------------------------
+\section{Una curva, dos formas}\label{sec:B-curve}
+
+X25519 y Ed25519 utilizan la \emph{misma} curva elíptica sobre el cuerpo de enteros módulo $p=2^{255}-19$, expresada de dos maneras:
+\begin{description}
+  \item[Forma de Montgomery] $v^2 = u^3 + 486662\,u^2 + u$. X25519 utiliza esta forma: una clave pública contiene únicamente la coordenada $u$ de un punto, codificada en 32 bytes little-endian. Esta representación permite un algoritmo de multiplicación escalar sencillo y rápido, la \enquote{escalera de Montgomery}, cuyo tiempo de ejecución es independiente de la clave secreta.
+  \item[Forma de Edwards retorcida] $-x^2+y^2=1+d\,x^2y^2$, donde $d=-121665/121666$. Ed25519 utiliza esta forma para firmas: la clave pública es la coordenada $y$, y el signo de $x$ se almacena en el bit más significativo del último byte.
+\end{description}
+Una transformación explícita relaciona ambas representaciones; la utilizaremos en \ref{sec:B-conversione}.
+
+\subsection{Ajuste de bits de claves X25519}
+
+Una clave privada X25519 comienza como 32 bytes, pero antes de utilizarla la implementación fuerza ciertos bits a valores establecidos: pone a cero los tres bits menos significativos, limpia el bit más alto y activa el siguiente más alto. Limpiar los tres bits inferiores hace que el escalar sea múltiplo de 8, el \emph{cofactor} de la curva, para que los componentes de orden pequeño de un punto recibido no filtren información sobre el escalar. Fijar los bits superiores también fija el número de pasos de la escalera de Montgomery. Podemos comprobarlo con la misma biblioteca usada en los laboratorios:
+\begin{lstlisting}[language=Python,numbers=none]
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives import serialization as s
+import os
+def public_key(k):
+    return X25519PrivateKey.from_private_bytes(k).public_key().public_bytes(
+        s.Encoding.Raw, s.PublicFormat.Raw)
+a = bytearray(os.urandom(32)); b = bytearray(a)
+b[0] ^= 0x07                     # solo cambian los tres bits inferiores
+print(public_key(bytes(a)) == public_key(bytes(b)))      # True
+\end{lstlisting}
+Dos secuencias de bytes de claves privadas que solo se diferencian en los bits sobrescritos durante el ajuste producen la misma clave pública.
+
+\subsection{El punto en el infinito}
+
+Durante un intercambio ntor, tanto el cliente como el repetidor comprueban que ninguna de sus operaciones $\mathrm{EXP}()$ produzca el punto del infinito. La especificación señala que, en Curve25519, esta comprobación sustituye adecuadamente la validación de que $Y$ pertenece al grupo~\spec{tor-spec}{The "ntor" handshake}. Sin ella, un adversario que proporcionara un punto público de orden pequeño podría producir un secreto compartido predecible, como una secuencia de ceros. La biblioteca \texttt{cryptography} efectúa por sí misma la comprobación: llamar a \texttt{exchange} con una clave pública de 32 bytes a cero provoca una excepción (\texttt{Error computing shared key}) en vez de devolver un secreto nulo.
+
+% ---------------------------------------------------------------------------
+\section{De Montgomery a Edwards: el certificado cruzado ntor}\label{sec:B-conversione}
+
+Cada repetidor publica su clave pública ntor, una clave X25519, en el descriptor y demuestra que posee la correspondiente clave privada mediante \texttt{ntor-onion-key-crosscert}: certificado Ed25519 de tipo \texttt{0a} que certifica la identidad Ed25519 principal del repetidor, pero está \emph{firmado con la clave ntor}~\spec{dir-spec}{ntor-onion-key-crosscert}. Esto plantea una dificultad: ntor utiliza la forma Montgomery, mientras las firmas Ed25519 necesitan la forma Edwards. La especificación define la conversión~\spec{dir-spec}{Converting a curve25519 public key to an ed25519 public key}:
+\[ y = \frac{u - 1}{u + 1} \bmod p . \]
+La coordenada $u$ determina $y$, pero no el signo de $x$: a cada coordenada de Montgomery corresponden dos claves públicas Edwards simétricas. No es posible recuperar ese signo solo de la clave pública Montgomery, así que el descriptor lo proporciona expresamente como primer argumento del campo del certificado cruzado: 0 para positivo y 1 para negativo. El repetidor lo calcula a partir de su clave privada.
+
+El módulo \file{labs/es/codigo/torlab/conversion.py} realiza la conversión en unas líneas:
+\begin{lstlisting}[language=Python,numbers=none]
+P = 2**255 - 19
+def montgomery_to_edwards(u_bytes, sign):
+    u = int.from_bytes(u_bytes, "little") & ((1 << 255) - 1)
+    y = (u - 1) * pow(u + 1, P - 2, P) % P      # división mediante el inverso módulo p
+    compressed = bytearray(y.to_bytes(32, "little"))
+    compressed[31] |= (sign & 1) << 7          # signo de x en el bit más alto
+    return bytes(compressed)
+\end{lstlisting}
+Después verifica el certificado cruzado mediante el decodificador de certificados del laboratorio~1. Aplicado a los descriptores de la red de laboratorio (clave abreviada para facilitar la lectura; las claves cambian con cada red nueva):
+\begin{lstlisting}[numbers=none]
+$ PYTHONPATH=labs/es/codigo python3 -m torlab.conversion labs/es/laboratorio/net/nodes/000a/cached-descriptors test004r
+test004r: ntor-onion-key DaxPE+Grnjex2Hmv+5qutl5dIX4La2jF6MIL7IK6+3E
+  Clave Edwards (signo 0): c369d08f8083002a15fe22f65dca14bf...
+  crosscert válido; identidad certificada: kjPIgDB2OFsGJzuwsT+KMS/El9qrlE2/4P5WvIvmzC8
+\end{lstlisting}
+En el ejemplo de referencia, la firma es válida y la identidad certificada coincide con la del archivo \file{fingerprint-ed25519} del repetidor. Lo mismo sucede con los demás repetidores del laboratorio. Si proporcionamos el signo incorrecto, la verificación falla: es una de las pruebas negativas automatizadas del módulo. La división módulo $p$ se calcula mediante el pequeño teorema de Fermat, multiplicando por $(u+1)^{p-2}$.
+
+% ---------------------------------------------------------------------------
+\section{Maleabilidad del cifrado de flujo}\label{sec:B-malleabilita}
+
+AES en modo contador (\cref{sec:cripto-cifrari}) genera una secuencia de bytes que se combina con el mensaje mediante XOR. Quien cambie un bit del texto cifrado altera \emph{el bit correspondiente del texto en claro}, sin conocer la clave; solo necesita conocer o adivinar el contenido original. Este ejemplo en Python lo demuestra:
+\begin{lstlisting}[language=Python,numbers=none]
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import os
+k, n = os.urandom(16), bytes(16)
+cipher = lambda d: Cipher(algorithms.AES(k), modes.CTR(n)).encryptor().update(d)
+c = bytearray(cipher(b"BEGIN www.example.org:443"))
+delta = bytes(x ^ y for x, y in zip(b"www.example.org", b"www.example.net"))
+for i, d in enumerate(delta):
+    c[6 + i] ^= d                 # modificación dirigida, sin conocer la clave
+print(cipher(bytes(c)))            # b'BEGIN www.example.net:443'
+\end{lstlisting}
+El cifrado relay original de Tor, tor1, utiliza AES-CTR con una comprobación de integridad solo en el extremo del circuito mediante un resumen de cuatro bytes. Un repetidor malicioso puede, por tanto, alterar de manera predecible una celda y hacer que un cómplice situado más adelante en la ruta reconozca el cambio. Es el ataque de marcado explicado en \cref{sec:tor1-debolezze} y una de las motivaciones de CGO (\cref{sec:cgo}), cuyo diseño hace irrecuperables la celda alterada y las siguientes.
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:B-bit}
+¿Cuántos valores diferentes puede adoptar un escalar privado X25519 después del ajuste de bits? Compara el resultado con $2^{256}$.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:B-inversa}
+Deduce e implementa la transformación inversa desde la coordenada $y$ de una clave pública Ed25519 hasta la coordenada $u$ de Montgomery. Conserva el bit de signo de $x$ de la clave original y utiliza \texttt{montgomery\_to\_edwards} de \file{conversion.py} para comprobar que ambas conversiones recuperan la clave pública Ed25519 inicial (para $y \neq 1$).
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:B-digest}
+En tor1, una celda tiene un resumen de cuatro bytes y un campo \texttt{recognized} de dos bytes a cero. ¿Qué probabilidad existe de que el último salto acepte como válida una celda modificada aleatoriamente? ¿Por qué puede funcionar, aun así, el marcado?
+\end{esercizio}

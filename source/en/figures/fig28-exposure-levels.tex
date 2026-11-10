@@ -1,0 +1,18 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Four levels of possible identity exposure: network (IP addresses and circuits), application (DNS, plugins and fingerprints), content (metadata, accounts and style), and behavior (timing, habits and contacts). Tor mitigates some network risks; dedicated systems and tools help elsewhere, alongside user decisions. No layer guarantees anonymity on its own.}
+% Layers of identity leaks and the corresponding protections
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  liv/.style={draw,rounded corners=2pt,minimum width=5.2cm,minimum height=0.75cm,align=center},
+  chi/.style={align=left,text width=5cm}]
+  \node[liv,fill=torviola!15] (r) at (0,0) {network: IP addresses and circuits};
+  \node[liv,fill=torviola!9] (a) at (0,0.95) {application: DNS, plugins, fingerprints};
+  \node[liv,fill=torgrigio!10] (c) at (0,1.9) {content: metadata, accounts, style};
+  \node[liv,fill=avviso!12] (b) at (0,2.85) {behavior: timing, habits, contacts};
+  \node[chi,right=0.4cm of r] {tor: network protection is not absolute};
+  \node[chi,right=0.4cm of a] {Tor Browser, Tails, Whonix (\cref{cap:23-browser})};
+  \node[chi,right=0.4cm of c] {tools and choices about content};
+  \node[chi,right=0.4cm of b] {choices, habits, supporting tools};
+  \draw[->,thick,torgrigio] (-3.1,-0.3) -- node[left,rotate=90,anchor=south] {protection is not fully automatic} (-3.1,3.2);
+\end{tikzpicture}

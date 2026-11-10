@@ -1,0 +1,25 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Schema di una connessione HTTPS: il contenuto è raffigurato in riquadri contrassegnati come cifrati, mentre attorno restano visibili in chiaro i metadati, cioè indirizzi IP di origine e destinazione, orario e dimensione e frequenza dei pacchetti.}
+% Che cosa HTTPS protegge e che cosa resta visibile a un osservatore
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  riga/.style={draw,minimum height=0.65cm,align=center},
+  visibile/.style={riga,fill=avviso!12,draw=avviso!60},
+  protetto/.style={riga,fill=torverde!15,draw=torverde!60!black}]
+  \node[client,minimum width=1.6cm] (u) at (0,0) {utente};
+  \node[server,minimum width=1.6cm] (s) at (10.6,0) {sito web};
+  \draw[very thick,torgrigio!50] (u) -- (s);
+  \node[font=\sffamily\scriptsize,text=torgrigio] at (5.3,0.45) {HTTPS};
+  \node[visibile,text width=1.9cm] (a) at (2.5,-1.5) {indirizzo IP\\di chi invia};
+  \node[visibile,text width=1.9cm] (b) at (4.6,-1.5) {indirizzo IP\\del sito};
+  \node[visibile,text width=1.9cm] (c) at (6.7,-1.5) {ora e durata};
+  \node[visibile,text width=1.9cm] (d) at (8.8,-1.5) {byte inviati\\e ricevuti};
+  \node[protetto,text width=4.2cm] (e) at (3.4,-2.9) {pagina richiesta e contenuto};
+  \node[protetto,text width=4.2cm] (f) at (7.9,-2.9) {credenziali, testo dei messaggi};
+  \node[text=avviso] at (0.5,-1.5) {\textbf{metadati}};
+  \node[text=avviso,font=\sffamily\tiny] at (0.5,-1.85) {in chiaro};
+  \node[text=torverde!45!black] at (0.5,-2.9) {\textbf{contenuto}};
+  \node[text=torverde!45!black,font=\sffamily\tiny] at (0.5,-3.25) {cifrato};
+  \foreach \n in {a,b,c,d} \draw[dotted,avviso!70] (\n.north) -- (\n.north |- u.south);
+\end{tikzpicture}

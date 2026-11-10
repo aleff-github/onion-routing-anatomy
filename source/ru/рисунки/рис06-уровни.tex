@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Упрощённая схема шести уровней сверху вниз: приложение HTTP поверх потоков; команды потоков BEGIN, DATA, END, SENDME (глава 11); послойно зашифрованные сообщения RELAY (глава 10); управление цепью: CREATE2 и DESTROY — команды ячеек, а EXTEND2 — сообщение RELAY (глава 9); ячейки фиксированной длины 514 байт при версии протокола канала v4 и выше, наряду с ячейками переменной длины (глава 8); канал TLS поверх TCP с CERTS и NETINFO (глава 7). Это функциональные уровни, а не строгая классификация типов ячеек.}
+% Уровни протокола Tor.
+\begin{tikzpicture}[font=\sffamily\small,
+  liv/.style={draw,rounded corners=2pt,minimum width=7cm,minimum height=0.8cm,align=center},
+  rifcap/.style={font=\sffamily\scriptsize,text=torgrigio,anchor=west}]
+  \node[liv,fill=torverde!20] (a) at (0,4) {Приложение (HTTP, \ldots) поверх потоков};
+  \node[liv,fill=torverde!10] (s) at (0,3) {Поток: BEGIN, DATA, END, SENDME};
+  \node[liv,fill=torviola!20] (r) at (0,2) {Послойно зашифрованные сообщения RELAY};
+  \node[liv,fill=torviola!10] (c) at (0,1) {Цепи: CREATE2, EXTEND2, DESTROY};
+  \node[liv,fill=torgrigio!15] (l) at (0,0) {Фикс. ячейки: 514 байт (v4+)};
+  \node[liv,fill=torgrigio!5] (t) at (0,-1) {Канал: TLS поверх TCP, CERTS, NETINFO};
+  \node[rifcap] at (3.7,3) {Глава 11};
+  \node[rifcap] at (3.7,2) {Глава 10};
+  \node[rifcap] at (3.7,1) {Глава 9};
+  \node[rifcap] at (3.7,0) {Глава 8};
+  \node[rifcap] at (3.7,-1) {Глава 7};
+\end{tikzpicture}

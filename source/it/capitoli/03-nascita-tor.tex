@@ -1,0 +1,113 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Dall'onion routing del NRL al Tor Project}\label{cap:03-nascita-tor}
+\aggiornatoal{23 settembre 2026}{Syverson, \emph{A Peel of Onion} (2011); pagina storica del Tor Project}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item ricostruire la nascita dell'onion routing al Naval Research Laboratory e le sue tre generazioni;
+  \item spiegare che cosa distingue Tor dalle generazioni precedenti;
+  \item raccontare le tappe principali della storia del Tor Project, dal 2002 a oggi;
+  \item conoscere l'origine del nome \enquote{Tor}.
+\end{itemize}
+\end{obiettivi}
+
+% ---------------------------------------------------------------------------
+\section{Al Naval Research Laboratory}\label{sec:nascita-nrl}
+
+Nel 1995 tre ricercatori del Naval Research Laboratory (NRL) statunitense, David Goldschlag, Michael Reed e Paul Syverson, si chiesero se fosse possibile creare connessioni su Internet che non rivelassero chi parla con chi~\cite{torhistory}. Il loro scopo non era l'anonimato in sé, ma, come abbiamo visto, \enquote{separare l'identificazione dall'instradamento} (\cref{sec:anon-termini}). Il primo progetto fu presentato all'\emph{Information Hiding Workshop} nel maggio del 1996~\cite{goldschlag1996hiding}; entro l'anno ne seguì un secondo, che separava il programma dell'utente, che costruisce i circuiti, dai nodi che li trasportano~\cite{syverson2011peel}. Già nel 1996 il laboratorio ottenne il permesso di pubblicare il codice, prima che l'idea di software \emph{open source} fosse diffusa: i progettisti sapevano che nessuno si sarebbe fidato di una rete di cui non poteva esaminare il codice.
+
+Il nome viene dalla struttura dei dati: un messaggio avvolto in strati di cifratura, ciascuno dei quali un nodo toglie come si sbuccia una cipolla.
+
+% ---------------------------------------------------------------------------
+\section{Tre generazioni}\label{sec:nascita-generazioni}
+
+Syverson distingue tre generazioni di progetti dell'NRL~\cite{syverson2011peel}.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig03-generazioni}
+\caption{Le tre generazioni dell'onion routing. Il cambiamento decisivo di Tor non è il numero di salti, ma il modo di costruire il circuito: non più un'unica cipolla preparata dal client, ma un'estensione alla volta, con uno scambio di chiavi per ciascun nodo.}
+\label{fig:generazioni}
+\end{figure}
+
+\paragraph{Prima generazione.} Circuiti di lunghezza fissa di cinque nodi, pensati anche per collegare tra loro le reti protette di due organizzazioni: con tre salti, un nodo intermedio ostile avrebbe visto subito le due reti che comunicavano; con quattro, chi comprometteva il nodo vicino a un estremo avrebbe saputo quale altro nodo attaccare per ricostruire l'intero circuito; con cinque, nessuna delle due scorciatoie è disponibile senza aver prima compromesso un altro nodo. Il client era integrato nel nodo; la rete era statica, di venti o cento nodi gestiti da organizzazioni stabili, con configurazione e chiavi distribuite a mano. C'erano proxy specifici per ogni applicazione (web, login remoto, posta), perché il protocollo SOCKS non era ancora diffuso. Il circuito veniva costruito con un'unica cipolla, cifrata con le chiavi pubbliche di tutti i nodi.
+
+\paragraph{Seconda generazione.} Client separato dal nodo, circuiti di lunghezza variabile, meccanismi di mixing e di padding tra i circuiti, poi abbandonati. La diffusione delle informazioni sulla rete era prevista ma non fu mai completamente realizzata.
+
+\paragraph{Terza generazione: Tor.} Il cambiamento più importante è la costruzione dei circuiti \textbf{un salto alla volta}, con uno scambio Diffie-Hellman con ciascun nodo (\cref{sec:circ-telescopio}), un'idea presa dal progetto Cebolla. Ne derivano la forward secrecy e la possibilità di verificare ogni salto man mano. A essa si aggiungono i server di directory, il supporto a SOCKS, i servizi nascosti con punti di rendezvous, e soprattutto un progetto pensato per essere distribuito e gestito da volontari di tutto il mondo.
+
+\begin{storia}[Il nome]
+Il titolo dell'articolo del 2004, \titolo{Tor: The Second-Generation Onion Router}, ha generato due equivoci che lo stesso Syverson ha poi ammesso~\cite{syverson2011peel}. Tor è la \emph{terza} generazione, non la seconda; e la \enquote{r} di Tor non sta per \emph{router}. Quando Roger Dingledine iniziò a lavorare al progetto dell'NRL, esistevano molti sistemi di onion routing, e alla domanda \enquote{quale?} rispondeva: \enquote{\emph{the onion routing}}, quello originale. Fu Rachel Greenstadt a notare che le iniziali formavano un bell'acronimo. Dingledine osservò che funzionava anche come acronimo ricorsivo, \emph{Tor's onion routing}, e decise che si sarebbe scritto \enquote{Tor}, non \enquote{TOR}: una parola comune, che in tedesco significa anche \emph{porta}, come quella di una città. Nel resto del libro scriviamo \emph{Tor} per la rete e il progetto, e \emph{tor}, in minuscolo, per il programma.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{La rete Tor}\label{sec:nascita-rete}
+
+Roger Dingledine si unì al progetto dell'NRL all'inizio degli anni Duemila, seguito poco dopo da Nick Mathewson. La rete Tor fu attivata nell'\textbf{ottobre 2002}, con il codice rilasciato fin da subito con una licenza libera; alla fine del 2003 contava circa una dozzina di nodi gestiti da volontari, quasi tutti negli Stati Uniti e uno in Germania~\cite{torhistory}. Nell'agosto del 2004 Dingledine, Mathewson e Syverson presentarono il progetto al simposio USENIX Security~\cite{dingledine2004tor}.
+
+Da lì, le tappe principali~\cite{torhistory}:
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+Anno & Evento \\
+\midrule
+2002 & la rete Tor entra in funzione, con codice libero \\
+2004 & la Electronic Frontier Foundation inizia a finanziare il lavoro di Dingledine e Mathewson \\
+2006 & nasce The Tor Project, Inc., organizzazione senza scopo di lucro statunitense (501(c)(3)) \\
+2007 & inizia lo sviluppo dei bridge contro la censura (\cref{cap:16-censura}) \\
+2008 & inizia lo sviluppo di Tor Browser (\cref{cap:23-browser}) \\
+2010--2011 & Tor diventa uno strumento importante durante le Primavere arabe \\
+2013 & le rivelazioni di Edward Snowden sulla sorveglianza di massa, in cui Tor ha un ruolo centrale \\
+2017 & onion service v3 (\cref{cap:14-onion-services}) \\
+2021 & disattivazione degli onion service v2 \\
+2022--2023 & controllo della congestione (\cref{sec:cc}) e prova di lavoro per gli onion service (\cref{cap:15-dos}) \\
+2024 & WebTunnel; migrazione della distribuzione dei bridge a rdsys \\
+2025--2026 & CGO in tor (\cref{sec:cgo}); Arti come client e per gli onion service (\cref{cap:30-arti}) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ---------------------------------------------------------------------------
+\section{Un'organizzazione e una comunità}\label{sec:nascita-comunita}
+
+The Tor Project, Inc.\ sviluppa il software, mantiene le specifiche, gestisce le directory authority insieme a operatori indipendenti, misura la rete e sostiene la comunità. Ma la rete non gli appartiene: i relay sono gestiti da migliaia di volontari, individui, università, associazioni, in decine di paesi. È una scelta di progetto, maturata guardando all'esperienza di Freedom (\cref{sec:radici-bassa}): nessun soggetto singolo deve poter controllare la rete, né essere costretto a compromettere gli utenti.
+
+Il finanziamento dell'organizzazione è un tema ricorrente di discussione pubblica: nel corso degli anni sono arrivati fondi da agenzie governative, soprattutto statunitensi, da fondazioni private e da donazioni individuali. L'organizzazione pubblica ogni anno i propri bilanci. La domanda \enquote{ci si può fidare di un software finanziato anche da un governo?} ha una risposta tecnica più che politica: il codice e le specifiche sono pubblici e verificabili, le decisioni di progetto sono discusse apertamente nelle proposte (\cref{cap:31-futuro}), e la sicurezza del sistema non dipende dalla fiducia nel Tor Project ma dalla distribuzione della rete tra molti operatori indipendenti (\cref{cap:04-modello-minaccia}).
+
+\begin{approfondimento}[Le rivelazioni del 2013]
+Tra i documenti diffusi da Snowden nel 2013 c'erano presentazioni interne della NSA dedicate a Tor, che riconoscevano la difficoltà di deanonimizzarne gli utenti in modo sistematico e descrivevano invece attacchi mirati contro i singoli utenti, sfruttando vulnerabilità dei browser anziché della rete. È una conferma indiretta di un principio che ritroveremo spesso: le debolezze più pericolose spesso non stanno nel protocollo, ma attorno a esso (\cref{cap:28-opsec}).
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item L'onion routing nasce nel 1995 al Naval Research Laboratory (Goldschlag, Reed, Syverson), con l'obiettivo di separare l'identificazione dall'instradamento.
+  \item La prima generazione usava circuiti fissi di cinque nodi e una rete statica; Tor, la terza, costruisce i circuiti un salto alla volta, con forward secrecy, directory e rendezvous.
+  \item \enquote{Tor} viene da \emph{the onion routing}; si scrive con la sola iniziale maiuscola.
+  \item La rete è attiva dal 2002; The Tor Project, Inc.\ esiste dal 2006; i relay sono gestiti da volontari indipendenti.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:03-cinque}
+Perché la prima generazione usava circuiti di cinque nodi? Ricostruisci il ragionamento su tre e quattro salti riportato nel capitolo, e spiega perché Tor si accontenta di tre.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:03-cipolla}
+Confronta la costruzione di un circuito con un'unica cipolla (prima generazione) e quella telescopica di Tor rispetto alla forward secrecy e alla possibilità di scoprire subito un nodo che non risponde.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:03-fiducia}
+Scrivi una breve argomentazione (una pagina) sulla domanda \enquote{ci si può fidare di Tor, visto chi lo ha finanziato?}, distinguendo tra ciò che si può verificare tecnicamente e ciò che richiede fiducia.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item P.~Syverson, \titolo{A Peel of Onion}~\cite{syverson2011peel}.
+  \item D.~Goldschlag, M.~Reed, P.~Syverson, \titolo{Hiding Routing Information}~\cite{goldschlag1996hiding}.
+  \item La pagina storica del Tor Project~\cite{torhistory}.
+\end{itemize}

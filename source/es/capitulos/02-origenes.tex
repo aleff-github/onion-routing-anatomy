@@ -1,0 +1,109 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Los orígenes: redes mix, remailers, Crowds y Freedom}\label{cap:02-radici}
+\aggiornatoal{23 de septiembre de 2026}{fuentes históricas citadas en este capítulo}
+
+\begin{obiettivi}
+Al terminar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item explicar la idea de \emph{mix} propuesta por David Chaum y por qué es fundamental para los sistemas de anonimato;
+  \item distinguir los sistemas de alta latencia destinados al correo electrónico de los sistemas de baja latencia adecuados para navegar por la web;
+  \item seguir la evolución de los remailers desde anon.penet.fi hasta Mixminion;
+  \item situar Crowds, PipeNet y Freedom en la historia que condujo a Tor.
+\end{itemize}
+\end{obiettivi}
+
+Tor no apareció de la nada. Representa, al menos por ahora, la etapa más reciente de más de cuarenta años de investigación y sistemas puestos en funcionamiento. Algunos tuvieron éxito y muchos fracasaron, pero todos dejaron enseñanzas. Este capítulo recorre los principales avances anteriores al surgimiento del encaminamiento cebolla.
+
+% ---------------------------------------------------------------------------
+\section{El mix de Chaum (1981)}\label{sec:radici-chaum}
+
+En 1981, David Chaum publicó un artículo de cinco páginas que sentaría las bases de todo un campo de investigación: \titolo{Untraceable Electronic Mail, Return Addresses, and Digital Pseudonyms}~\cite{chaum1981untraceable}. La cuestión se refería al correo electrónico: ¿cómo enviar un mensaje sin que un observador pudiera relacionar al remitente con el destinatario, incluso si se vigilara toda la red?
+
+La solución era el \textbf{mix}: un servidor que recibe mensajes cifrados con su clave pública, los descifra, los reúne en un grupo (o \emph{lote}) y los reenvía juntos en un orden distinto del de llegada. Tres técnicas impiden relacionar un mensaje entrante con uno saliente:
+\begin{itemize}
+  \item el mensaje de salida tiene un aspecto completamente distinto porque el mix ha retirado una capa de cifrado;
+  \item todos los mensajes tienen la misma longitud;
+  \item los mensajes se mezclan y salen juntos, de modo que tampoco puedan vincularse por sus tiempos de salida.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig02-mix}
+\caption{Un mix de Chaum. Un observador que vigile tanto la entrada como la salida no puede vincular los mensajes: todos tienen la misma longitud, su aspecto cambia al retirarse una capa de cifrado y salen juntos en un orden diferente.}
+\label{fig:mix}
+\end{figure}
+
+En lugar de confiar en un único mix, el remitente puede enviar el mensaje a través de una \textbf{cadena} de mixes, cifrándolo por capas con la clave de cada uno. Cada mix elimina su propia capa y solo conoce la identidad del siguiente. Si al menos uno de los mixes de la cadena es honesto, el vínculo sigue oculto. Aquí se encuentra el germen del encaminamiento cebolla.
+
+En el mismo artículo, Chaum propuso \emph{direcciones anónimas de respuesta}, que permiten contestar sin conocer al remitente, además de seudónimos digitales. En 1988 añadió un segundo mecanismo, las \emph{DC-nets}~\cite{chaum1988dining}, que proporcionan anonimato incondicional a un coste muy elevado y cuya influencia ha sido principalmente teórica.
+
+% ---------------------------------------------------------------------------
+\section{Alta y baja latencia}\label{sec:radici-latenza}
+
+El mix de Chaum ofrece una protección sólida, pero es \textbf{lento}: un mensaje debe esperar en cada mix hasta que se forme un lote y puede tardar minutos u horas en llegar. Esto resulta aceptable para el correo electrónico, pero no para la navegación web, donde se espera que una página se cargue en segundos.
+
+Esta es la división fundamental del campo:
+\begin{description}
+  \item[Sistemas de alta latencia] Los mixes y remailers retrasan y reordenan los mensajes. Pueden resistir a un observador que vigile toda la red, pero solo sirven para comunicaciones que admitan demoras.
+  \item[Sistemas de baja latencia] El encaminamiento cebolla y Tor reenvían los datos en cuanto llegan, lo que permite navegar, conversar y mantener conexiones interactivas. Sin embargo, un observador capaz de vigilar ambos extremos puede correlacionar los tiempos y volúmenes de tráfico.
+\end{description}
+
+Tor elige deliberadamente el segundo enfoque: un sistema que casi nadie utiliza por ser demasiado lento no protege a nadie (\cref{sec:anon-utenti}).
+
+% ---------------------------------------------------------------------------
+\section{Remailers}\label{sec:radici-remailer}
+
+En la década de 1990, las ideas de Chaum se transformaron en servicios reales llamados \textbf{remailers}: servidores que reciben un mensaje de correo y lo reenvían después de retirar la información del remitente.
+
+\paragraph{anon.penet.fi (1993--1996).} El remailer más conocido fue operado en Finlandia por Johan \enquote{Julf} Helsingius entre 1993 y 1996. No era un mix: asignaba un \emph{seudónimo} a cada usuario y conservaba una tabla que relacionaba los seudónimos con las direcciones reales, para poder entregar las respuestas. Llegó a procesar miles de mensajes al día. Aquella misma tabla terminó contribuyendo a su cierre. En 1995 y 1996, la Iglesia de la Cienciología, con la intervención de la policía finlandesa, obtuvo las identidades de algunos usuarios que habían distribuido documentos de esa organización. Helsingius cerró el servicio en 1996, alegando la incertidumbre jurídica que rodeaba a Internet en Finlandia. La lección que retomaron expresamente los diseñadores del encaminamiento cebolla~\cite{syverson2011peel} es clara: un sistema que conserva una correspondencia entre usuarios e identidades crea un punto único de fallo, pues puede obligarse a su operador a revelarla.
+
+\paragraph{Cypherpunk, Mixmaster y Mixminion.} Mientras tanto, la comunidad \emph{cypherpunk} desarrolló remailers sin tablas de correspondencia. Los remitentes cifraban los mensajes por capas para una cadena de servidores. Las generaciones sucesivas, de Mixmaster a Mixminion~\cite{danezis2003mixminion}, incorporaron mensajes de longitud fija, agrupación real por lotes y mecanismos de defensa frente a la repetición de mensajes. Roger Dingledine y Nick Mathewson figuraron entre los autores de Mixminion, publicado en 2003, cuando también trabajaban en el diseño de Tor.
+
+% ---------------------------------------------------------------------------
+\section{Hacia la baja latencia}\label{sec:radici-bassa}
+
+\paragraph{PipeNet (1995).} En un mensaje enviado a la lista de correo cypherpunk en febrero de 1995, Wei Dai propuso PipeNet, un sistema de baja latencia en el que todos los participantes enviarían tráfico continuamente a una velocidad constante, de manera que no quedaran variaciones temporales que correlacionar. Resistiría el análisis temporal, pero a un precio inaceptable: si un solo participante dejara de transmitir, toda la red tendría que detenerse~\cite{syverson2011peel}. PipeNet nunca llegó a implementarse, aunque sigue siendo un punto de referencia sobre lo que haría falta para contrarrestar la correlación de tráfico.
+
+\paragraph{Encaminamiento cebolla (1996).} Ese mismo año comenzaba a tomar forma el encaminamiento cebolla en el Naval Research Laboratory. Contaremos su historia en el \cref{cap:03-nascita-tor}.
+
+\paragraph{Crowds (1998).} Michael Reiter y Aviel Rubin propusieron Crowds~\cite{reiter1998crowds}. Los usuarios forman una \enquote{multitud} y cada solicitud web se reenvía a uno de sus miembros, elegido al azar. Con cierta probabilidad, ese miembro envía la solicitud al sitio web; en caso contrario, la transmite a otro miembro. El sitio ve llegar la petición desde un miembro cualquiera y ningún integrante puede saber con certeza si quien le pasó una solicitud fue también su autor original. Crowds no utiliza cifrado por capas y ofrece protección frente al sitio web y a otros miembros, pero no frente a un observador de la red. Con todo, introdujo una forma rigurosa de expresar el anonimato mediante probabilidades, así como un análisis de los ataques de participantes que actúan en connivencia y que anticipó parte de la investigación relacionada con los guardias.
+
+\paragraph{Freedom (1999--2001).} La mayor red de anonimato anterior a Tor fue Freedom, administrada por la empresa canadiense Zero-Knowledge Systems. Anunciada a finales de 1998, estuvo operativa desde finales de 1999 hasta finales de 2001~\cite{syverson2011peel}. Era un servicio comercial: los usuarios pagaban una suscripción y los servidores eran operados por la empresa y sus socios. Cerró porque los ingresos de las suscripciones no bastaban para mantenerlo. Su historia sugiere dos lecciones que Tor ha seguido en la práctica: una red de anonimato es más resistente cuando la administran numerosos participantes independientes en lugar de una sola empresa, y su modelo de financiación importa tanto como su criptografía (\cref{sec:nascita-comunita}).
+
+\begin{approfondimento}[Muchas cebollas]
+Durante el mismo período se propusieron numerosos sistemas de encaminamiento cebolla, entre ellos Tarzan y MorphMix, completamente descentralizados, y Cebolla, del que Tor tomó la idea de construir circuitos salto a salto mediante un intercambio Diffie--Hellman independiente para cada salto~\cite{syverson2011peel}. Otros proyectos surgieron en paralelo a Tor y siguieron caminos distintos: I2P, orientado principalmente a los servicios internos y todavía activo, y AN.ON, nacido en la Universidad de Dresde con el cliente JAP (y ofrecido también como servicio comercial con el nombre de JonDonym), que utiliza cadenas fijas de mixes administrados por organizaciones conocidas. Cada sistema establece un equilibrio diferente entre descentralización, confianza y rendimiento.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item El mix de Chaum (1981) oculta la relación entre mensajes entrantes y salientes al modificar su aspecto, igualar sus longitudes y reordenarlos. Una cadena de mixes con cifrado por capas anticipa la idea de la cebolla.
+  \item Los sistemas de alta latencia resisten a observadores poderosos, pero son lentos; los de baja latencia permiten actividades interactivas, aunque son vulnerables a la correlación temporal.
+  \item anon.penet.fi mostró el peligro de almacenar las identidades de los usuarios; Mixmaster y Mixminion desarrollaron la tecnología mix aplicada al correo electrónico.
+  \item PipeNet, Crowds y Freedom exploraron distintas soluciones de baja latencia. Freedom puso de manifiesto la importancia de una red administrada por múltiples actores y de un modelo de financiación sostenible.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:02-mix}
+Un mix reúne lotes de 100 mensajes. Un observador ve entrar los 100 mensajes y salir los 100. Si conoce al remitente de uno de los mensajes de entrada, ¿cuál es la probabilidad de acertar su correspondiente mensaje de salida eligiendo al azar? ¿Qué ocurriría si el observador hubiera enviado 99 de los 100 mensajes?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:02-penet}
+Diseña a grandes rasgos un remailer que permita enviar respuestas a los usuarios sin conservar una tabla que relacione seudónimos con direcciones. ¿Qué ideas de Chaum necesitarías?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:02-crowds}
+En Crowds, si la probabilidad de reenvío es $p_f = 3/4$, ¿por cuántos miembros pasa en promedio una solicitud antes de llegar al sitio web? ¿Por qué el miembro que recibe una solicitud no puede estar seguro de que quien se la transmitió sea su originador?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item D.~Chaum, \titolo{Untraceable Electronic Mail, Return Addresses, and Digital Pseudonyms}~\cite{chaum1981untraceable}.
+  \item M.~Reiter, A.~Rubin, \titolo{Crowds: Anonymity for Web Transactions}~\cite{reiter1998crowds}.
+  \item G.~Danezis, R.~Dingledine, N.~Mathewson, \titolo{Mixminion: Design of a Type III Anonymous Remailer Protocol}~\cite{danezis2003mixminion}.
+  \item La \emph{Anonymity Bibliography} de Free Haven, \url{https://www.freehaven.net/anonbib/}: colección de referencia de trabajos científicos sobre anonimato.
+\end{itemize}

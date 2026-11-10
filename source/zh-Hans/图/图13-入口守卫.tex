@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 可访问性替代文本。
+\altfig{Tor 守卫选择流程并非一串逐层包含的集合。当前共识中带 Guard 标记的中继可被加入持久样本；样本可能暂时保留已从共识中消失的中继。FILTERED 和 CONFIRMED 是样本中可能重叠但互不包含的两个子集。PRIMARY（默认三个）只能从 FILTERED 中选取，优先采用已确认者，不足时补充其他已过滤守卫。样本默认最多 60 个守卫、阈值 20\%；未确认守卫约 120 天后移除，已确认者在确认 60 天后移除，连续缺席共识 20 天也可移除。主要守卫可能暂时不可达。}
+% Tor 守卫集合与列表关系
+\begin{tikzpicture}[font=\sffamily\scriptsize,>=Stealth,
+  guardbox/.style={draw=torviola,fill=torviola!6,rounded corners=4pt,align=center,minimum height=1.1cm},
+  guardarrow/.style={-Stealth,thick,torgrigio}]
+  \node[guardbox,draw=torgrigio,fill=torgrigio!6,text width=10.5cm] (cons) at (5.8,5.1) {\textbf{共识中带 Guard 标记的中继}：新增候选};
+  \node[guardbox,text width=10.5cm] (sample) at (5.8,3.7) {\textbf{SAMPLED}：持久样本，最多 60，阈值 20\,\%};
+  \node[guardbox,text width=4.4cm] (filtered) at (2.7,2.0) {\textbf{FILTERED}：已列入且可使用};
+  \node[guardbox,text width=4.4cm] (confirmed) at (8.9,2.0) {\textbf{CONFIRMED}：曾用于用户流量};
+  \node[guardbox,draw=torverde!60!black,fill=torverde!15,text width=10.5cm] (primary) at (5.8,0.2) {\textbf{PRIMARY}：默认 3 个，均来自 FILTERED};
+  \draw[guardarrow] (cons) -- (sample);
+  \draw[guardarrow] (sample.south west) to[out=235,in=90] (filtered.north);
+  \draw[guardarrow] (sample.south east) to[out=305,in=90] (confirmed.north);
+  \draw[guardarrow] (filtered.south) to[out=270,in=160] (primary.west);
+  \draw[guardarrow] (confirmed.south) to[out=270,in=20] (primary.east);
+  \node[align=center,text=torgrigio,font=\sffamily\tiny] at (5.8,-1.05) {优先已确认且已过滤者；默认移除期 120/60/20 天};
+\end{tikzpicture}

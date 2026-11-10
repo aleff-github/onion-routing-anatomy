@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{Arquitectura esquemática de los transportes conectables: tor se comunica con el proxy SOCKS local del PT cliente, que transforma el tráfico. En el puente, el PT servidor deshace la transformación y entrega la conexión a tor por ORPort o, si está configurado, por Extended ORPort. Los proxies voluntarios intermedios de Snowflake no se muestran. El censor ve tráfico transformado en el enlace observado, pero podría identificarlo. Ejemplos: obfs4 parece bytes aleatorios, Snowflake usa WebRTC y WebTunnel se asemeja a HTTPS.}
+% Arquitectura de transportes conectables (pt-spec)
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  proc/.style={draw,rounded corners=2pt,align=center,minimum height=0.8cm,minimum width=1.7cm},
+  mac/.style={draw=torgrigio,dashed,rounded corners=4pt,inner sep=6pt}]
+  \node[proc,fill=torviola!12] (tc) at (0,0) {tor\\(cliente)};
+  \node[proc,fill=torverde!15] (pc) at (2.6,0) {PT cliente};
+  \node[proc,fill=torverde!15] (ps) at (8.2,0) {PT servidor};
+  \node[proc,fill=torviola!12] (tb) at (10.8,0) {tor\\(puente)};
+  \node[mac,fit=(tc)(pc),label={[font=\sffamily\scriptsize]above:equipo del usuario}] {};
+  \node[mac,fit=(ps)(tb),label={[font=\sffamily\scriptsize]above:puente}] {};
+  \draw[->] (tc) -- node[above,font=\sffamily\tiny] {SOCKS} (pc);
+  \draw[->] (ps) -- node[above,align=center,font=\sffamily\tiny] {ORPort /\\Extended ORPort} (tb);
+  \draw[->,thick,decorate,decoration={snake,amplitude=1.2pt,segment length=6pt}] (pc) -- node[above] {tráfico transformado} (ps);
+  \node[server,minimum width=1.4cm,fill=avviso!10,draw=avviso] (cen) at (5.4,-1.5) {censor};
+  \draw[dotted,avviso] (cen) -- (5.4,-0.15);
+  \node[text=torgrigio,align=center] at (5.4,-2.3) {bytes aleatorios (obfs4),\\WebRTC (Snowflake), HTTPS (WebTunnel)};
+  \node[text=torgrigio,font=\sffamily\tiny,align=center,text width=10.5cm] at (5.4,-3.05) {Esquema simplificado: no se muestran los proxies voluntarios de Snowflake};
+\end{tikzpicture}

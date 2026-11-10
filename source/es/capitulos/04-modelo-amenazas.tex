@@ -1,0 +1,116 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{El modelo de amenazas de Tor}\label{cap:04-modello-minaccia}
+\aggiornatoal{23 de septiembre de 2026}{Dingledine, Mathewson y Syverson (2004), sección 3}
+
+\begin{obiettivi}
+Al terminar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item explicar qué es un modelo de amenazas y por qué todos los sistemas de seguridad necesitan uno;
+  \item enumerar los objetivos y los \enquote{no objetivos} establecidos por los diseñadores de Tor;
+  \item describir al adversario frente al cual Tor pretende ofrecer protección y a aquel frente al que no puede resistir;
+  \item distinguir lo que protege Tor de lo que sigue siendo responsabilidad de los usuarios y las aplicaciones.
+\end{itemize}
+\end{obiettivi}
+
+Ningún sistema de seguridad protege frente a todo. Un \textbf{modelo de amenazas} describe explícitamente a quién o a qué pretende proteger un sistema, frente a qué adversarios y amenazas se ha diseñado y qué supuestos adopta. Constituye el criterio con el que debe evaluarse el sistema: un ataque exitoso dentro del modelo revela un defecto, mientras que un ataque expresamente excluido de él no lo demuestra. Este último caso sigue siendo, sin embargo, una limitación que el usuario debe comprender. El capítulo presenta el modelo de amenazas de Tor tal como lo formularon sus diseñadores en 2004~\cite{dingledine2004tor} y explica cómo ha evolucionado desde entonces.
+
+% ---------------------------------------------------------------------------
+\section{Objetivos}\label{sec:minaccia-obiettivi}
+
+El objetivo principal consiste en impedir que un adversario pueda \textbf{vincular} a las dos partes de una comunicación o relacionar varias comunicaciones realizadas por un mismo usuario. Cuatro criterios recogidos en el artículo de 2004 guiaron el diseño:
+\begin{description}
+  \item[Facilidad de despliegue] El sistema debe funcionar en el mundo real: no debe resultar excesivamente costoso para los voluntarios, exponer a los operadores a responsabilidades desproporcionadas, exigir cambios en los sistemas operativos ni obligar a los sitios web a instalar componentes adicionales.
+  \item[Facilidad de uso] Un sistema complicado atrae a menos usuarios y, cuantos menos usuarios haya, menor será el anonimato. Como explican sus autores, la facilidad de uso no es solo una comodidad, sino \enquote{un requisito de seguridad}.
+  \item[Flexibilidad] El protocolo debe estar bien especificado para servir de base a futuras investigaciones.
+  \item[Simplicidad] Solo deben emplearse técnicas conocidas y suficientemente estudiadas. Cada funcionalidad adicional complica el análisis de seguridad.
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{No objetivos}\label{sec:minaccia-nonobiettivi}
+
+Igual de importante es aquello que Tor declara explícitamente que \emph{no} pretende conseguir:
+\begin{description}
+  \item[No es una red entre pares] Tor no pretende operar con miles de nodos de vida muy corta, muchos de los cuales podrían ser hostiles. Utiliza un conjunto de repetidores enumerados y verificados por las autoridades de directorio (\cref{cap:12-directory}).
+  \item[No resiste los ataques de extremo a extremo] Tor no afirma que pueda derrotar la correlación temporal ni los ataques de intersección realizados por quien observa los dos extremos de una comunicación.
+  \item[No normaliza los protocolos] Tor transporta los datos de las aplicaciones tal como son. Si una aplicación revela la identidad del usuario, Tor no puede impedirlo. En sus comienzos era necesario un proxy de filtrado; hoy esa función la cumple Tor Browser (\cref{cap:23-browser}).
+  \item[No es esteganográfico] Tor por sí solo no esconde que el usuario está conectado a la red. Los transportes conectables, desarrollados posteriormente, atenúan esta limitación (\cref{cap:16-censura}).
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{El adversario}\label{sec:minaccia-avversario}
+
+Muchos análisis teóricos de los sistemas de anonimato suponen un \textbf{adversario pasivo global}: alguien capaz de observar todo el tráfico de Internet. Ningún sistema práctico de baja latencia protege frente a ese adversario, y Tor lo reconoce expresamente. En cambio, su modelo supone un adversario con visibilidad parcial de la red, aunque con capacidades activas relativamente amplias en otros aspectos~\cite{dingledine2004tor}. Puede:
+\begin{itemize}
+  \item observar una \emph{parte} del tráfico de la red;
+  \item generar, modificar, eliminar o retrasar tráfico;
+  \item operar sus propios repetidores;
+  \item comprometer algunos repetidores administrados por terceros.
+\end{itemize}
+
+Con estas capacidades, el adversario puede intentar muchos ataques: correlacionar el tráfico de entrada y salida observando los extremos de la red; comprometer repetidores o claves; repetir mensajes; provocar una denegación de servicio contra repetidores honestos para empujar a los usuarios hacia otros maliciosos (\cref{cap:15-dos}); marcar el tráfico para reconocerlo en otro punto (\cref{sec:tor1-debolezze}); ofrecer a distintos usuarios vistas inconsistentes de la red mediante el sistema de directorios (\cref{cap:12-directory}); o degradar el servicio hasta conseguir que las personas abandonen Tor y utilicen alternativas menos seguras.
+
+\subsection{Confirmación y análisis}
+
+Los diseñadores de Tor distinguen dos grandes clases de ataques basados en el tráfico. En un ataque de \textbf{confirmación}, el adversario ya sospecha una relación (\enquote{Alicia se comunica con Bob}) y observa ambos extremos para comprobarla. Como otros sistemas de baja latencia, Tor no puede proporcionar protección completa contra este tipo de ataque. En un ataque de \textbf{análisis}, el adversario estudia el tráfico para descubrir \emph{dónde} debe mirar, es decir, qué puntos de la red le interesa atacar. Tor está diseñado principalmente para resistir esta segunda clase. Todo el proceso de selección de rutas, incluidos los guardias y los pesos según el ancho de banda (\cref{cap:13-percorso}), busca reducir la probabilidad de que un mismo adversario ocupe ambos extremos de un circuito.
+
+\begin{attenzione}[El principio que conviene recordar]
+Tor protege frente a quien observa una \emph{parte} de la red, no frente a quien consigue observar \emph{los dos extremos} de una comunicación. Un adversario que controle u observe tanto la conexión del usuario con el guardia como la conexión de la salida con el sitio web puede correlacionar el tiempo y el volumen del tráfico. Para una organización con acceso a las redes de todo un país, tanto el usuario como el sitio web podrían encontrarse en ese mismo país. Es un escenario práctico, no únicamente teórico.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Qué protege Tor y qué queda fuera de su alcance}\label{sec:minaccia-sintesi}
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig04-visibilidad}
+\caption{Qué sabe cada punto del recorrido. La protección de Tor depende de separar la información: el guardia conoce al cliente, pero no su destino; la salida conoce el destino, pero no al cliente.}
+\label{fig:sapere}
+\end{figure}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+Tor protege frente a & Tor no protege frente a \\
+\midrule
+un sitio web que intenta conocer la dirección IP de sus visitantes & los datos que revela el propio usuario, al iniciar sesión o comunicar información personal \\
+un observador de la red local o un proveedor de Internet que solo ve una conexión a Tor & un observador que vigila los dos extremos de la comunicación \\
+un repetidor individual que conoce, como máximo, uno de los extremos & un adversario que controla a la vez el guardia y la salida de un circuito \\
+una salida que intenta identificar quién envió una solicitud & una salida que lee o modifica tráfico sin cifrar, cuando no se utiliza HTTPS \\
+la censura basada en direcciones IP cuando se utilizan puentes & una aplicación o un navegador vulnerable, comprometido o mal configurado \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+El modelo ha evolucionado para abordar problemas que el artículo de 2004 no podía prever: la censura a escala nacional (\cref{cap:16-censura}), las medidas frente a la \emph{identificación mediante huellas digitales} del navegador (\cref{cap:23-browser}), las defensas contra la denegación de servicio (\cref{cap:15-dos}) y la futura amenaza de los ordenadores cuánticos (\cref{cap:31-futuro}). Un principio permanece constante: comprender el modelo de amenazas es el primer paso para utilizar Tor de forma segura.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item Un modelo de amenazas identifica los adversarios y ataques frente a los que un sistema está diseñado para proteger.
+  \item Tor intenta evitar que los usuarios y sus destinos puedan vincularse, y prioriza la facilidad de despliegue, la facilidad de uso, la flexibilidad y la simplicidad.
+  \item Tor no es una red entre pares, no resiste los ataques de extremo a extremo, no normaliza los protocolos de aplicación y no oculta su uso sin transportes conectables.
+  \item El adversario puede observar parte de la red, operar y comprometer repetidores y actuar sobre el tráfico. Tor está diseñado sobre todo para resistir ataques de análisis y ofrece menos protección frente a ataques de confirmación.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:04-casi}
+Indica si Tor protege al usuario en cada uno de estos escenarios y explica por qué: (a) el administrador del Wi-Fi de una cafetería quiere saber qué sitios visita un cliente; (b) un sitio web intenta averiguar las direcciones IP de sus visitantes; (c) una persona inicia sesión en su cuenta personal de una red social utilizando Tor; (d) una agencia que controla las redes de un país sospecha que alguien está comunicándose con un periódico ubicado en el mismo país.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:04-usabilita}
+Propón un ejemplo que muestre por qué la facilidad de uso constituye un requisito de seguridad, y no solo una comodidad, en un sistema de anonimato.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:04-modello}
+Redacta un modelo de amenazas para una periodista que utiliza Tor Browser para comunicarse con una fuente situada en otro país. Identifica a los posibles adversarios, qué pueden observar y qué aspectos quedan fuera de la protección de Tor.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item R.~Dingledine, N.~Mathewson, P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}, secciones 3 y 7.
+  \item R.~Dingledine, N.~Mathewson, \titolo{Anonymity Loves Company: Usability and the Network Effect}~\cite{dingledine2006company}.
+\end{itemize}

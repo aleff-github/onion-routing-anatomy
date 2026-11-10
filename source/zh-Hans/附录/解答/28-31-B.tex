@@ -1,0 +1,103 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{第 \ref{cap:28-opsec} 章：操作安全失误}
+
+\begin{soluzione}{es:28-livello}
+流量绕过 Tor、联网期间打开文档和 DNS 泄露都属于应用层问题；防御措施包括使用 Tor Browser、Tails 或 Whonix、启用 \opt{SafeSocks}，以及断网后再打开文件。元数据、登录账户和混用身份属于内容层问题；应使用元数据清理工具并分离会话。写作风格、发布时间以及在匿名集很小时使用 Tor 属于行为层问题；需要调整使用习惯，考虑网桥并审慎安排发布时间。
+\end{soluzione}
+
+\begin{soluzione}{es:28-dns}
+本地 DNS 查询从用户计算机发往系统配置的解析器，通常由网络接入服务商运营，并包含目标网站的域名。接入服务商以及能够观察到解析器通信路径的任何人，都可能获知用户准备访问哪个网站，即使后续连接通过 Tor。
+\end{soluzione}
+
+\begin{soluzione}{es:28-evento}
+通过 Stem 订阅 \texttt{EventType.STATUS\_CLIENT}。只包含 IP 地址的请求会产生严重程度为 \texttt{WARN}、动作为 \texttt{DANGEROUS\_SOCKS} 的事件，参数包含 \texttt{PROTOCOL} 与 \texttt{ADDRESS}。图形界面可以在警告中标明应用程序与目的地，并说明应该修正该应用的 SOCKS 配置。
+\end{soluzione}
+
+\begin{soluzione}{es:28-insieme}
+使用 obfs4 时，本地观察者看到的会是一条通向普通外观地址的加密连接，数据没有明显结构，因此无法确定这一定是 Tor 流量。其他线索仍可能存在：流量大小、时间、异常持续时长、相似连接，以及消息内容或可能动机。这些信息依然可能将候选人缩小到预计参加相关考试的人。
+\end{soluzione}
+
+\begin{soluzione}{es:28-modello}
+这是开放式练习。好的答案应遵循 \cref{cap:04-modello-minaccia} 的结构：列明攻击者及其能力、他们在 \cref{fig:livelli} 各层能观察到什么、所选择的防御及理由，以及残余风险清单，例如同时观察通信两端的攻击者进行关联，或者用户设备遭到扣押。
+\end{soluzione}
+
+\section*{第 \ref{cap:29-ricerca} 章：Tor 学术研究}
+
+\begin{soluzione}{es:29-entropia}
+$H=\tfrac12\cdot1+\tfrac14\cdot2+2\cdot\tfrac18\cdot3=1.75$ 比特。$H_M=\log_2 4=2$ 比特，因此 $d=0.875$。具有相同不确定性的等概率用户数量为 $2^{1.75}\approx3.4$。
+\end{soluzione}
+
+\begin{soluzione}{es:29-metodo}
+（a）使用 Shadow 模拟网络，或在较小规模下通过 Chutney 仿真：需要真实 tor 的行为，但无须涉及真实用户。（b）像 Tor Metrics 一样利用公开的汇总数据测量真实网络（\cref{sec:metrics-utenti}）。（c）使用跨较长时间的真实共识开展 TorPS 式行为模拟，并可辅以理论分析。
+\end{soluzione}
+
+\begin{soluzione}{es:29-durata}
+将 \texttt{guard\_lifetime} 设为 30 天后，时间戳回溯使实际寿命为 18--30 天，客户端在 180 天内约选择七到八次守卫，模拟得到 32.1\% 的失守比例。默认的 60 天对应 48--60 天实际寿命，大约选择三次守卫，失守比例为 18.4\%。寿命为 180 天时，只选择一到两次守卫，失守比例为 8.6\%。近似地，经过 $k$ 次独立守卫选择，失守比例趋近于 $1-(1-q)^k$，其中 $q=5\%$；$k\approx7.5$ 时约为 31\%，与 30 天实验结果接近。守卫寿命越长，新选择越少，新增暴露用户越少，但已经选中恶意守卫的人会更长时间处于风险之中。
+\end{soluzione}
+
+\begin{soluzione}{es:29-asimmetria}
+根据本实验需要同时观察两端的失守判定标准，两种攻击者都无法使客户端失守。不过，它们观察到的信息仍不同：恶意出口知道访问目的地和未受应用层加密保护的内容，却不知道客户端身份；恶意守卫知道选择它的客户端的 IP 地址，却不知道目的地，还可能尝试网站指纹识别（\cref{sec:att-wf}）。
+\end{soluzione}
+
+\begin{soluzione}{es:29-torps}
+这是研究练习。复用电路会减少每天需要进行的新选择，在没有持久守卫时减缓失守曲线上升。除非恶意中继集中在同一网络中，/16 约束的影响通常较小。自治系统级攻击者会从根本上改变模型，因为它能够在不运营中继的情况下观察流量，因此需要 \cite{johnson2013users} 等研究使用的互联网拓扑数据。
+\end{soluzione}
+
+\section*{第 \ref{cap:30-arti} 章：Arti}
+
+\begin{soluzione}{es:30-crate}
+第~5 章：\texttt{tor-llcrypto}。第~7 章：处理通道的 \texttt{tor-proto} 和 \texttt{tor-chanmgr}。第~8 章：\texttt{tor-cell}。第~9--11 章：处理电路、加密、流与流量控制的 \texttt{tor-proto}。第~12 章：\texttt{tor-netdoc}、\texttt{tor-dirmgr} 和 \texttt{tor-dirclient}。第~13 章：\texttt{tor-circmgr}、\texttt{tor-guardmgr} 和 \texttt{tor-relay-selection}。第~14 章：\texttt{tor-hsclient}、\texttt{tor-hsservice} 和 \texttt{tor-hscrypto}。第~15 章：工作量证明使用的 \texttt{equix} 与 \texttt{hashx}。第~16 章：\texttt{tor-ptmgr}。
+\end{soluzione}
+
+\begin{soluzione}{es:30-obsoleto}
+优点：代码更少、攻击面更小、不必处理两字节 CircID 等特殊情况，也无须维护过时且薄弱的密码学。缺点：Arti 无法与非常旧的中继通信。不过，公共 Tor 网络已经排除了不再被推荐的版本，因此实际影响主要出现在私有网络和长期不更新的安装环境中。
+\end{soluzione}
+
+\begin{soluzione}{es:30-cella}
+\texttt{decode\_cell} 从第五个字节读取命令，据此判断信元是否为变长格式。如果是变长，后两个字节表示消息体长度，总长度为 $7+$ 声明的数值；否则总长度为 514 字节。收到的输入不足时，函数返回 \texttt{Ok(None)}，而不把不完整的信元当成错误；调用方在更多字节到达后重试。这与实验~2 所写的流式解码器要求相同。
+\end{soluzione}
+
+\begin{soluzione}{es:30-isolamento}
+是的。Arti 的 SOCKS 代理默认将使用不同 SOCKS 凭据的流隔离到不同电路，并且也隔离不同的监听器。可以从中继一侧观察电路，例如通过出口的 ControlPort，或者在 Arti 的调试日志（debug）中查看。作为库使用时，可以通过 \texttt{TorClient::isolated\_client} 或 \texttt{StreamPrefs} 隔离令牌明确指定隔离。截至 Arti 2.6.0，其源码 \file{cfg.rs} 仍把等效的逐端口配置记录为未来工作。
+\end{soluzione}
+
+\begin{soluzione}{es:30-libreria}
+这是编程练习。把实验 TOML 文件读取为 \texttt{TorClientConfig}，通过 \texttt{TorClient::create\_bootstrapped} 启动客户端，再调用 \texttt{connect(("127.0.0.1", 8080))} 建立流，并通过它发送 HTTP 请求。配置必须允许访问本地地址，就像实验~20 生成的文件一样。
+\end{soluzione}
+
+\section*{第 \ref{cap:31-futuro} 章：开放问题}
+
+\begin{soluzione}{es:31-stato}
+以本章参考日期为例：ntor-v3 的 \proposta{332} 处于 \emph{Closed}，表示已经实现且内容已纳入正式规范；拥塞控制的 \proposta{324} 为 \emph{Finished}，已实现，但其文本尚未完全纳入规范；CGO 的 \proposta{359} 为 \emph{Open}，虽然功能已存在于代码中，但提案仍在讨论。应检查每份提案头部及仓库状态索引，以确认是否有更新。
+\end{soluzione}
+
+\begin{soluzione}{es:31-celle}
+对于传统格式，简单计算需要 $\lceil1184/498\rceil=3$ 个信元来承载 1\,184 字节 ML-KEM-768 公钥，以及 $\lceil1088/498\rceil=3$ 个信元承载 1\,088 字节密文，总共六个。但是，现有协议甚至不允许这样分片单条中继消息。\proposta{340} 引入了所需的封装方式，允许消息跨越多个信元，也允许多个消息共用一个信元。其建议格式的中继信元消息体为 493 字节，而非 498 字节，因为新格式消耗 16 字节用于认证，即 $509-16=493$，参见 \cref{cap:08-celle}。一条消息的第一个分片还包含封装头部，因此最多只能承载 490 字节有效数据。提案目前仍为普通消息体保留 493 字节上限，因此若要承载更大的后量子 \texttt{EXTEND2}，还需要新版本的 \texttt{Relay} 子协议解除该限制。即使扩展完成，公钥仍占三个信元，密文另占三个。而且两者传输方向\emph{相反}——分别从客户端发往中继，再由中继返回客户端——因此不能打包在一起。总数仍是六个信元。
+\end{soluzione}
+
+\begin{soluzione}{es:31-epistemico}
+如果每个客户端都下载不同的中继子集，已经知道或能够影响某个客户端子集的攻击者，就可以通过电路识别它。使用只对该客户端可见的中继构建电路，会泄露电路由谁建立。即使事先不知道子集，长期观察客户端使用哪些中继，也能逐步缩小可能的用户集合。
+\end{soluzione}
+
+\begin{soluzione}{es:31-conflux}
+筛选用途为 \texttt{CONFLUX\_LINKED} 的电路，并按 \texttt{CONFLUX\_ID} 分组（\cref{cap:18-stem}），随后比较每对电路的路径。两条分支都会以相同出口结束，符合预期。但在实验网络中，它们经常还共用其他中继。例如 \texttt{[test007e, test003r, test006e]} 和 \texttt{[test003r, test007e, test006e]} 只是在不同顺序下使用完全相同的节点。这不是 tor 的缺陷。私有网络中合格中继很少，而 \proposta{329} 使用的是 \texttt{SHOULD NOT} 建议，不是绝对禁止。在拥有数千台中继的公共网络中，这种共享情况罕见得多。
+\end{soluzione}
+
+\begin{soluzione}{es:31-proposta}
+这是开放式练习。参考格式见 \proposta{001}：包含编号、标题、作者、日期和状态的头部，以及动机、设计、安全性与兼容性分析、实施计划和部署计划。
+\end{soluzione}
+
+\section*{附录 \ref{cap:B-crittografia}：密码学进阶}
+
+\begin{soluzione}{es:B-bit}
+256 个比特中有五位被固定：最低三位、最高位和次高位。因此，钳制后有 $2^{251}$ 种不同取值，而钳制前有 $2^{256}$ 种。这种减少不会削弱方案：无论如何，该椭圆曲线的安全级别约为 128 比特。
+\end{soluzione}
+
+\begin{soluzione}{es:B-inversa}
+根据 $y=(u-1)/(u+1)$，可解得 $u=(1+y)/(1-y)\bmod p$。在 Python 中，先从 32 个小端序字节读取 $y$，并清除符号位；然后计算 \texttt{(1 + y) * pow(1 - y, P - 2, P) \% P}，再将结果编码为 32 个小端序字节。保留原始 $x$ 符号位，使用 \texttt{montgomery\_to\_edwards} 即可恢复最初的 Edwards 公钥（要求 $y \neq 1$）。
+\end{soluzione}
+
+\begin{soluzione}{es:B-digest}
+随机修改后的信元同时通过两项检查的概率约为 $2^{-16}\cdot2^{-32}=2^{-48}$：两字节全零 \texttt{recognized} 字段，以及四字节正确摘要。但标记攻击并不要求修改后的信元被\emph{接受}。能够观察它的恶意同伙，或者拒绝它的终点，可以通过电路关闭、可预测的内容变化等结果识别修改。这种观察可能足以关联电路上的两个位置。
+\end{soluzione}

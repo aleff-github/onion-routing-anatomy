@@ -1,0 +1,178 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Arti: Tor in Rust}\label{cap:30-arti}
+\aggiornatoal{23 September 2026}{Arti 2.6.0 (1 September 2026); tor 0.4.9.13; laboratory network}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item explain why the Tor Project is rewriting tor in Rust and assess the project's progress;
+  \item understand Arti's architecture and identify the concepts covered in Part~II;
+  \item interpret its supported-subprotocol table and understand which features are still missing;
+  \item configure Arti as a client of the book's private network (Laboratory~20).
+\end{itemize}
+\end{obiettivi}
+
+Throughout this book we have relied on \emph{tor}, the C implementation begun in 2002. The future of the Tor client, however, is \textbf{Arti}, a complete rewrite in Rust. The Tor Project has designated Arti as the preferred client for developing new functionality and announced that every new client-side feature will receive an Arti implementation. This chapter presents Arti from the perspective of someone who has just written a small Tor client in Python during the laboratories. Many of Arti's design decisions are the same decisions we faced, implemented at production scale.
+
+% ---------------------------------------------------------------------------
+\section{Why Rewrite tor?}\label{sec:arti-perche}
+
+The project's introductory document lists four motivations:
+\begin{description}
+  \item[Security] Safe Rust prevents many classes of memory-safety bugs, although unsafe code, dependencies, and logic errors still require review. According to the Tor Project's estimate, Rust would have ruled out at least half of tor's recorded security vulnerabilities and made many of the rest very unlikely.
+  \item[Development speed] Language-level guarantees make it possible to develop new code with greater confidence and less time.
+  \item[Flexibility] tor started as a SOCKS proxy, with integration features added later. Arti was designed from the outset as a modular library that other applications can embed.
+  \item[Maintainability] Twenty years of development have left complex relationships among the components of tor's codebase. A rewrite offers an opportunity to separate responsibilities more clearly.
+\end{description}
+
+\paragraph{Milestones.} Arti's first public version, 0.0.1, appeared in October 2021. Version 1.0.0, released on 1 September 2022, declared Arti stable as a client. In August 2023, version 1.1.7 enabled compilation of client-side onion service support by default, although users still needed to enable the feature. Version 2.0.0 followed in February 2026. This chapter's reference version is 2.6.0, released on 1 September 2026, which makes congestion control (\cref{sec:cc}) and CGO encryption (\cref{sec:cgo}) permanently enabled.
+
+\paragraph{Current scope.} According to its project documentation at the reference date, Arti is a complete general-purpose client supporting bridges and pluggable transports; it can both access and publish onion services. It cannot yet operate as a relay, bridge, or directory authority. Those capabilities are under development, and much of the work in recent releases has focused on relays and authorities.
+
+% ---------------------------------------------------------------------------
+\section{Architecture}\label{sec:arti-architettura}
+
+Arti consists of dozens of Rust \emph{crates}, the language's compilation units: more than seventy in version 2.6.0. Naming conventions distinguish their roles. User-facing crates begin with \texttt{arti}, Tor protocol-specific crates with \texttt{tor-}, and crates useful outside Tor have more general names. A guiding principle shapes the design: keep code that directly reads or writes network data to a minimum; most components should behave \enquote{as if the network did not exist}, making them easier to test.
+
+\Cref{fig:crate} places the principal crates alongside the \texttt{torlab} modules that serve similar purposes. The correspondence is intentional: both follow the protocol's layers, from the lowest-level primitives to the high-level client.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig30-crates}
+\caption{Simplified functional map of Arti crates and educational \texttt{torlab} modules. Solid arrows summarize architectural relationships, not an exact Cargo dependency graph; dashed links indicate analogous roles, not project dependencies or complete equivalents. For example, \texttt{onion.py} only decrypts descriptors and cannot replace an onion-service client; crates such as \texttt{tor-bytes} and \texttt{tor-hsservice} are omitted.}
+\label{fig:crate}
+\end{figure}
+
+\begin{description}
+  \item[\texttt{tor-llcrypto}, \texttt{tor-bytes}] Cryptographic primitives and binary parsing/serialization. They provide the foundations that our \file{ntor.py} and \file{encryption.py} obtained from Python's \texttt{cryptography} and \texttt{struct} modules.
+  \item[\texttt{tor-cell}] Cells and relay messages: Arti's equivalent of \file{cells.py} (\cref{cap:08-celle}).
+  \item[\texttt{tor-proto}] Channels, circuits, layered encryption, and streams: everything we built using \file{channel.py}, \file{circuit.py}, and \file{stream.py}.
+  \item[\texttt{tor-chanmgr}, \texttt{tor-circmgr}, \texttt{tor-guardmgr}] Managing multiple channels and circuits, selecting paths, and maintaining guards. Our educational client implemented hardly any of these features, which are among the most complex parts of a real client.
+  \item[\texttt{tor-netdoc}, \texttt{tor-dirmgr}] Reading and updating directory documents, corresponding to \file{directory.py}.
+  \item[\texttt{tor-hsclient}, \texttt{tor-hsservice}] Both sides of onion services, of which \file{onion.py} implemented only descriptor decryption.
+  \item[\texttt{arti-client}, \texttt{arti}] The high-level library for embedding into other applications, and the command-line program exposing a SOCKS proxy.
+\end{description}
+
+\subsection{A Comparison: Writing a Cell}
+
+In Laboratory~2, we wrote a cell-encoding function. Arti's corresponding function, \texttt{write\_cell} in \file{crates/tor-cell/src/chancell/codec.rs}, follows the same steps: write the CircID, then the command. For a variable-length cell, reserve two bytes for its length, encode the body, then go back and write the actual length. For a fixed-length cell, encode the body and verify that it does not exceed 509 bytes (\texttt{CELL\_DATA\_LEN}). Two differences are instructive:
+\begin{itemize}
+  \item The CircID is \emph{always} written as four bytes. Arti does not implement link-protocol versions older than version 4, so it does not need the special case of two-byte CircIDs (\cref{cap:08-celle}). Only the \cella{VERSIONS} cell, which precedes negotiation, is handled separately.
+  \item Violating the length limit does not produce a caller error but an \emph{internal} error: an oversized cell would be a defect in Arti's own code, not in data received from a peer. The error type itself distinguishes an implementation bug from malicious input.
+\end{itemize}
+Arti explicitly declines to support obsolete protocols. Its goal is compatibility with \emph{currently recommended} versions, not preservation of every historical format.
+
+% ---------------------------------------------------------------------------
+\section{Supported Features}\label{sec:arti-supporto}
+
+The most precise description of the capabilities of a Tor implementation is its \textbf{subprotocol} support (\spec{tor-spec}{Subprotocol-based versioning}). Every relay and client announces the versions it supports for each family of features: \texttt{Link}, \texttt{Relay}, \texttt{FlowCtrl}, \texttt{HSIntro}, and so forth. Arti's compatibility documentation lists, among other client-side capabilities:
+\begin{itemize}
+  \item \texttt{Link=4} and \texttt{Link=5}: four-byte CircIDs and modern channel padding (\cref{cap:07-canali});
+  \item \texttt{Relay=4} (ntor-v3, \cref{cap:09-circuiti}), \texttt{Relay=5} (subprotocol negotiation), and \texttt{Relay=6} (CGO encryption);
+  \item \texttt{FlowCtrl=1} (authenticated SENDME) and \texttt{FlowCtrl=2} (congestion control);
+  \item \texttt{Desc=4}: key-based families as described in \cref{sec:relay-famiglie}.
+\end{itemize}
+
+\begin{attenzione}[An Off-by-One Error in Arti's Table]
+The referenced Arti compatibility document numbers these two flow-control subprotocols \texttt{FlowCtrl=0} and \texttt{FlowCtrl=1}. The specification, however, assigns value 1 to authenticated SENDME and 2 to congestion control~\spec{tor-spec}{Subprotocol-based versioning}, and relays in the public consensus announce \texttt{FlowCtrl=1-2}. This is an off-by-one error in documentation, not the implementation. It also illustrates a useful practice: when sources disagree, check the specification and look for independent evidence in the consensus.
+\end{attenzione}
+
+Two capabilities of the C client remain missing from the Arti client at the source's reference date. \texttt{Conflux=1} provides multipath operation: the \texttt{tor-proto} crate supports it, but Arti does not yet build Conflux circuits. \texttt{Padding=2} refers to padding state machines designed to conceal onion-service circuit construction (\cref{sec:att-wf}). While \texttt{tor-proto} includes a padding framework based on the \emph{maybenot} library, these machines are not yet implemented. No relay-side subprotocols are marked supported: much of the relay-side code exists, but features will be declared supported only when a functioning relay can provide them.
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: Arti on the Private Network}\label{sec:lab-arti}
+
+\begin{laboratorio}[20]{A Second Client, in Rust}
+\textbf{Objective.} Compile Arti, configure it as a client of the book's private network, and use its SOCKS proxy in place of \texttt{test008c}.\\
+\textbf{Prerequisites.} The laboratory network running and a Rust toolchain (\cmd{cargo}).\\
+\textbf{Estimated time.} 1--2 hours, most of it spent compiling.
+\end{laboratorio}
+
+\paragraph{Step 1: compile.} From the book repository root, check out the reference version of Arti (2.6.0) under \file{labs/en/vendor/arti} and build the optimized \texttt{arti} binary:
+\begin{lstlisting}[language=bash,numbers=none]
+$ mkdir -p labs/en/vendor
+$ git clone https://gitlab.torproject.org/tpo/core/arti.git labs/en/vendor/arti
+$ git -C labs/en/vendor/arti checkout arti-v2.6.0
+$ (cd labs/en/vendor/arti && cargo build --release -p arti --locked)
+$ labs/en/vendor/arti/target/release/arti --version
+Arti 2.6.0
+\end{lstlisting}
+The first build takes several minutes because it compiles the whole crate tree and its dependencies.
+
+\paragraph{Step 2: configure.} Arti does not read \file{torrc}; it uses TOML configuration. To access a non-public Tor network, Arti must know its directory authorities and the fallback caches from which to fetch its initial directory documents, just as the \texttt{DirAuthority} lines do in Chutney-generated \file{torrc} files (\cref{sec:rp-file}). The \file{labs/en/lab/arti\_config.py} script reads each authority's RSA fingerprint, Ed25519 key, v3 certificate identity, and listening ports from its local files. It writes these values to \file{labs/en/lab/net/arti/arti.toml}. The following abbreviated snippet is illustrative, not valid ready-to-use TOML: the authority identities must be generated locally, and the ellipses are placeholders:
+\begin{lstlisting}[numbers=none]
+[tor_network]
+fallback_caches = [
+  { rsa_identity = "7B465200C885ED566C6CD4F46DBB0492076D203A",
+    ed_identity = "JwhsA9VS01mRVnQseL9xsKZfstoBae7OcgL3jBvDzis",
+    orports = ["127.0.0.1:5100"] },
+  ...
+]
+[tor_network.authorities]
+v3idents = ["390998046DEFF1E68AC346D7577319791B32C91A", ...]
+\end{lstlisting}
+Three other configuration changes adapt Arti to a network where everything runs on \texttt{127.0.0.1}. Setting \texttt{allow\_local\_addrs} allows connections to local addresses, which public-network clients ordinarily reject. Two impossible network prefix lengths (33 bits for IPv4 and 129 for IPv6) disable the same-network constraint that would otherwise prevent every circuit here. Finally, \texttt{hsdir\_interval} shortens the onion-service period, just as \opt{TestingTorNetwork} does in tor. These settings mirror Chutney's own Arti configurations.
+
+\paragraph{Step 3: start.} After generating the private configuration with \file{python3 labs/en/lab/arti\_config.py}, run \file{labs/en/vendor/arti/target/release/arti proxy -p 9150 -c labs/en/lab/net/arti/arti.toml} from the book's root. Bootstrap time depends on the machine; in one of our runs:
+\begin{lstlisting}[numbers=none]
+INFO tor_dirmgr::bootstrap: 1: Looking for a consensus.
+INFO tor_dirmgr::bootstrap: 1: Downloading certificates for consensus
+     (we are missing 3/3).
+INFO tor_dirmgr::bootstrap: 1: Downloading microdescriptors (we are missing 8).
+INFO tor_dirmgr: Marked consensus usable.
+WARN tor_netdir: Requested 60 relays, but only 8 were usable, ...  role=Guard
+INFO arti::subcommands::proxy: Sufficiently bootstrapped; proxy now functional.
+INFO tor_guardmgr::guard: We have found that guard [scrubbed] is usable.
+\end{lstlisting}
+Three details are revealing. Bootstrap follows \cref{sec:dir-client} step by step: first the consensus, then certificates for the three authorities, and finally eight microdescriptors. The \texttt{tor\_netdir} warning reflects our tiny network: the guard manager would prefer a sample of 60 candidates, but only eight are usable. The guard's identity appears in the log as \texttt{[scrubbed]}: Arti marks sensitive values with its \texttt{safelog} crate and suppresses them in logs, equivalent to tor's \opt{SafeLogging}. On subsequent directory updates, other log output may report \texttt{Applying a consensus diff} (not shown in this excerpt). Arti can download a consensus diff when one is available and negotiated using \texttt{DirCache=2}; this is not guaranteed for every update.
+
+\paragraph{Step 4: use it.} Arti offers a SOCKS proxy on port 9150. \cmd{curl} uses it just as it used \texttt{test008c}:
+\begin{lstlisting}[language=bash,numbers=none]
+$ curl -s -o /dev/null -w '%{http_code} in %{time_total}s\n' \
+       --noproxy "" --socks5-hostname 127.0.0.1:9150 http://127.0.0.1:8080/
+200 in 0.047224s
+\end{lstlisting}
+An empty \texttt{-{}-noproxy} list ensures that \texttt{NO\_PROXY} does not bypass SOCKS for the loopback destination. The circuit crosses the C-language relays of the private network: a Rust client and C relays speak exactly the same byte-level protocol studied in Part~II. One last observation relates to Laboratory~18: SOCKS requests containing only an IP address (\texttt{-{}-socks5}) also succeed, and Arti's default logs do not display a warning analogous to tor's. However, the \texttt{arti-client} crate's documentation warns API users about resolving names locally, which might disclose the destination to a DNS resolver, depending on configuration. An IP-only SOCKS request by itself does not prove that a DNS leak occurred (\cref{sec:lab-opsec}).
+
+The laboratory is part of \texttt{make verifica-lab} when Arti has been built; otherwise the test is skipped and reported.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item Arti rewrites tor in memory-safe Rust. It is modular, designed as a library, stable as a client since 2022, and the preferred client for developing new features.
+  \item Its architecture follows the protocol layers: primitives and cells, channels and circuits, then directory, path, and guard management.
+  \item Subprotocol versions describe what Arti supports precisely. Its client implements ntor-v3, CGO, congestion control, and key-based families, while Conflux and padding state machines remain incomplete at this chapter's reference date. Relay support is still being developed.
+  \item Arti connects to a private network through configured authorities and directory caches, much like a Chutney node.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:30-crate}
+For each chapter in Part~II, identify the Arti crate implementing the main concepts covered there.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:30-obsoleto}
+What are the benefits and drawbacks of Arti's decision not to implement obsolete protocol versions? Who might be excluded?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:30-cella}
+Read \texttt{decode\_cell} in \file{crates/tor-cell/src/chancell/codec.rs} and compare it with Laboratory~2's \texttt{decode}. How is a variable-length cell recognized, and what happens if the input does not yet contain a complete cell?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:30-isolamento}
+Repeat Laboratory~11's stream-isolation experiment with Arti as the SOCKS proxy. Do distinct SOCKS credentials prevent streams from sharing circuits under Arti? Distinguish stream isolation from the unsupported assumption that each credential pair permanently maps to exactly one circuit; find the relevant Arti configuration.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:30-libreria}
+Write a small Rust program using \texttt{arti-client} to retrieve a page from the laboratory network's server, loading Laboratory~20's configuration from a file.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item The project website, \url{https://arti.torproject.org/}, and source repository, particularly its README, \emph{Architectural overview} (\file{doc/dev/Architecture.md}), and compatibility guide (\file{doc/Compatibility.md}).
+  \item Arti's changelog, which documents changes in each monthly release.
+  \item Chutney's generated Arti configuration (\file{lib/chutney/arti/config.py}), which inspired Laboratory~20.
+\end{itemize}

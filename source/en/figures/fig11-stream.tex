@@ -1,0 +1,27 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Client–exit–web server stream diagram: BEGIN to example.com:80, optional optimistic DATA before CONNECTED, DNS resolution by the exit separately from the TCP SYN/SYN-ACK with the server, then CONNECTED. DATA passes through the layered-encrypted circuit and over an external TCP link. The circuit SENDME in classic flow control acknowledges increments of 100 DATA-bearing cells, not 31. FIN can lead to END (DONE). HTTPS may still secure application data beyond the exit, outside Tor's encryption. Timing is schematic.}
+% Stream lifecycle
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  msg/.style={font=\ttfamily\scriptsize,fill=white,inner sep=1pt},
+  tcp/.style={-{Stealth[length=2.5mm]},thick,torgrigio}]
+  \node[client] (c) at (0,0) {Client};
+  \node[relay,fill=torverde!30] (e) at (6.5,0) {Exit};
+  \node[server] (s) at (10.5,0) {Web server};
+  \foreach \x in {0,6.5,10.5} \draw[torgrigio] (\x,-0.5) -- (\x,-7.3);
+  \draw[cellaf] (0,-1.0) -- node[msg,above]{BEGIN "example.com:80"} (6.5,-1.0);
+  \draw[cellaf,dashed] (0,-1.6) -- node[msg,above]{DATA (optimistic)} (6.5,-1.6);
+  \draw[tcp] (6.5,-1.3) -- node[msg,above]{TCP SYN} (10.5,-1.3);
+  \draw[tcp] (10.5,-2.1) -- node[msg,above]{SYN-ACK} (6.5,-2.1);
+  \draw[risposta] (6.5,-2.6) -- node[msg,above]{CONNECTED (IP, TTL)} (0,-2.6);
+  \draw[tcp] (6.5,-2.9) -- node[msg,above]{request} (10.5,-2.9);
+  \draw[tcp] (10.5,-3.6) -- node[msg,above]{response} (6.5,-3.6);
+  \draw[risposta] (6.5,-4.1) -- node[msg,above]{DATA, DATA, \ldots} (0,-4.1);
+  \draw[cellaf] (0,-4.8) -- node[msg,above]{SENDME (circuit, 100 DATA)} (6.5,-4.8);
+  \draw[risposta] (6.5,-5.5) -- node[msg,above]{DATA, \ldots} (0,-5.5);
+  \draw[tcp] (10.5,-6.1) -- node[msg,above]{FIN} (6.5,-6.1);
+  \draw[risposta] (6.5,-6.7) -- node[msg,above]{END (DONE)} (0,-6.7);
+  \node[font=\scriptsize,text=torgrigio] at (3.25,-7.6) {inside the circuit (3 hops, encrypted)};
+  \node[font=\scriptsize,text=torgrigio] at (8.5,-7.6) {ordinary TCP connection};
+\end{tikzpicture}

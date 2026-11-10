@@ -1,0 +1,97 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{第 \ref{cap:19-rete-privata} 章：私有 Tor 网络}
+
+\begin{soluzione}{es:19-porte}
+\texttt{test006e} 的节点编号为 6，因此 ORPort 是 5106，ControlPort 是 8006。\texttt{test009h} 没有 ORPort：洋葱服务不是中继，不接受其他网络节点主动发起的连接，而是自己向引介点和汇合点建立出站电路。
+\end{soluzione}
+
+\begin{soluzione}{es:19-guard}
+相关选项是目录权威节点 \file{torrc} 中的 \opt{TestingDirAuthVoteGuard}~\texttt{*}。在公共网络中，获得 Guard 标志需要经过一定时间的稳定性与带宽验证（\cref{cap:12-directory}）。在实验网络中，任何中继都可以充当守卫，因此在其中测得的第一跳选择统计，不能代表公共网络的情况。
+\end{soluzione}
+
+\begin{soluzione}{es:19-socks}
+使用 \texttt{--socks5} 时，\texttt{curl} 会自己解析 \texttt{localhost}，再向 Tor 客户端提供 IP 地址。使用 \texttt{--socks5-hostname} 时，它会把域名传给出口解析。在公共网络上访问普通互联网域名时，本地解析会把访问的网站泄露给客户端的 DNS 解析器，以及任何观察该解析器的人，即使后续连接仍通过 Tor。这是典型的 DNS 泄露。
+\end{soluzione}
+
+\begin{soluzione}{es:19-consenso}
+按照 \opt{V3AuthVotingInterval} 的配置，每 20 秒更新一次。因此实验网络每天生成 $86400/20=4320$ 份共识；公共网络中的权威节点每小时投票一次，每天只产生 24 份。
+\end{soluzione}
+
+\begin{soluzione}{es:19-autorita}
+停止一台权威节点后，网络仍能产生共识，因为三台中的多数，即两个签名，已经足够。停止两台后，最后一台无法独自生成具有足够签名的新共识。不过，客户端仍可在旧共识过期后约 24 小时内，将其视为\emph{合理地仍可使用}（\cref{cap:12-directory}），因此一段时间内仍可建立电路。实验网络的共识有效期只有 40 秒，但这一宽限时间仍然是 24 小时。
+\end{soluzione}
+
+\begin{soluzione}{es:19-stem}
+思路：\file{c.get\_network\_status(fingerprint)} 返回对应的共识条目，其中含有 \texttt{address} 和 \file{or\_port} 属性。遍历 \texttt{circ.path} 中的各个元组，取其第一项作为指纹，然后逐个查询。
+\end{soluzione}
+
+\begin{soluzione}{es:19-rete}
+采用与本书网络定义相同的结构，将节点数量改成 \texttt{getN(5)}、\texttt{getN(10)} 和 \texttt{getN(4)}。引导时间取决于硬件。随着网络增长，新增时间主要用于等待中继出现在共识中，以及客户端下载微描述符。
+\end{soluzione}
+
+\begin{soluzione}{es:19-log}
+这是探索性练习。查找涵盖路径选择、发送 \cella{CREATE2} 和 \texttt{EXTEND2}、接收回应以及电路完成的日志。\emph{info} 级别不会记录每一条信元。要获得更详细的信息，可以在客户端 \file{torrc} 中按模块启用 \emph{debug} 日志。
+\end{soluzione}
+
+\begin{soluzione}{es:19-cattura}
+不能。TLS 协商完成后，Tor 信元在加密后传输，\cmd{tcpdump} 只能看到 TLS 记录。地址、端口、记录长度和时间特征仍然可见。这些恰好是流量分析攻击（\cref{cap:26-attacchi}）能够利用的信息。
+\end{soluzione}
+
+\section*{第 \ref{cap:21-onion-pratica} 章：发布洋葱服务}
+
+\begin{soluzione}{es:21-vanity}
+六字符前缀平均需要约 $32^6\approx1.07\times10^9$ 次尝试。每秒尝试一千万次时，耗时约 107 秒。八字符前缀需要约 $32^8\approx1.1\times10^{12}$ 次尝试，约 $1.1\times10^5$ 秒，略超过 30 小时。每多一个字符，预期工作量就乘以 32。
+\end{soluzione}
+
+\begin{soluzione}{es:21-fuga}
+错误页面暴露了 Web 服务器的软件名称和版本，这可能有助于识别漏洞；更重要的是，页面显示了 IP 地址 192.0.2.10，可能是服务器真实的公开地址，使服务位置暴露。应关闭 HTTP 头部和错误页面中的服务器签名，让服务器仅监听 localhost 或 Unix 套接字，并通过实验客户端检查响应。
+\end{soluzione}
+
+\begin{soluzione}{es:21-revoca}
+删除 \file{alice.auth} 并重新加载配置。服务发布新描述符，排除 Alice 的记录，并使用她无法解密的新\emph{描述符 cookie} 进行加密。仍持有旧描述符的客户端，只要此前获知的引介点仍然有效，就可能继续使用它们。若要更彻底地撤销权限，可以通过重启服务等方式轮换引介点。但要注意边界情况：如果 Alice 是唯一获得授权的客户端，删除后目录将变为空目录，原实验中 HSDir 会拒绝这样的描述符（\cref{sec:onionp-ristretta}）。若要彻底关闭受限发现，应删除 \file{authorized\_clients/} 目录，再重新加载配置。
+\end{soluzione}
+
+\begin{soluzione}{es:21-socket}
+设置 \texttt{HiddenServicePort 80 unix:/path/socket}，同时让 Web 服务器监听对应 Unix 套接字。除了避免开放 TCP 端口之外，文件系统套接字还可以使用文件权限保护，不能直接通过网络接口访问，也能防止误将服务暴露在公开接口上。
+\end{soluzione}
+
+\section*{第 \ref{cap:20-traffico} 章：观察流量}
+
+\begin{soluzione}{es:20-dimensioni}
+TLS 记录不会与 Tor 信元的边界对齐。tor 将信元写入缓冲区，TLS 库再将它们组成最大约 16\,KB 的记录，这与每 31 个信元的 \texttt{sendme\_inc} 值有关（\cref{sec:cc}）。TLS 还会添加自身的头部和认证标签。随后 TCP 又可能把 TLS 记录拆成不同的数据段，或把多个记录合并到同一段。固定长度的约束适用于 Tor 信元，而不是网络数据包。
+\end{soluzione}
+
+\begin{soluzione}{es:20-relay}
+思路：收到 \cella{CREATED2} 后，使用 \file{circuit.py} 中保存的各跳密钥，按正确顺序逐层解密电路上的 \cella{RELAY\_EARLY} 和 \cella{RELAY} 信元。AES-CTR 密钥流状态必须严格按照真实使用顺序推进。建立电路时可以看到 \texttt{EXTEND2} 和 \texttt{EXTENDED2}，之后还可能看到 \texttt{BEGIN}、\texttt{CONNECTED}、\texttt{DATA} 和 \texttt{SENDME}。
+\end{soluzione}
+
+\begin{soluzione}{es:20-padding}
+如果客户端通道曾承载多跳电路，即使没有应用流量，也可能每隔几秒出现 TLS 记录。这些记录包含通道级 \cella{PADDING} 信元，其发送间隔在 1.5 到 9.5 秒之间随机变化（\cref{sec:lab-cifratura}）。相比之下，从未承载过多跳电路的通道不会出现这种填充流量。
+\end{soluzione}
+
+\begin{soluzione}{es:20-dissector}
+这是编程练习。注册为解密后 TLS 数据的\emph{启发式解析器}的 Lua 程序，可以在最初的 \cella{VERSIONS} 信元中读取前两个字节作为 CircID，之后则读取四个字节，再读取命令及变长信元的长度字段。应像 \file{traffic.py} 那样，为每条连接、每个方向分别保存状态。
+\end{soluzione}
+
+\section*{第 \ref{cap:22-relay} 章：运行中继或网桥}
+
+\begin{soluzione}{es:22-ordine}
+可以。第一条匹配规则 \texttt{accept *:80} 会允许连接，后续规则不会再被检查。只需对调前两条规则：\texttt{reject 192.0.2.0/24:*}、\texttt{accept *:80}、\texttt{reject *:*}。
+\end{soluzione}
+
+\begin{soluzione}{es:22-riassunto}
+摘要只列出端口，不包含地址，因此必然是一种近似。只有出口允许该端口连接到\enquote{大多数}地址时，摘要才会将其列入。dir-spec 对此有精确定义，并非简单的超过 50\%：排除非公开地址后，出口不能阻断超过 $2^{25}$ 个 IPv4 地址（一个 /7）或 $2^{112}$ 个 IPv6 地址（一个 /16）。客户端收到原因码为 \texttt{EXITPOLICY} 的 \texttt{END} 后，会在指定 TTL 内记住该出口拒绝访问对应地址与端口，并通过包含另一出口的新电路重试流。
+\end{soluzione}
+
+\begin{soluzione}{es:22-famiglia}
+对于 \opt{MyFamily}，只有相互声明才有效。原来的五台中继仍然互为家族成员，但第六台不属于该家族，因为旧中继没有任何一台把它列入。客户端因此可能同时选中第六台与旧家族成员。如果使用家族密钥，只需把相同家族密钥安装到新中继：其签名证书会将它绑定到家族，无须修改其他中继。
+\end{soluzione}
+
+\begin{soluzione}{es:22-refused}
+日志依次报告 \enquote{in-progress connect failed \ldots (Connection refused)} 和 \enquote{Didn't recognize errno 115}。如果流关闭原因直接使用 \texttt{getsockopt(SO\_ERROR)} 返回的错误，客户端就会收到 \texttt{CONNECTREFUSED}。同理，在连接最初返回 \texttt{EINPROGRESS} 后失败时，\texttt{ETIMEDOUT} 可以正确映射为 \texttt{TIMEOUT}，\texttt{ENETUNREACH} 或 \texttt{EHOSTUNREACH} 映射为 \texttt{NOROUTE}，另外还可能正确报告 \texttt{CONNRESET}，而不是全部变为 \texttt{MISC}。对客户端的实际影响很小：错误消息变化，但流失败的处理过程不变。
+\end{soluzione}
+
+\begin{soluzione}{es:22-accounting}
+以 10\,MB/s 的带宽运行，中继每天约传输 864\,GB，以发送和接收流量中较大的一项计入配额。因此，1\,TB 的月配额在略超过一天后就会耗尽。如果一台中继整个月的大部分时间处于离线状态，它会失去 \texttt{Stable} 和 \texttt{Guard} 标志，并在关闭时破坏现有电路。相比之下，整月在线但速度较慢的中继对网络更有价值，因此应该通过 \opt{RelayBandwidthRate} 把流量配额分配到整个统计周期。
+\end{soluzione}

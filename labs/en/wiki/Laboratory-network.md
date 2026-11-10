@@ -1,0 +1,91 @@
+# The Laboratory Network
+
+A complete Tor network—with directory authorities, relays, and an onion service—using loopback services at `127.0.0.1` inside Docker. **Important:** the Makefile uses `--network host`, so the container **shares the host network namespace**; it is not an independent network-isolation boundary. Almost every laboratory in the book uses this private Tor topology. Chapter 19 provides the full explanation.
+
+## Why run your own network?
+
+You should not experiment on the public Tor network. Packets sent there traverse volunteer relays alongside traffic from people who rely on Tor for their safety. An action that is a harmless one-line experiment in a private network may be an attack against strangers on the public network.
+
+On your own network, you can do things that would be inappropriate elsewhere: deliberately break a MAC to inspect relay behavior, exceed the `RELAY_EARLY` limit, trigger anti-DoS defenses, decrypt your own TLS session and inspect its cells one by one.
+
+## Topology
+
+Ten nodes, all running on `127.0.0.1`:
+
+| Node | Role | ORPort | ControlPort | Other |
+|---|---|---:|---:|---|
+| `000a`, `001a`, `002a` | Directory authority and relay | 5100–5102 | 8000–8002 | DirPort 7100–7102 |
+| `003r`, `004r`, `005r` | Middle relay | 5103–5105 | 8003–8005 | |
+| `006e`, `007e` | Exit | 5106, 5107 | 8006, 8007 | Exits toward `127.0.0.0/8` |
+| `008c` | Client | — | 8008 | SocksPort 9008 |
+| `009h` | v3 onion service | — | 8009 | Virtual port 5858 → `127.0.0.1:4747` |
+
+**Port rule:** node *n* uses ORPort `5100+n`, ControlPort `8000+n`, and, if it is a client, SocksPort `9000+n`. This holds throughout the network and across the laboratories: `5103` always belongs to `003r`, and `9008` to the client.
+
+Chutney names nodes `test000a`, `test003r`, and so on. The book and wiki often use the abbreviated names.
+
+Three differences from the public network are important when interpreting results:
+
+- Authorities vote **every 20 seconds**, not once an hour, so a fresh consensus arrives in under a minute.
+- There are only three middle relays, so realistic path diversity constraints—distinct relays, distinct /16 networks and families—cannot be observed as on the public network. [Laboratory 7](Laboratory-07-Path-selection.md) addresses this using a public consensus.
+- All nodes share one IP address, making some defenses ineffective by construction.
+
+The alternative `book-bridge` topology is **not simply the ten-node network plus three nodes**: its Chutney definition has **12 nodes** (three ordinary authorities, one bridge authority, three middle relays, two exits, one obfs4 bridge and two clients, including the bridge client). It **does not include the `009h` onion-service node**. Use it for [Laboratory 10](Laboratory-10-Bridge.md) and restore the regular `book` topology before onion-service laboratories.
+
+## Commands
+
+**Prerequisites and isolation:** use a suitable Linux/Docker host with GNU Make and Docker. Building the image requires Internet access to obtain Tor, Chutney and dependencies; experiments must target only the private topology. Docker **host networking exposes the laboratory's bound ports to the host**, and these ports overlap across language editions. **Do not run two language networks at the same time**. EN/RU/ZH-CN also share Docker image and container names (`torbook-lab:latest`, `torbook-network`), while ES and IT use different names but still share port ranges. Run each command from the repository root, after checking that other language networks have been stopped.
+
+From the repository root:
+
+```bash
+make -C labs/en/lab image       # once: build the English laboratory image
+make -C labs/en/lab start       # create the container and nodes; wait for bootstrap
+make -C labs/en/lab verify      # Chutney end-to-end verification
+make -C labs/en/lab status      # show node status
+make -C labs/en/lab shell       # open a shell in the container
+make -C labs/en/lab stop        # stop nodes and remove the container; keep net/
+make -C labs/en/lab clean       # also delete labs/en/lab/net/
+
+PYTHONPATH=labs/en/code python3 -m pytest -q labs/en/code/torlab/test
+```
+
+For the bridge topology used by Laboratory 10:
+
+```bash
+make -C labs/en/lab clean
+make -C labs/en/lab start NETWORK=book-bridge
+make -C labs/en/lab verify
+```
+
+Return to the ordinary topology by stopping/cleaning this one and starting `book` again. **Warning:** `clean` deletes `labs/en/lab/net/` including generated private keys, onion-service identities and state; the next start creates different identities. The English environment does not depend on the Italian root Makefile targets. The `verify` target checks the currently running Chutney topology, not the complete book's Python test suite.
+
+## File locations
+
+```text
+labs/en/lab/net/nodes/            ten nodes (symlink to nodes.<timestamp>)
+labs/en/lab/net/nodes/003r/
+    torrc                 configuration generated by Chutney
+    fingerprint           RSA identity
+    fingerprint-ed25519   Ed25519 identity checked in the laboratories
+    notice.log            first place to inspect when something breaks
+    pid
+labs/en/lab/net/nodes/008c/cached-microdescs.new    relay ntor keys, as seen by client
+labs/en/lab/net/nodes/009h/hidden_service/hostname  the service's .onion address
+```
+
+`labs/en/lab/net/` is **not version-controlled**. It contains private keys—even if only for a toy network—and is recreated on each `make -C labs/en/lab clean && make -C labs/en/lab start`. Every fresh initialization changes node identities. The fingerprints in your output will therefore differ from those recorded in the book and this wiki, which is expected.
+
+The `torlab.laboratory` module reads these files for you:
+
+```python
+from torlab.laboratory import relay
+r = relay("003r")
+print(r.port, r.id_ed.hex()[:16], r.ntor.hex()[:16])
+```
+
+## Safety rules
+
+Laboratory scripts deliberately generate unusual traffic: malformed cells, exceeded limits, repeated probes, and packet captures. Run them **only on this private network**. Running them against real relays or services harms their users and may be illegal. Chapter 25 discusses relevant legal questions.
+
+Laboratories 7, 15, and 19 analyze **archived public directory documents** obtained from Tor Project CollecTor; they do not direct experimental traffic at public Tor relays or end users. The initial download requires an **HTTPS Internet connection** and must not be confused with an entirely offline build.

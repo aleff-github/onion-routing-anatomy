@@ -1,0 +1,152 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Measuring the Network: Tor Metrics and OONI}\label{cap:24-metrics}
+\aggiornatoal{23 September 2026}{Tor Metrics data through 20 September 2026; consensus of 23 September 2026 at 15:00; OONI specifications ts-023 and ts-030}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item describe the data the Tor Project publishes and where they come from;
+  \item explain how to estimate user numbers on a network designed not to know its users, and how uncertain such estimates are;
+  \item extract network statistics from a real consensus (Laboratory~15);
+  \item explain how OONI measures Tor blocking from users' perspectives.
+\end{itemize}
+\end{obiettivi}
+
+An anonymity network poses a curious problem for its operators: improving it requires measurement, but measurement means gathering information about precisely what it is supposed to protect. The Tor Project's approach is to measure sparingly, aggregate and publish results, and document every step so anyone can reproduce the calculations~\cite{metricsreproducible}. This chapter follows the data from their origins to the charts, then looks at the network from the outside through OONI's measurements.
+
+% ---------------------------------------------------------------------------
+\section{Data Sources}\label{sec:metrics-fonti}
+
+Almost everything publicly known about the Tor network comes from documents we have already encountered:
+\begin{description}
+  \item[Consensus and descriptors] (\cref{cap:12-directory}): the relay list, flags, bandwidth weights, versions, and exit policies.
+  \item[Extra-info descriptors] Published by each relay alongside its descriptor, these contain historical byte-transfer counts and aggregate statistics, including directory-request counts broken down by country.
+  \item[Active measurements] OnionPerf periodically downloads files through Tor from selected locations worldwide, recording transfer times and failures.
+\end{description}
+\textbf{CollecTor} archives these documents, going back to the network's early years, and makes them downloadable. \textbf{Tor Metrics} derives charts and tables from them, accompanied by downloadable CSV data and documented methods. \textbf{Relay Search} supports queries about individual relays. The consensus used in this book's laboratories (\file{fonti/collector}) came from CollecTor.
+
+% ---------------------------------------------------------------------------
+\section{Counting Anonymous Users}\label{sec:metrics-utenti}
+
+Tor does not register users, and no relay can tell whether two connections belong to one person. How, then, can the network estimate that it has roughly three million users? The method is indirect (\cref{fig:stima}). Every client periodically downloads a consensus, and directory requests can be counted without identifying requesters. Directory-serving relays count successful requests each day, grouped by country inferred from the source address. They publish aggregate totals in extra-info descriptors, rounding country counts upward to multiples of eight so that small, precise counts disclose less information~\spec{dir-spec}{Extra-info document format}.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig24-estimate}
+\caption{From successful directory requests to an indirect estimate of \emph{average connected clients}, not distinct people. Directory-serving relays and bridges provide separate aggregate series in extra-info descriptors, including country counts in \texttt{dirreq-v3-reqs}, rounded upward to multiples of 8. CollecTor archives these data; Tor Metrics corrects binning by subtracting 4 from valid counts, estimates the reporting coverage $\mathit{frac}$ and applies $\lfloor r(R)/(\mathit{frac}\cdot10)\rfloor$. The divisor 10 is an assumption about average requests per client per day. Dates with $\mathit{frac}<10\%$ or $\mathit{frac}>110\%$ are excluded.}
+\label{fig:stima}
+\end{figure}
+
+Tor Metrics collects these figures and applies three steps~\cite{metricsreproducible}:
+\begin{enumerate}
+  \item Account for rounding by subtracting half the rounding interval from each value.
+  \item Estimate the \textbf{fraction}, $\mathit{frac}$, of network-wide directory requests covered by reporting relays, accounting for how long each relay remained operational and how much directory traffic it served.
+  \item Divide reported requests by that fraction to estimate the network total, then divide by 10:
+\[ r(N) = \left\lfloor \frac{r(R)}{\mathit{frac} \cdot 10} \right\rfloor. \]
+\end{enumerate}
+The divisor 10 is an assumption. A continuously active client makes about 15 requests daily, but many clients are online for only part of the day, and the Tor Project chose 10 as the average. Estimates with a reporting fraction below 10\,\% or above 110\,\% are discarded.
+
+\begin{attenzione}[What \enquote{Users} Means]
+The result estimates the number of \emph{connected clients on average}, not individual people. A client online for two hours daily generally generates fewer requests than one online around the clock, but the ratio is not fixed; multiple programs running Tor on one machine count as multiple clients. Changes in software behavior, such as fetching consensuses less frequently, alter the estimate even when the number of people remains unchanged. Charts are most useful for interpreting \emph{changes}, not absolute numbers.
+\end{attenzione}
+
+\paragraph{The numbers at the book's reference date.} From 1 August through 20 September 2026, estimated daily directly connected users fluctuated between 2.8 and 3.5 million, with reporting fractions between 57\,\% and 73\,\%. The Italian average was approximately 60\,000, but daily results carry wide expected intervals: on 20 September, for example, about 34\,000 to 111\,000. Changes within ranges like these do not, by themselves, demonstrate an event. On that same day, estimated bridge users numbered about 98\,000 for obfs4, 60\,000 for Snowflake, and 35\,000 for WebTunnel.
+
+\subsection{Detecting Censorship}
+
+Metrics uses the same time series to flag potential censorship events. For countries with substantial user counts, it compares each country's week-on-week change with changes typical of other countries and highlights dates when that country falls outside the expected interval~\cite{metricsreproducible}. A sudden drop in direct users accompanied by a rise in bridge users is a characteristic sign of blocking. It is a clue, not proof. Confirmation requires measurements from inside the country, which is OONI's role.
+
+% ---------------------------------------------------------------------------
+\section{Performance}\label{sec:metrics-prestazioni}
+
+OnionPerf measures, from fixed locations, the time required to download files of various sizes over Tor, failures, and circuit latency: the interval between sending an HTTP request and receiving the response headers~\cite{metricsreproducible}. On 20 September 2026, median latency to a public server was about 110--140\,ms from the German measurement point, 280\,ms from the US point, and more than 500\,ms from Hong Kong. Geographic distance from the network's main concentration in Europe and North America matters. Some measurement points use Conflux, the multipath system described in \cref{cap:31-futuro}, allowing comparisons under similar conditions.
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: Reading a Real Consensus}\label{sec:lab-metrics}
+
+\begin{laboratorio}[15]{Deriving network statistics from a consensus}
+\textbf{Objective.} Extract key network statistics from a real CollecTor consensus using a new module, \file{labs/en/code/torlab/metrics.py}.\\
+\textbf{Prerequisites.} Laboratory~6 (\file{directory.py}) and Laboratory~7 (\file{path\_selection.py}); no running network required.\\
+\textbf{Estimated time.} 1 hour.
+\end{laboratorio}
+
+The module adds a \texttt{summary} function reusing Laboratory~6's consensus parser, along with the two user-estimation functions. Counts are also sorted by name when values tie. Without this precaution, their order would change across runs according to Python's set iteration order. For the historical consensus of 23 September 2026 at 15:00, first prepare the snapshot from the repository root with \texttt{make -C labs/en data} (this preparation needs Internet access). Applied to that consensus (output abbreviated):
+\begin{lstlisting}[language=bash,numbers=none]
+$ PYTHONPATH=labs/en/code python3 -m torlab.metrics labs/en/data/collector/consensus-microdesc-2026-09-23-15
+relay: 9358
+flag: {'Running': 9358, 'Valid': 9358, 'Fast': 8961, 'Stable': 8199,
+       'V2Dir': 7674, 'Guard': 5306, 'HSDir': 4050, 'Exit': 3177,
+       'BadExit': 32, 'MiddleOnly': 28, 'StaleDesc': 21, 'Authority': 10}
+total_bandwidth: 198927900
+exit_bandwidth_share: 0.3308947161257923
+guard_bandwidth_share: 0.7010271560701139
+versions: [('Tor 0.4.9.12', 6027), ('Tor 0.4.9.11', 2520), ...]
+networks16: [('64.65', 771), ('192.42', 636), ('204.8', 598), ...]
+\end{lstlisting}
+
+A few observations:
+\begin{itemize}
+  \item The 9,358 relays are consistent with the Tor Metrics chart, which reports 9,416 relays and 2,333 bridges on 20 September.
+  \item Roughly one-third of relays have the \texttt{Exit} flag and account for roughly one-third of measured bandwidth; guards account for 70\,\%. These fractions overlap because a relay can hold both flags. The imbalance is addressed by the bandwidth weights discussed in \cref{sec:percorso-pesi}.
+  \item \texttt{BadExit} (32 relays) and \texttt{MiddleOnly} (28) reflect authority decisions about suspect or misconfigured relays.
+  \item Ten relays carry the \texttt{Authority} flag, but only nine authorities vote on the consensus (\cref{sec:arch-ruoli}). The tenth is \texttt{Serge}, the bridge authority, which has the flag but does not vote.
+  \item Most relays run recent 0.4.9 versions.
+  \item Several /16 networks host hundreds of relays, typically large exit operators. The one-relay-per-/16 rule for circuit selection (\cref{sec:percorso-vincoli}) limits reliance on any single network.
+\end{itemize}
+The sum of consensus bandwidth weights represents bandwidth units measured by the authorities, not actual transferred traffic. To estimate traffic, Metrics uses byte histories in extra-info descriptors.
+
+% ---------------------------------------------------------------------------
+\section{OONI}\label{sec:metrics-ooni}
+
+The \emph{Open Observatory of Network Interference} (OONI) measures Internet censorship from users' perspectives. Volunteers worldwide install OONI Probe, which periodically runs tests and publishes open results. Some tests specifically concern Tor~\cite{oonitor}:
+\begin{description}
+  \item[\texttt{tor}] Checks reachability of selected directory authorities and bridges. Tests go beyond opening a TCP connection and perform protocol-specific actions, such as an obfs4 handshake.
+  \item[\texttt{torsf}] Attempts to start tor using Snowflake, recording whether bootstrap succeeds and how long it takes.
+\end{description}
+The test specifications contain safeguards to prevent publication of private bridge addresses: including them in results would hand them to censors. Metrics and OONI complement each other. Metrics may show a decline in users from a country; OONI can investigate whether relays or bridges were actually unreachable from within that country and identify the blocking technique.
+
+\begin{approfondimento}[Measure Without Harming]
+Every statistic a relay publishes is a trade-off. Greater detail makes data more useful but increases the risk of disclosing information. This is why counts are rounded and aggregated by day and country. Network research follows the same principles (\cref{sec:rp-perche}): collect the minimum necessary, aggregate before publication, and do not retain unnecessary data.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item Network data originate from consensuses, descriptors, and extra-info documents archived by CollecTor and from OnionPerf active measurements. Tor Metrics analyzes them using documented, reproducible methods.
+  \item Users are estimated from directory requests: reported requests divided by the covered fraction and then by 10. This estimates average connected clients and is especially useful for studying changes.
+  \item The same data can suggest possible censorship events that require confirmation through local measurements.
+  \item A real consensus provides relay counts, flags, bandwidth shares, versions, and network-level concentration.
+  \item OONI measures authority and bridge reachability and Snowflake operation from within countries.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:24-dieci}
+If all clients started downloading consensuses half as often, what would happen to the user estimate, assuming the number of people stayed constant? How might someone interpreting the charts notice the change?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:24-frazione}
+On one day, reporting relays recorded twenty million requests, and the estimated reporting fraction was 60\,\%. How many users would Metrics estimate? What if the fraction were 8\,\%?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:24-flag}
+Extend \texttt{summary} to compute the bandwidth share of relays carrying both \texttt{Guard} and \texttt{Exit}, and the overall weighted probability that a circuit's exit belongs to one of the five most represented /16 networks.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:24-censura}
+Download direct-user and bridge-user time series from Metrics for a country with a documented Tor-blocking event. Describe what happens to the two series on the dates of the block.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:24-privacy}
+Country-level counts are rounded upward to multiples of eight. Describe an attack made more difficult by this rounding, and explain why it does not protect against an adversary controlling many relays.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item The Tor Project's \titolo{Reproducible Metrics} page~\cite{metricsreproducible}, explaining the methods behind individual charts.
+  \item OONI test specifications~\cite{oonitor} and OONI Explorer, \url{https://explorer.ooni.org/}.
+  \item The extra-info descriptor format, \spec{dir-spec}{Extra-info document format}.
+\end{itemize}

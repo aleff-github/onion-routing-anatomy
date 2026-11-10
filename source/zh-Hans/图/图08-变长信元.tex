@@ -1,0 +1,15 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 替代文本。
+\altfig{链路协议已协商为 v4 或以上时，Tor 变长信元的格式为：CircID 在偏移 0，占 4 字节；Command 在偏移 4，占 1 字节；Length 在偏移 5，占 2 字节，是网络字节序的大端无符号整数；Body 从偏移 7 开始，恰有 Length 字节。信元总长为 7 + Length 字节，Length 取值 0 到 65535，不需要额外填充。例外是协商前的 VERSIONS 信元，它始终使用含 2 字节 CircID 的 v0 头部。图中宽度不按比例。}
+% 变长信元：已协商链路协议 v4+（宽度不按比例）；VERSIONS 使用 v0 头部。
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\small,inner sep=2pt}]
+  \node[campo,fill=torviola!15,minimum width=2.6cm] (c) {CircID (4)};
+  \node[campo,fill=torviola!35,minimum width=1.6cm,right=0pt of c] (k) {Cmd (1)};
+  \node[campo,fill=torviola!55,text=white,minimum width=2cm,right=0pt of k] (l) {Length (2)};
+  \node[campo,fill=torverde!15,minimum width=5cm,right=0pt of l] (b) {主体};
+  \foreach \n/\o in {c/0,k/4,l/5,b/7} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (b.north east) {$7+\mathit{Length}$};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]b.south west) -- ([yshift=-2pt]b.south east)
+    node[midway,below=6pt,font=\sffamily\small] {\textit{Length} 字节};
+\end{tikzpicture}

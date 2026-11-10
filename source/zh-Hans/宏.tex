@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% 复用意大利文版的内部标记和 TikZ 样式，但覆盖所有面向读者的名称。
+\input{../it/macro}
+\renewcommand{\proposta}[1]{提案~#1\index{提案!#1}}
+% 保留第 2 个参数中的英文协议术语，避免译文丢失原文对应词。
+\renewcommand{\termine}[2]{\emph{#1}（#2）\index{#1}}
+\renewcommand{\aggiornatoal}[2]{%
+  \begin{center}\small\color{torgrigio}\textit{最后核验：#1 --- #2}\end{center}}
+\renewcommand{\dacontrollare}[1]{\textcolor{avviso}{\textbf{[待核验：#1]}}}
+\renewtcolorbox{obiettivi}{base,colback=torviola!5,colframe=torviola,title={本章目标}}
+\renewtcolorbox{approfondimento}[1][]{base,colback=torgrigio!4,colframe=torgrigio,title={深入说明\ifx&#1&\else：#1\fi}}
+\renewtcolorbox{attenzione}[1][]{base,colback=avviso!5,colframe=avviso,title={注意\ifx&#1&\else：#1\fi}}
+\renewtcolorbox{storia}[1][]{base,colback=torverde!5,colframe=torverde!70!black,title={历史说明\ifx&#1&\else：#1\fi}}
+\renewtcolorbox{specbox}[1]{base,colback=white,colframe=torviola!60,title={规范原文：#1}}
+\renewtcolorbox{laboratorio}[2][]{base,colback=torverde!4,colframe=torverde!60!black,
+  title={\ifx&#1&\refstepcounter{laboratorio}实验 \thechapter.\arabic{laboratorio}\else 实验~#1\fi：#2}}
+\renewenvironment{esercizio}[1][1]{\refstepcounter{esercizio}\par\medskip
+  \noindent\textbf{练习 \theesercizio}\ \stelle{#1}\quad}{\par}
+\renewenvironment{soluzione}[1]{\par\medskip\noindent\textbf{解答 \ref{#1}。}\quad}{\par}

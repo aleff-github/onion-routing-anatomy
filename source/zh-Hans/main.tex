@@ -1,0 +1,35 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% 简体中文版：PDF 入口。
+\documentclass[11pt,openright,twoside]{book}
+\input{导言}
+\input{宏}
+\input{版权}
+\hypersetup{pdftitle={Tor 解剖}, pdfsubject={逐字节解析匿名协议},
+  pdfauthor={Alessandro Greco}, pdflang={zh-Hans}}
+\title{Tor 解剖\\[0.5em]\large 逐字节解析匿名协议}
+\author{Alessandro Greco}
+\date{第一版 --- 版本 1.0.0}
+% 紧跟在行内标题（\paragraph）之后的代码清单会从标题所在行开始：边框的上边线
+% 从标题之后画起并超出页面。这里让标题单独占一行（与 source/it/main.tex 中的修正相同）。
+\makeatletter
+\AddToHook{env/lstlisting/before}{\if@noskipsec\leavevmode\par\fi}
+\makeatother
+
+\begin{document}
+\frontmatter
+\maketitle
+% 版权页位于书名页背面。
+\thispagestyle{empty}
+\null\vfill
+\Colophon
+\clearpage
+\tableofcontents
+\include{章节/00-前言}
+
+\mainmatter
+\input{结构}
+\backmatter
+\printbibliography[heading=bibintoc,title={参考文献}]
+\printindex
+\end{document}

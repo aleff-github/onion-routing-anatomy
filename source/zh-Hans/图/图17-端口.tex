@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 无障碍替代文本。
+\altfig{tor 架构示例：浏览器和 curl 经由本机的 SocksPort 9050 连接；Stem 和 Nyx 仅在启用 ControlPort 9051 并使用 cookie 或密码认证时连接。SOCKS 和控制协议本身不提供链路加密，因此这些本地监听端口不应对网络开放。DataDirectory 是保存密钥、状态和缓存的文件系统目录，并不是端口。中继（包括网桥）可在 ORPort 443 接受来自其他节点的连接；443 只是示例端口，不是必选值。}
+% tor 进程的示例端口与数据目录
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  porta/.style={draw,rounded corners=1pt,fill=torviola!10,minimum height=0.55cm,minimum width=2.9cm,font=\ttfamily\scriptsize},
+  dir/.style={draw=torgrigio,rounded corners=1pt,fill=torgrigio!10,minimum height=0.55cm,minimum width=2.9cm,font=\ttfamily\scriptsize},
+  app/.style={draw=torgrigio,fill=torgrigio!8,rounded corners=2pt,minimum height=0.6cm,minimum width=2.1cm}]
+  \node[draw=torviola,fill=torviola!5,rounded corners=4pt,minimum width=3.6cm,minimum height=4.3cm] (tor) at (4.6,0) {};
+  \node[font=\sffamily\small,text=torviola] at (4.6,1.85) {\textbf{tor 进程}};
+  \node[porta] (socks) at (4.6,1.0) {SocksPort 9050};
+  \node[porta] (ctrl) at (4.6,0.2) {ControlPort 9051};
+  \node[porta] (or) at (4.6,-0.6) {ORPort 443};
+  \node[dir] (dd) at (4.6,-1.5) {DataDirectory};
+  \node[app] (br) at (0.6,1.0) {浏览器、curl};
+  \node[app] (st) at (0.6,0.2) {Stem, Nyx};
+  \node[app,fill=torverde!12,draw=torverde!60!black] (rete) at (9.0,-0.6) {Tor 网络};
+  \draw[->] (br) -- (socks); \draw[<->] (st) -- (ctrl); \draw[<->] (or) -- (rete);
+  \node[anchor=west,font=\sffamily\tiny,align=left,text=torgrigio] at (6.6,1.0) {仅限本机：\\SOCKS 不加密};
+  \node[anchor=west,font=\sffamily\tiny,align=left,text=torgrigio] at (6.6,0.2) {启用时需认证：\\cookie 或密码};
+  \node[anchor=west,font=\sffamily\tiny,align=left,text=torgrigio] at (6.6,-1.5) {密钥、守卫状态、\\共识缓存};
+  \node[font=\sffamily\tiny,text=torgrigio,align=center] at (4.6,-2.5) {ORPort 443 仅为示例\\适用于中继与网桥};
+\end{tikzpicture}

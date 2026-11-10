@@ -1,0 +1,19 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible para el EPUB.
+\altfig{El diagrama muestra un circuito cliente–guardia–intermedio–salida con tres canales y CircID locales, no nulos y distintos: 0x8000A1C3 en el canal 1, 0x0000712F en el canal 2 y 0x93B40E07 en el canal 3. La tabla del guardia asocia el primero con el segundo; la del intermedio, el segundo con el tercero. En enlaces v4+ el CircID tiene 32 bits y su bit más significativo depende de qué extremo inició la conexión del canal, no del número del salto. Comparar solo los CircID no permite vincular directamente dos enlaces, pero otras observaciones del tráfico pueden permitir correlación.}
+% Los CircID solo tienen validez local al canal.
+\begin{tikzpicture}[node distance=2.9cm]
+  \node[client] (cl) {Cliente};
+  \node[relay,right=of cl] (g) {Guardia};
+  \node[relay,right=of g] (m) {Intermedio};
+  \node[relay,right=of m] (x) {Salida};
+  \draw[thick,torgrigio] (cl) -- node[above,font=\sffamily\scriptsize]{canal 1} node[below,font=\ttfamily\scriptsize,text=torviola]{0x8000A1C3} (g);
+  \draw[thick,torgrigio] (g) -- node[above,font=\sffamily\scriptsize]{canal 2} node[below,font=\ttfamily\scriptsize,text=torviola]{0x0000712F} (m);
+  \draw[thick,torgrigio] (m) -- node[above,font=\sffamily\scriptsize]{canal 3} node[below,font=\ttfamily\scriptsize,text=torviola]{0x93B40E07} (x);
+  \node[below=0.9cm of g,draw=torgrigio,fill=white,font=\ttfamily\scriptsize,align=left] (tg)
+    {(can.1, 0x8000A1C3)\\\hspace*{1em}$\leftrightarrow$ (can.2, 0x0000712F)};
+  \node[below=0.9cm of m,draw=torgrigio,fill=white,font=\ttfamily\scriptsize,align=left] (tm)
+    {(can.2, 0x0000712F)\\\hspace*{1em}$\leftrightarrow$ (can.3, 0x93B40E07)};
+  \draw[dotted] (g) -- (tg); \draw[dotted] (m) -- (tm);
+\end{tikzpicture}

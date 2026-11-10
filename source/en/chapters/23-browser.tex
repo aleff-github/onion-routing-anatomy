@@ -1,0 +1,160 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Tor Browser, Tails, and Whonix}\label{cap:23-browser}
+\aggiornatoal{23 September 2026}{Tor Browser design document (2018); Tor Browser manual; Tails and Whonix documentation}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item explain why configuring an ordinary browser to use Tor is insufficient;
+  \item list the security and privacy requirements behind Tor Browser's design;
+  \item connect Tor Browser's per-site isolation with tor's stream isolation;
+  \item compare what Tor Browser, Tails, and Whonix protect and the costs of each approach.
+\end{itemize}
+\end{obiettivi}
+
+The 2004 threat model explicitly stated that Tor does not normalize application protocols (\cref{sec:minaccia-nonobiettivi}). If the browser reveals your identity, onion routing cannot save you. This chapter examines tools designed to address precisely that layer: Tor Browser, which makes the browser consistent with the network's protections, and two operating systems, Tails and Whonix, which extend the approach to the whole computer.
+
+% ---------------------------------------------------------------------------
+\section{Why a Proxy Is Not Enough}\label{sec:browser-proxy}
+
+Configuring an ordinary browser to use tor's SocksPort hides the IP address in many circumstances, but not all, and conceals little else:
+\begin{itemize}
+  \item Some components may connect outside the proxy: local DNS resolution, WebRTC, extensions, or external programs launched from the browser.
+  \item Cookies and other browser state link today's visits to yesterday's, perhaps made without Tor.
+  \item A site can collect dozens of browser characteristics---window size, installed fonts, language, time zone, rendering details---and combine them into a \textbf{fingerprint} distinguishing one user from millions.
+  \item If all tabs use the same circuit, a tracker embedded in several websites may observe requests from the same exit at the same time.
+\end{itemize}
+The first issue threatens the address; the others threaten \emph{unlinkability} between activities, one of Tor's central goals.
+
+% ---------------------------------------------------------------------------
+\section{Tor Browser}\label{sec:browser-tb}
+
+Tor Browser is a modified version of Mozilla's extended-support Firefox branch, distributed by the Tor Project together with tor. Its design is described in a document that, although no longer current in every detail, remains an important statement of its principles~\cite{perry2018torbrowser}. It separates requirements into two groups.
+
+\paragraph{Security requirements.} These concern safe use of Tor; violating them may expose a user immediately:
+\begin{description}
+  \item[Proxy obedience] No content may bypass tor.
+  \item[State separation] No information may be shared with other browsers or sessions outside Tor.
+  \item[No persistent traces] Nothing revealing browsing activity should remain on disk or in memory beyond the session unless the user explicitly chooses to retain it.
+  \item[Application isolation] Anything the browser leaves on the system must be removable by deleting it.
+\end{description}
+
+\paragraph{Privacy requirements.} These prevent different activities from being linked and are organized around the \textbf{address-bar origin}, the site the user is visiting:
+\begin{description}
+  \item[Identifiers] Data stored by a third party, such as a tracker embedded on several sites, while visiting one site must not become available to that party when it appears on another.
+  \item[Fingerprints] Browser characteristics must not permit linkage across different websites.
+  \item[Long-term unlinkability] A user must be able to clear all state and obtain a new identity through one simple action.
+\end{description}
+The document also offers a useful design principle: protections should not undermine how users expect a browser to behave. Tor Browser's predecessor, the Torbutton extension, let users toggle Tor within the same browser. Users confused tabs opened in different states. An interface that induces mistakes is itself a security weakness.
+
+\subsection{One Circuit per Site}
+
+Origin isolation extends to the network. Tor Browser identifies the address-bar site in the SOCKS credentials it sends to tor. By default, tor isolates streams carrying different credentials (\opt{IsolateSOCKSAuth}) onto different circuits. We verified this mechanism in Laboratory~11 (\cref{sec:lab-stem}). From the user's perspective, as described in the manual~\cite{tbmanual}, two websites embedding the same tracker use distinct circuits, while tabs showing the same site share one.
+
+Two commands act on this arrangement:
+\begin{description}
+  \item[New Circuit for This Site] Reloads the current site over a new circuit, for example when an exit cannot reach it. It does not clear browser state or change other sites' circuits.
+  \item[New Identity] Closes all tabs, clears cookies, history, and other state, and obtains new circuits for all activity, implementing the long-term unlinkability requirement.
+\end{description}
+Neither action changes the guard, which remains stable for months for the reasons explained in \cref{sec:guard}.
+
+Per-site isolation is a \emph{separation between sites}, not a promise that each site has exactly one circuit throughout a session: circuits age out and can be replaced. \enquote{New Circuit for This Site} reloads the active tab; other tabs at that site will adopt the replacement circuit when reloaded, while existing connections are not necessarily interrupted. \enquote{New Identity} also stops ongoing activity and downloads. Neither option is intended to rotate the entry guard; tor manages that separately.
+
+\subsection{Resisting Fingerprints}
+
+Tor Browser's strategy against fingerprinting is not to make every user different, but to make users look \emph{alike}. If all Tor Browser users expose the same values, a fingerprint says little more than \enquote{this is a Tor Browser user}. Several visible design choices follow. Windows open at rounded sizes, and resizing adds margins around page content to keep the reported dimensions in standardized increments (\emph{letterboxing}). The reported time zone is UTC. Many interfaces exposing operating-system details are disabled or standardized. This also explains why installing extensions or changing settings is discouraged: every difference shrinks the crowd in which a user can hide, the same anonymity-set principle discussed in \cref{cap:01-anonimato}.
+
+The objective is to \emph{minimize observable differences}, not to make every fingerprint literally identical. Platform, language, security level and other attributes can still place users in distinguishable groups. The result is a reduction in uniqueness, not a guarantee of perfect uniformity.
+
+\subsection{Security Levels}
+
+Many browser vulnerabilities exploit JavaScript and complex features. Tor Browser provides three levels~\cite{tbmanual}:
+\begin{description}
+  \item[Standard] All features are enabled; this is the default.
+  \item[Safer] JavaScript is disabled on non-HTTPS sites; some fonts and mathematical symbols are disabled; audio and video start only after a click.
+  \item[Safest] JavaScript is disabled everywhere, and images and other content may also be restricted. Static websites remain usable.
+\end{description}
+Choosing a level balances security and usability. The choice can itself affect fingerprinting, since a website may infer the selected level.
+
+\begin{approfondimento}[Reproducible Builds]
+People downloading Tor Browser need confidence that the distributed binary corresponds to the published code. The Tor Project produces \emph{reproducible builds}: using the same source code and build environment should yield bit-for-bit identical files. The design document describes the work required to eliminate sources of differences, including dates, file paths, and archive member ordering~\cite{perry2018torbrowser}. An independent rebuild and comparison of the outputs can detect malicious changes inserted into a distribution build environment.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Beyond the Browser}\label{sec:browser-sistemi}
+
+Tor Browser protects its own traffic, not that of unrelated applications on the same computer. Those applications can still connect directly, and a mistake or exploited browser vulnerability may reveal the real address. Two operating systems extend protection to the whole machine through distinct architectures (\cref{fig:architetture}).
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig23-architectures}
+\caption{Three routing and isolation models, not absolute anonymity guarantees. (a) Tor Browser routes its own traffic over tor, but unrelated applications on the host may connect directly. (b) Tails normally enforces Tor routing with firewall rules that block application bypass; its \emph{Unsafe Browser} for captive portals is an explicit non-anonymous exception. Tails runs as a live USB system, mainly in RAM, with optional persistent storage. (c) Whonix separates application Workstation and tor Gateway into two VMs on an isolated virtual network; compromise of the host or hypervisor can still defeat that isolation.}
+\label{fig:architetture}
+\end{figure}
+
+\subsection{Tails}
+
+Tails is a Debian-based operating system booted from a USB drive~\cite{tailsabout}. It has two defining properties:
+\begin{description}
+  \item[Everything through Tor] Applications attempting to reach the Internet without tor are blocked.
+  \item[Amnesia] The system runs in memory, does not write to the computer's disk, and forgets its state at shutdown. Data the user chooses to retain is stored in optional encrypted \emph{persistent storage} on the USB drive.
+\end{description}
+Tails includes Tor Browser and other cautiously configured applications. The project joined the Tor Project in September 2024~\cite{torblogtails}. Its documentation is explicit about limits: Tails cannot protect against tampered hardware, such as a physical keylogger, or against a USB drive prepared on an already infected computer.
+
+These are properties of Tails under its normal operating assumptions, \emph{not an absolute guarantee} that no storage device can ever hold traces. Users may explicitly access disks or create persistent files, while malware, compromised hardware and activity outside Tails can also undermine this threat model.
+
+\subsection{Whonix}
+
+Whonix separates its functions into two virtual machines. The \textbf{Gateway} runs tor and is the only virtual machine connected to the external network. The \textbf{Workstation} runs applications and connects only to the Gateway through an internal virtual network. All Workstation traffic must therefore pass through tor by architecture rather than merely by application configuration. Compared with Tails, this provides stronger separation: even an attacker gaining administrative control over the Workstation cannot directly learn the real address, because that machine does not know it. The trade-offs are dependence on the virtualization software's security and the absence of amnesia unless Whonix runs inside a system that provides it.
+
+Separating the Gateway and Workstation is a valuable boundary, \emph{not an absolute guarantee} against a compromised Workstation. An attacker may still reveal the user's identity through application data; compromise of the host, hypervisor, or Gateway could also defeat the network boundary. Firewall integrity and deployment configuration remain essential.
+
+\paragraph{A filtered control port.} Some Workstation applications, including Tor Browser's New Identity function, need to communicate with tor's ControlPort on the Gateway. Yet the control protocol (\cref{sec:stem-protocollo}) also allows requests for tor's public address using \texttt{GETINFO address}, precisely what the Workstation should not learn. Whonix therefore inserts \emph{onion-grater}, a proxy allowing only explicitly permitted commands~\cite{whonixgrater}. A feature harmless in one context can become a leak in another.
+
+\begin{attenzione}[Tools Cannot Replace Good Habits]
+Tor Browser, Tails, and Whonix reduce possible technical mistakes but not behavioral ones: signing into a personal account, opening downloaded documents outside a protected environment, or disclosing identifying details. \Cref{cap:28-opsec} addresses that layer.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item An ordinary browser behind Tor may leak traffic outside its proxy and, more importantly, link activities through shared state, fingerprints, or circuits.
+  \item Tor Browser follows explicit design requirements: proxy obedience, separation of state, limited persistence, unlinkability between sites, and an accessible New Identity function.
+  \item Per-site isolation relies on SOCKS credentials and tor's stream isolation.
+  \item Tor Browser counters fingerprinting by standardizing users' observable characteristics; security levels reduce the attack surface.
+  \item Tails forces all traffic through Tor and avoids persistent traces; Whonix confines applications inside a machine that does not know the real network address.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:23-identita}
+In terms of circuits and browser state, what is the difference between \enquote{New Circuit for This Site} and \enquote{New Identity}? Why does neither change the guard?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:23-estensioni}
+A user installs an advertisement-blocking extension in Tor Browser, believing it will improve privacy. What might the user gain and lose?
+\end{esercizio}
+
+\textbf{Methodological note.} Laboratory~11 simulates distinct SOCKS credentials; it does not create three real Tor Browser tabs. Matching credentials may reuse a circuit but are not guaranteed to do so at every moment, because circuits age out and other isolation rules can apply.
+
+\begin{esercizio}[2]\label{es:23-isolamento}
+Using the laboratory network and Laboratory~11's script, simulate three tabs: two visiting the same site and one visiting another, with the site name as the SOCKS credential. Check through the ControlPort which streams share a circuit.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:23-scelta}
+For each scenario, identify which tool among Tor Browser, Tails, and Whonix fits the stated needs, and explain your reasoning: (a) someone browsing censored websites from their home computer; (b) a journalist processing confidential documents on other people's computers; (c) a researcher running several long-lived programs that must all use Tor.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:23-impronta}
+Choose five browser properties that websites can read through JavaScript and estimate how many bits of information each exposes in an ordinary browser. How does Tor Browser standardize them, and which differences remain among users?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item M.~Perry, E.~Clark, S.~Murdoch, G.~Koppen, \titolo{The Design and Implementation of the Tor Browser}~\cite{perry2018torbrowser}.
+  \item The Tor Browser manual~\cite{tbmanual}.
+  \item Tails documentation~\cite{tailsabout} and Whonix documentation, especially the onion-grater page~\cite{whonixgrater}.
+\end{itemize}

@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% English EPUB alternative description.
+\altfig{Decrypted traditional tor1 RELAY cell body: an 11-byte header comprising Cmd (1 byte at offset 0), Recognized (2 at 1), StreamID (2 at 3), Digest (4 at 5), and Length (2 at 9). Length bytes of data follow at offset 11, at most 498 bytes, with optional padding ending at offset 509. When originating a cell, Recognized is set to zero; the legacy running digest also includes padding. When space remains, the specification recommends up to four initial zero bytes followed by random bytes: if fewer than four bytes remain, all are zero, and if Length equals 498 there is no padding. Receivers must not rely on padding contents.}
+% Decrypted RELAY cell body, traditional format.
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\scriptsize,inner sep=1pt,align=center}]
+  \node[campo,fill=torviola!35,minimum width=1.2cm] (a) {Cmd\\(1)};
+  \node[campo,fill=torviola!15,minimum width=1.6cm,right=0pt of a] (b) {Recognized\\(2)};
+  \node[campo,fill=torviola!15,minimum width=1.4cm,right=0pt of b] (c) {StreamID\\(2)};
+  \node[campo,fill=torviola!15,minimum width=1.4cm,right=0pt of c] (d) {Digest\\(4)};
+  \node[campo,fill=torviola!15,minimum width=1.3cm,right=0pt of d] (e) {Length\\(2)};
+  \node[campo,fill=torverde!15,minimum width=3.2cm,right=0pt of e] (f) {Data\\(Length)};
+  \node[campo,fill=torgrigio!10,minimum width=2cm,right=0pt of f] (g) {Padding\\zeros + random};
+  \foreach \n/\o in {a/0,b/1,c/3,d/5,e/9,f/11} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (g.north east) {509};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]a.south west) -- ([yshift=-2pt]e.south east)
+    node[midway,below=6pt,font=\sffamily\small] {header: 11 bytes};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]f.south west) -- ([yshift=-2pt]g.south east)
+    node[midway,below=6pt,font=\sffamily\small] {498 bytes};
+\end{tikzpicture}

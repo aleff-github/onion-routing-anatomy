@@ -1,0 +1,152 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Correlazione del traffico, fingerprinting, Sybil}\label{cap:26-attacchi}
+\aggiornatoal{23 settembre 2026}{articoli citati nel capitolo; tor 0.4.9.13; rete di laboratorio}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item classificare gli attacchi all'anonimato di Tor secondo la posizione dell'avversario;
+  \item spiegare la correlazione da estremo a estremo e misurarla sul tuo traffico nella rete di laboratorio (Laboratorio~16);
+  \item descrivere il website fingerprinting e i limiti delle sue valutazioni;
+  \item riconoscere gli attacchi Sybil e le difese della rete, dai guard alla misura della banda.
+\end{itemize}
+\end{obiettivi}
+
+Il modello di minaccia del \cref{cap:04-modello-minaccia} dichiarava che Tor non resiste a chi osserva entrambi gli estremi di una comunicazione. Vent'anni di ricerca hanno trasformato quella frase in numeri, e hanno mostrato che le posizioni da cui osservare sono più numerose e più facili da raggiungere di quanto sembrasse. Questo capitolo segue gli attacchi dal punto di vista di chi difende: che cosa richiedono, che cosa ottengono, e quale parte del protocollo che abbiamo studiato serve a contrastarli.
+
+% ---------------------------------------------------------------------------
+\section{Dove si trova l'avversario}\label{sec:att-posizioni}
+
+Conviene ordinare gli attacchi in base a ciò che l'avversario vede:
+\begin{description}
+  \item[Un estremo] il collegamento tra client e guard (il fornitore di connettività, la rete locale, un censore) oppure quello tra exit e destinazione. Sul collegamento client--guard osserva tempi, volumi e direzioni di traffico cifrato; tra exit e destinazione la cifratura applicativa dipende dal protocollo usato. Il website fingerprinting può sfruttare i metadati del lato client, senza leggere il contenuto.
+  \item[Entrambi gli estremi] un avversario che osserva sia l'ingresso sia l'uscita, perché gestisce relay in entrambe le posizioni o perché controlla le reti che le collegano. È la posizione della correlazione.
+  \item[Dentro la rete] relay ostili, anche in posizione intermedia, che possono misurare, ritardare, marcare o scartare celle.
+  \item[Sopra la rete] Internet stessa: sistemi autonomi (AS) e punti di interscambio (IXP) attraversati dai collegamenti tra i relay e verso di essi.
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{La correlazione da estremo a estremo}\label{sec:att-correlazione}
+
+Tor non applica deliberatamente lunghi ritardi o rimescolamenti di tipo mix alle celle, per restare usabile (\cref{sec:radici-latenza}). La conseguenza è che la \emph{forma} del traffico, cioè quanti byte passano in ciascun istante, resta spesso abbastanza riconoscibile ai due estremi, pur risentendo di ritardi, buffering, multiplexing e traffico aggiuntivo (\cref{fig:correlazione}). Chi vede i due estremi confronta le forme e decide se appartengono allo stesso flusso: non ha bisogno di rompere nessuna cifratura.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig26-correlazione}
+\caption{Due profili \emph{sintetici}, non misure reali, del volume di traffico osservato in una direzione su client--guard ed exit--server. I picchi si somigliano, ma le serie non sono identiche: lo sfasamento di un intervallo da 250\,ms è puramente illustrativo. La cifratura protegge i contenuti, non necessariamente le caratteristiche temporali e volumetriche; ritardi, overhead, buffering, multiplexing e traffico concorrente possono modificare le tracce. Una somiglianza statistica non prova da sola l'identità del flusso.}
+\label{fig:correlazione}
+\end{figure}
+
+\paragraph{Quanto è facile.} Nel 2018 DeepCorr ha addestrato una rete neurale a riconoscere coppie di flussi Tor: osservando circa 900 pacchetti per flusso ha ottenuto un'accuratezza del 96\%, contro il 4\% del metodo statistico precedente nelle stesse condizioni~\cite{nasr2018deepcorr}. La difficoltà vera, per l'avversario, non è confrontare i flussi ma trovarsi nel posto giusto.
+
+\paragraph{Quanto è probabile trovarsi nel posto giusto.} Johnson e coautori hanno simulato per mesi il comportamento di utenti tipici con il vero algoritmo di selezione dei percorsi~\cite{johnson2013users}. Con relay ostili di banda moderata, l'80\% degli utenti di ogni tipo veniva deanonimizzato almeno una volta entro sei mesi; contro un singolo AS, per utenti in alcune località comuni, quasi il 100\% entro tre mesi. Il risultato non dice che ogni connessione è esposta, ma che nel lungo periodo le occasioni si accumulano: è il ragionamento che ha portato a guard più longevi e a meno guard per client (\cref{sec:guard}).
+
+\paragraph{Internet come avversario.} RAPTOR ha mostrato che un AS può aumentare le proprie occasioni in tre modi~\cite{sun2015raptor}: sfruttando l'asimmetria dei percorsi di Internet (basta vedere \emph{una} direzione a ciascun estremo, anche i soli riscontri TCP); sfruttando i cambiamenti naturali dei percorsi nel tempo; e dirottando o intercettando prefissi con BGP. Queste mosse non toccano Tor: la difesa passa per il monitoraggio dell'instradamento e, in prospettiva, per una selezione dei percorsi consapevole della topologia.
+
+\paragraph{Attacchi attivi.} Un avversario che controlla un estremo può anche \emph{imprimere} una forma riconoscibile al traffico, ritardandolo o raggruppandolo, per ritrovarla all'altro estremo: la marcatura che la \cref{sec:tor1-debolezze} discuteva a livello di cifratura è un caso estremo di questa idea. Già nel 2005 Murdoch e Danezis mostrarono che non serve nemmeno osservare i collegamenti: un server ostile imprime un ritmo al traffico diretto alla vittima, e l'avversario misura la latenza di propri circuiti attraverso i vari relay; quelli che rallentano con quel ritmo sono i relay del circuito della vittima~\cite{murdoch2005lowcost}.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: correlare il proprio traffico}\label{sec:lab-attacchi}
+
+\begin{laboratorio}[16]{Correlazione da estremo a estremo}
+\textbf{Obiettivo.} Verificare sulla rete di laboratorio che la forma del traffico sopravvive a un circuito, e che basta a riconoscere quale flusso d'uscita corrisponde a quale client.\\
+\textbf{Prerequisiti.} Laboratorio~11; la rete di laboratorio avviata. Tutti i flussi sono generati dallo script stesso.\\
+\textbf{Tempo stimato.} 1 ora.
+\end{laboratorio}
+
+Lo script \file{labs/it/laboratorio/correlazione.py} avvia un server sulla porta 8095 del container e sei client, ciascuno con credenziali SOCKS diverse: con \opt{IsolateSOCKSAuth} attivo, i loro flussi non condividono lo stesso circuito (\cref{sec:lab-stem}). Per 20 secondi ogni client alterna, a caso, raffiche di blocchi da 2\,KB e silenzi. Due \enquote{osservatori} registrano i dati:
+\begin{itemize}
+  \item l'osservatore d'ingresso annota quando ogni client scrive: è una traccia idealizzata di ciò che vedrebbe chi osserva il collegamento verso il guard, dove il traffico sarebbe incapsulato in celle e in TLS, ma la struttura temporale che serve alla correlazione sopravvive a entrambi;
+  \item l'osservatore d'uscita, il server, annota quando arrivano i byte di ciascuna connessione, e riceve anche un identificatore di controllo nei primi quattro byte, escluso dall'algoritmo di correlazione e usato solo per verificare gli abbinamenti.
+\end{itemize}
+Entrambi raggruppano i byte in intervalli di 250\,ms, e per ogni client si calcola la correlazione di Pearson con ognuno dei sei flussi d'uscita. Il flusso più correlato è l'abbinamento proposto; lo script conosce la risposta giusta, che il client comunica nei primi 4 byte, ma la usa solo per valutare, non per scegliere il flusso più correlato.
+
+\begin{lstlisting}[language=bash,numbers=none]
+$ docker exec -w /tmp torlibro-rete python3 /lab/correlazione.py 1
+client 0: +0.79 -0.11 +0.12 +0.17 +0.11 -0.01  -> uscita 0 OK
+client 1: -0.11 +0.80 -0.02 +0.07 +0.18 +0.08  -> uscita 1 OK
+client 4: +0.13 +0.02 +1.00 +0.21 +0.10 +0.21  -> uscita 2 OK
+client 3: +0.21 +0.09 +0.33 +0.81 -0.07 +0.03  -> uscita 3 OK
+client 2: +0.17 +0.05 +0.10 -0.09 +0.85 -0.03  -> uscita 4 OK
+client 5: -0.00 +0.01 +0.23 +0.06 -0.13 +0.92  -> uscita 5 OK
+abbinamenti corretti: 6/6
+\end{lstlisting}
+Le colonne sono i flussi d'uscita, numerati nell'ordine in cui le connessioni arrivano al server, che non coincide con quello dei client. Nell'output illustrativo il valore corretto spicca in ogni riga, tra 0,79 e 1,00; ordine dei flussi e coefficienti possono cambiare tra esecuzioni. Nessuna chiave, nessuna cella decifrata: solo quantità e tempi. La rete di laboratorio è piccola e poco carica, quindi il ritardo è minimo; ma, come dicono i risultati di DeepCorr, anche nella rete reale bastano poche centinaia di pacchetti a un classificatore migliore del nostro. Questo è un estratto di un'esecuzione di riferimento, non una previsione esatta: possono comparire anche 5/6 abbinamenti. Il laboratorio fa parte di \texttt{make verifica-lab}.
+
+% ---------------------------------------------------------------------------
+\section{Website fingerprinting}\label{sec:att-wf}
+
+Un avversario che vede soltanto il collegamento tra client e guard non può correlare, ma può \emph{riconoscere}. Ogni pagina web produce una sequenza caratteristica di celle nelle due direzioni: quante, in che ordine, con che raffiche. L'avversario visita in anticipo i siti che gli interessano attraverso Tor, registra queste sequenze e addestra un classificatore; poi confronta con esse il traffico della vittima.
+
+La storia degli attacchi è una corsa tra classificatori e difese:
+\begin{itemize}
+  \item nel 2011 Panchenko e coautori, con caratteristiche basate su volumi, tempi e direzioni, portarono il riconoscimento su un insieme chiuso di 775 siti dal 3\% al 55\%, e mostrarono per primi un attacco efficace in un \emph{mondo aperto}, dove la vittima può visitare anche siti sconosciuti~\cite{panchenko2011website};
+  \item nel 2018 Deep Fingerprinting, con una rete neurale convoluzionale, superò il 98\% di accuratezza su 95 siti senza difese, e il 90\% contro WTF-PAD, una difesa basata sul padding adattivo considerata per Tor~\cite{sirinam2018deep}.
+\end{itemize}
+
+\begin{approfondimento}[La fallacia del tasso di base]
+Le accuratezze altissime vanno lette con cautela. Juarez e coautori hanno mostrato che molti studi assumevano condizioni favorevoli: un utente che visita una pagina alla volta, la stessa versione di Tor Browser dell'avversario, dati raccolti poco prima dell'attacco~\cite{juarez2014critical}. E soprattutto, nel mondo aperto, i siti sorvegliati sono una frazione minuscola di quelli visitati: anche un classificatore con pochissimi falsi positivi produce, su milioni di visite innocenti, più falsi allarmi che riconoscimenti corretti. È la stessa trappola dei test medici per malattie rare, e un avversario reale deve farci i conti.
+\end{approfondimento}
+
+\paragraph{Le difese.} Il padding di canale del \cref{cap:07-canali} rende più difficile riconoscere i tempi di inattività, ma non è pensato contro il fingerprinting delle pagine. tor contiene un sistema più generale, il \emph{circuit padding}, che permette di definire \enquote{macchine} che inviano celle finte secondo automi a stati; oggi le macchine attive servono a far somigliare i circuiti di introduzione e di rendezvous degli onion service (\cref{cap:14-onion-services}) ai circuiti ordinari (\proposta{302}). Una difesa generale contro il website fingerprinting, efficace e con un costo di banda accettabile, resta un problema di ricerca aperto.
+
+% ---------------------------------------------------------------------------
+\section{Sybil: moltiplicare i propri relay}\label{sec:att-sybil}
+
+Un attacco \textbf{Sybil} consiste nel presentarsi alla rete con molte identità. Per Tor significa aggiungere molti relay, in modo da essere scelti spesso come guard e come exit. Tre linee di difesa lo rendono costoso:
+\begin{description}
+  \item[La banda misurata] Un relay che dichiara più banda di quella reale sarebbe scelto più spesso: Bauer e coautori mostrarono nel 2007 che bastava mentire nel descrittore~\cite{bauer2007lowresource}. Oggi la banda usata dal consenso per la scelta dei relay deriva dalle misure delle autorità di banda (\cref{sec:dir-voto}), ma è soggetta anche ai limiti dichiarati dal relay: il valore misurato non è una semplice autodichiarazione. Per ottenere più traffico non basta quindi aumentare il numero scritto nel descrittore. Le misure rendono l'attacco più difficile, senza dimostrare che sia impossibile manipolare la capacità apparente durante una prova; il valore di consenso non garantisce una banda reale e costante.
+  \item[I vincoli sui percorsi] Due relay della stessa famiglia o della stessa rete /16 non stanno nello stesso circuito (\cref{sec:percorso-vincoli}): un operatore onesto si dichiara, e uno disonesto è limitato almeno dagli indirizzi.
+  \item[La sorveglianza della rete] Le autorità possono escludere relay o assegnare \texttt{BadExit}; volontari e ricercatori cercano gruppi di relay con caratteristiche comuni e controllano il comportamento degli exit. Nel 2014, per esempio, uno scanner degli exit trovò 25 relay che manipolavano il traffico o erano mal configurati: intercettazioni HTTPS, alterazioni del DNS, \emph{sslstrip}~\cite{winter2014spoiled}.
+\end{description}
+Il \cref{cap:27-casi-rete} racconta alcuni gruppi di relay ostili scoperti negli anni successivi, e mostra che questa sorveglianza è un lavoro continuo.
+
+\paragraph{Sybil contro gli onion service.} Nel sistema v2 la posizione degli HSDir responsabili di un servizio era prevedibile, e un avversario poteva creare relay con identità calcolate per diventarlo: Biryukov e coautori lo usarono nel 2013 per misurare la popolarità dei servizi, renderli irraggiungibili o avvicinarsi alla loro localizzazione~\cite{biryukov2013trawling}. Nel sistema v3 la posizione dipende dalle chiavi accecate e da un valore casuale condiviso che cambia ogni giorno (\cref{cap:14-onion-services}): la collocazione mirata con identità precalcolate diventa molto più difficile, senza eliminare il rischio di HSDir ostili una volta pubblicati i valori del periodo.
+
+% ---------------------------------------------------------------------------
+\section{Scoprire il guard}\label{sec:att-guard}
+
+Il guard protegge il client, ma è anche il bersaglio più interessante: conoscerlo significa sapere dove guardare. Per un onion service l'avversario può far costruire al servizio molti circuiti, per esempio chiedendo molte connessioni, finché un proprio relay non viene scelto come intermedio, accanto al guard: il primo attacco del genere, del 2006, portò all'introduzione dei guard stessi~\cite{overlier2006locating}. I vanguard (\cref{sec:vanguards}) aggiungono uno strato di relay intermedi fissi per un certo tempo, riducendo la velocità con cui un avversario può risalire verso il guard; non garantiscono che sia impossibile scoprirlo.
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item Gli attacchi si distinguono per ciò che l'avversario vede: un estremo, entrambi, l'interno della rete o i percorsi di Internet.
+  \item La correlazione confronta la forma del traffico ai due estremi e non richiede di rompere la cifratura; il problema dell'avversario è essere nella posizione giusta, e nel lungo periodo le occasioni si accumulano.
+  \item Il website fingerprinting riconosce le pagine dal solo traffico cifrato; le valutazioni vanno lette alla luce del tasso di base.
+  \item Contro Sybil: pesi misurati, famiglie e /16, sorveglianza degli exit e dei gruppi di relay; nel sistema v3 la scelta degli HSDir è meno manipolabile in anticipo, ma gli HSDir responsabili sono calcolabili nel periodo corrente.
+  \item Guard e vanguard rendono lenta e costosa la scoperta del primo salto.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:26-posizione}
+Per ciascun attacco del capitolo, indica la posizione minima che l'avversario deve occupare e la difesa di Tor che lo rende più difficile.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:26-base}
+Un classificatore riconosce un sito sorvegliato con probabilità 0,95 e scambia per quel sito una visita innocente con probabilità 0,001. Se una visita su 100\,000 è davvero al sito sorvegliato, quale frazione degli allarmi è corretta?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:26-bin}
+Ripeti il Laboratorio~16 con intervalli di 2 secondi, con una durata di 5 secondi, e con tutti i client che usano lo stesso ritmo. Quale modifica peggiora di più gli abbinamenti, e perché?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:26-difesa}
+Modifica i client del Laboratorio~16 perché inviino blocchi a ritmo costante, anche quando non hanno dati (padding). Quanto costa in banda la difesa, e che cosa succede alla correlazione?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:26-probabilita}
+Con \file{percorso.py} e il consenso reale del Laboratorio~15, calcola la probabilità che un avversario che controlla il 5\% della banda di guard e il 5\% della banda di exit si trovi ai due estremi di almeno un circuito di un client in sei mesi, con un guard fisso e con un guard cambiato a ogni circuito. Esplicita un numero ipotetico di circuiti nel semestre e assumi, solo per il modello, selezioni indipendenti in base alle quote di banda; spiega perché il calcolo non predice la rete reale.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item A.~Johnson e coautori, \titolo{Users Get Routed}~\cite{johnson2013users}.
+  \item Y.~Sun e coautori, \titolo{RAPTOR: Routing Attacks on Privacy in Tor}~\cite{sun2015raptor}.
+  \item M.~Juarez e coautori, \titolo{A Critical Evaluation of Website Fingerprinting Attacks}~\cite{juarez2014critical}.
+  \item La \emph{Anonymity Bibliography}, \url{https://www.freehaven.net/anonbib/}, per la letteratura successiva.
+\end{itemize}

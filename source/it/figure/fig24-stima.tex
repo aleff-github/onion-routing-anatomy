@@ -1,0 +1,18 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilità (solo EPUB).
+\altfig{Schema della stima indiretta di Tor Metrics, distinta per client che usano relay direttamente e client che usano bridge. I server che offrono directory contano le richieste riuscite in intervalli di circa 24 ore e riportano conteggi aggregati per paese nei descrittori extra-info alla voce dirreq-v3-reqs, arrotondati al multiplo di 8 superiore. CollecTor archivia i descrittori; Tor Metrics corregge l'arrotondamento sottraendo 4 dai conteggi validi, ricostruisce le richieste osservate r(R), stima la frazione frac di copertura delle statistiche e calcola floor(r(R)/(frac per 10)). Il numero 10 è una media ipotizzata di richieste al giorno per client; i giorni con frac sotto il 10 percento o sopra il 110 percento sono esclusi. Il risultato stima i client medi collegati in un giorno, non persone distinte; per bridge e relay si elaborano serie separate.}
+% Stima indiretta dei client medi, da richieste aggregate, non conteggio di persone
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.5cm,
+  box/.style={draw,rounded corners=2pt,align=center,minimum height=0.9cm,text width=2.3cm}]
+  \node[box,fill=torviola!10] (r) {relay e bridge\\contano richieste\\di directory};
+  \node[box,right=of r] (x) {extra-info\\\texttt{dirreq-v3-reqs}};
+  \node[box,right=of x] (c) {CollecTor\\archivia i dati};
+  \node[box,right=of c,fill=torverde!15] (m) {Tor Metrics:\\$\lfloor r(R)/(\mathit{frac}\cdot10)\rfloor$};
+  \draw[->] (r) -- (x); \draw[->] (x) -- (c); \draw[->] (c) -- (m);
+  \node[below=2pt of r,font=\sffamily\tiny,text=torgrigio,align=center] {intervalli\\di circa 24 h};
+  \node[below=2pt of x,font=\sffamily\tiny,text=torgrigio,align=center] {per paese; multipli\\di 8 (poi $-4$)};
+  \node[below=2pt of c,font=\sffamily\tiny,text=torgrigio,align=center] {$\mathit{frac}$: copertura\\stimata};
+  \node[below=2pt of m,font=\sffamily\tiny,text=torgrigio,align=center] {client medi stimati\\non persone};
+  \node[below=0.95cm of c,font=\sffamily\tiny,text=avviso,align=center] {giorni esclusi se $\mathit{frac}<10\%$ o $\mathit{frac}>110\%$};
+\end{tikzpicture}

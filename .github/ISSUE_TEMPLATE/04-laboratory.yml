@@ -1,0 +1,112 @@
+name: "Laboratory problem · Problema di laboratorio"
+description: "A laboratory, a test or the private Tor network does not behave as described. · Un laboratorio, un test o la rete privata non si comporta come descritto."
+title: "[Lab] "
+labels: ["laboratory", "status: to verify"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not attach** private keys, the content of `labs/*/lab/net/` (node keys and identities), traffic captures (PCAP), tokens or personal data. Shorten logs to the relevant lines and remove anything you would not publish.
+        **Non allegare** chiavi private, il contenuto di `labs/*/lab/net/`, catture di traffico, token o dati personali.
+
+        A security problem in the code or in the laboratory setup? Report it privately: see SECURITY.md.
+  - type: dropdown
+    id: lab
+    attributes:
+      label: "Laboratory · Laboratorio"
+      options:
+        - "Private network setup · Installazione della rete privata"
+        - "Offline tests (make -C labs/it test)"
+        - "Lab 1 — Canale (channel)"
+        - "Lab 2 — Celle (cells)"
+        - "Lab 3 — Handshake (ntor, ntor-v3, CREATE_FAST)"
+        - "Lab 4 — Cifratura (layered encryption)"
+        - "Lab 5 — Stream e SENDME"
+        - "Lab 6 — Consenso (consensus)"
+        - "Lab 7 — Percorsi (path selection)"
+        - "Lab 8 — Onion service descriptor"
+        - "Lab 9 — Difese anti-DoS"
+        - "Lab 10 — Bridge obfs4"
+        - "Lab 11 — Isolamento degli stream"
+        - "Lab 12 — Celle dentro il TLS"
+        - "Lab 13 — Scoperta ristretta (restricted discovery)"
+        - "Lab 14 — Politica di uscita (exit policy)"
+        - "Lab 15 — Metriche (network statistics)"
+        - "Lab 16 — Correlazione (traffic correlation)"
+        - "Lab 17 — RELAY_EARLY"
+        - "Lab 18 — Fuga DNS (DNS leak)"
+        - "Lab 19 — Simulazione (time to first compromise)"
+        - "Lab 20 — Arti"
+        - "make verifica-lab / make verifica-lab-bridge"
+        - "Other · Altro"
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: "Guide language · Lingua della guida"
+      options:
+        - "Italiano (labs/it)"
+        - "English (labs/en)"
+        - "Español (labs/es)"
+        - "Русский (labs/ru)"
+        - "简体中文 (labs/zh-Hans)"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: "Version and environment · Versione e ambiente"
+      description: "Repository commit (git rev-parse --short HEAD), operating system, Docker version, Python version. · Commit, sistema operativo, versione di Docker e Python."
+      placeholder: |
+        commit: 
+        OS: 
+        Docker: 
+        Python: 
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: "Description · Descrizione"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to reproduce · Passi per riprodurre"
+      placeholder: |
+        1. make -C labs/it avvia
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: "Observed result · Risultato osservato"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Expected result · Risultato atteso"
+      description: "What the book or the guide says should happen. · Che cosa dovrebbe succedere secondo il libro o la guida."
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: "Evidence (non-sensitive) · Prove (non sensibili)"
+      description: "Relevant log lines or test output, after removing anything sensitive. · Righe di log o output dei test, senza dati sensibili."
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: "Safety · Sicurezza"
+      options:
+        - label: "I ran this only on the private laboratory network, not against the public Tor network or its users. · L'ho eseguito solo sulla rete privata del laboratorio."
+          required: true
+        - label: "The evidence above contains no private keys, node identities, traffic captures or personal data. · Le prove non contengono chiavi, identità dei nodi, catture o dati personali."
+          required: true

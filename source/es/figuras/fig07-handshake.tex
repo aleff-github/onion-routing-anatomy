@@ -1,0 +1,25 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible para el EPUB.
+\altfig{Secuencia simplificada de establecimiento de un canal Tor moderno: el iniciador establece TLS, que cifra los mensajes posteriores, y ambos extremos envían VERSIONS. El respondedor envía en orden CERTS, AUTH\_CHALLENGE y NETINFO. Si el iniciador es un repetidor público, debe autenticarse enviando CERTS y AUTHENTICATE (pasos del recuadro discontinuo); un cliente o puente no envía estas dos celdas de autenticación. En ambos casos, el iniciador termina con NETINFO, que concluye el intercambio. Se omiten las celdas VPADDING opcionales, y las flechas indican el emisor.}
+% Intercambio inicial del canal
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth]
+  \node[client] (i) at (0,0) {Iniciador};
+  \node[relay,minimum size=1.3cm] (r) at (7,0) {\scriptsize Respondedor};
+  \draw[torgrigio] (i.south) -- ++(0,-8.4);
+  \draw[torgrigio] (r.south) -- ++(0,-8.4);
+  \draw[<->,thick,torgrigio] (0,-1.1) -- node[above]{intercambio TLS} node[below,font=\scriptsize]{desde aquí todo va cifrado} (7,-1.1);
+  \newcommand{\av}[2]{\draw[cellaf] (0,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (7,#1);}
+  \newcommand{\ind}[2]{\draw[risposta] (7,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (0,#1);}
+  \av{-2.3}{VERSIONS}
+  \ind{-3.0}{VERSIONS}
+  \ind{-3.7}{CERTS}
+  \ind{-4.4}{AUTH\_CHALLENGE}
+  \ind{-5.1}{NETINFO}
+  \draw[dashed,torgrigio,rounded corners] (-0.4,-5.55) rectangle (7.4,-7.05);
+  \node[font=\scriptsize,text=torgrigio,anchor=east,align=right] at (-0.5,-6.45) {solo\\repetidores públicos};
+  \av{-6.1}{CERTS}
+  \av{-6.8}{AUTHENTICATE}
+  \av{-7.8}{NETINFO}
+  \node[font=\scriptsize,text=torgrigio,anchor=west] at (7.5,-7.8) {canal abierto};
+\end{tikzpicture}

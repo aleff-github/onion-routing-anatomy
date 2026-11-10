@@ -1,0 +1,238 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{DoS Defenses and Resource Management}\label{cap:15-dos}
+\aggiornatoal{23 September 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; dos-spec, hspow-spec}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item explain why a denial-of-service attack against Tor is also an attack on anonymity;
+  \item describe how tor protects relay memory, CPU capacity, and bandwidth;
+  \item understand per-address limits on connections and circuits and the role of consensus parameters;
+  \item explain how onion services defend against floods of introduction requests;
+  \item describe the v1 proof-of-work mechanism (Equi-X and Blake2b) and how effort is controlled;
+  \item trigger and observe a relay's and an onion service's defenses on the laboratory network (Laboratory~9).
+\end{itemize}
+\end{obiettivi}
+
+An open, anonymous, volunteer-operated network is a natural target for anyone who wants to make it unusable. In this chapter we examine Tor's defenses against \emph{denial-of-service} (DoS) attacks: attempts to exhaust a relay's or onion service's resources so that others cannot use it. Concrete incidents from recent years, including the wave of attacks against onion services in 2022--2023, are discussed in \cref{cap:27-casi-rete}. Here, we focus on the mechanisms.
+
+% ---------------------------------------------------------------------------
+\section{Why DoS Is an Anonymity Problem}\label{sec:dos-anonimato}
+
+In an ordinary network, a DoS attack is \enquote{only} an availability problem. In Tor, it can also be a weapon against anonymity~\spec{dos-spec}{Overview}:
+\begin{itemize}
+  \item An adversary able to disable a relay on demand can force clients using it as a guard to select another, hoping they select an adversarial guard. Jansen, Tschorsch, Johnson, and Scheuermann demonstrated how an adversary with few resources could exhaust a relay's memory and use that capability to deanonymize onion services: the \emph{Sniper Attack}~\cite{jansen2014sniper}.
+  \item Making honest relays slow or unreachable pushes traffic toward adversarial relays, increasing the share of traffic they can observe.
+  \item An attack that selectively causes circuit failures can serve as a signal, for example to determine which circuits pass through a particular relay.
+\end{itemize}
+Defenses therefore aim to do more than simply \enquote{keep relays running}: they must avoid introducing observable behavior that an adversary could exploit.
+
+% ---------------------------------------------------------------------------
+\section{Physical Resources}\label{sec:dos-risorse}
+
+\subsection{Memory}
+
+Memory is the most sensitive resource, and the one protected by the most mature mechanisms~\spec{dos-spec}{Memory exhaustion}. On Linux, a process that requests too much memory usually does not immediately receive an error. The system promises the memory and may later terminate the process when it actually tries to use it. Waiting for allocation to fail is therefore ineffective. tor imposes its own limit, \opt{MaxMemInQueues}, set by the operator or calculated as a fraction of system memory. It accounts for everything that consumes memory: cells queued on circuits, connection buffers, compression state, cached onion service descriptors, and cached DNS lookups.
+
+When usage exceeds the limit, tor frees memory in two stages. First it evicts the oldest entries from caches consuming more than 20\,\% of the total, until those caches fall below 10\,\%. If usage still exceeds 90\,\% of the limit, it closes circuits and connections in order of the age of their oldest queued data, starting with those whose data have remained queued the longest. The goal is to target participants accumulating data without reading them, which is characteristic of this kind of attack.
+
+\subsection{CPU}
+
+CPU capacity is a weak point of the C implementation, which processes networking on a single main thread. Its most expensive operations, circuit handshakes (\cref{cap:09-circuiti}), are delegated to a pool of worker threads and queued. If too many handshakes arrive, however, the queue grows and legitimate circuits time out. Tor does not measure CPU usage directly. It protects the CPU indirectly by limiting operations that consume it, including circuit creation and onion service introductions.
+
+\subsection{Bandwidth}
+
+Operators can cap bandwidth through options such as \opt{RelayBandwidthRate}, but these limits primarily prevent them from exceeding their connectivity plans; they are not defenses in themselves. Against abnormal bandwidth consumption, Tor relies on flow and congestion control (\cref{cap:11-stream}) and fair scheduling of cells among circuits.
+
+% ---------------------------------------------------------------------------
+\section{Per-Address Limits}\label{sec:dos-limiti}
+
+The most effective defense against unsophisticated floods is straightforward. A guard sees the connecting client's IP address and can limit how much each address may request. This is the only place in the network where such limits can be applied, because later hops deliberately do not know the traffic's origin. Tor applies three families of limits to clients (not to authenticated relays), configurable with \texttt{DoS\ldots} options:
+\begin{description}
+  \item[Connections] (\texttt{DoSConnection\ldots}) A maximum number of concurrent TLS connections and a maximum rate of new connections per address. Connections exceeding these thresholds are closed.
+  \item[Circuits] (\texttt{DoSCircuitCreation\ldots}) A per-address \emph{token bucket}: every new circuit consumes one token. Tokens refill at a fixed rate up to a maximum (the \emph{burst}). An address that has exhausted its bucket \emph{and} holds at least a specified number of connections is marked; its subsequent circuit requests are refused for a period.
+  \item[Single-hop rendezvous] (\texttt{DoSRefuseSingleHopClientRendezvous}) Refuses rendezvous requests arriving on single-hop circuits, such as those used by Tor2web gateways to access onion services without client anonymity. These offer a cheap way to generate network load.
+\end{description}
+
+\subsection{The code and the consensus}
+
+In tor's code these defenses are \textbf{disabled} by default (\file{DOS\_CC\_ENABLED\_DEFAULT 0} in \file{src/core/or/dos.h}). Network-wide settings come from consensus parameters. The public consensus of 23 September 2026 contains:
+\begin{center}\small
+\begin{tabular}{lrr}
+\toprule
+Parameter & Consensus & Code default \\
+\midrule
+\texttt{DoSCircuitCreationEnabled} & 1 & 0 \\
+\texttt{DoSCircuitCreationMinConnections} & 2 & 3 \\
+\texttt{DoSCircuitCreationRate} & 2 & 3 \\
+\texttt{DoSCircuitCreationBurst} & 60 & 90 \\
+\texttt{DoSConnectionEnabled} & 1 & 0 \\
+\texttt{DoSConnectionMaxConcurrentCount} & 50 & 100 \\
+\texttt{DoSRefuseSingleHopClientRendezvous} & 1 & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+The network's values are stricter than the code defaults: they reflect years of attacks and subsequent adjustments. Being able to change them through the consensus, within hours and without updating thousands of relays, is one of the Tor Project's most valuable tools during an attack.
+
+\begin{attenzione}[Limits of per-address limits]
+An adversary with many IP addresses, such as a botnet, can evade per-address limits. Conversely, overly strict limits affect legitimate users sharing one address, for example behind a mobile operator's or university's NAT. The values are always a compromise.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Onion Services Under Attack}\label{sec:dos-onion}
+
+Onion services are particularly vulnerable. Each introduction request is inexpensive for the client: one \texttt{INTRODUCE1} (\cref{sec:os-rendezvous}). For the service, the same request is costly: it must decrypt the request, perform a handshake, and build a multi-hop circuit to the specified rendezvous point. This creates \textbf{amplification}: with relatively few resources, an adversary can force both the service and all the relays on its circuits to perform considerably more work. The service cannot block attackers' IP addresses because it never sees them.
+
+\subsection{Limits at introduction points}
+
+One initial defense is to have introduction points rate-limit requests. With \texttt{HiddenService\-EnableIntroDoS\-Defense} and the related \texttt{\ldots RatePerSec} and \texttt{\ldots BurstPerSec} options, a service uses a \file{DOS\_PARAMS} extension in \file{ESTABLISH\_INTRO} to tell each introduction point how many \texttt{INTRODUCE2} messages per second it is willing to receive. This protects the service but does not distinguish an attacker from a legitimate user. Under attack, both may be rejected.
+
+\subsection{Proof of work}
+
+The newer defense, proposed in \proposta{327} and available since tor 0.4.8.4 (August 2023), is \textbf{proof of work} (PoW)~\spec{hspow-spec}{Motivation}. Clients must demonstrate that they have performed some computation before being served; requests demonstrating greater effort receive priority. A few seconds of work may be acceptable to a legitimate user. For an attacker sending thousands of requests per second, multiplying that cost across all requests can be prohibitive.
+
+The mechanism has four components~\spec{hspow-spec}{Common protocol}:
+\begin{enumerate}
+  \item \textbf{Descriptor parameters.} In the descriptor's second layer (\cref{sec:os-descrittore}), the service publishes a \texttt{pow-params} line containing the scheme (\texttt{v1}), a random 32-byte \emph{seed}, \emph{suggested effort}, and seed expiration. The seed is renewed every 105--120 minutes.
+  \item \textbf{The client solves the problem.} Having chosen effort $E$, it searches for a solution to the Equi-X problem for the challenge
+  \[ \texttt{"Tor hs intro v1\textbackslash 0"} \,\|\, A' \,\|\, \mathit{seed} \,\|\, \mathit{nonce} \,\|\, E, \]
+  where $A'$ is the service's blinded key. An Equi-X solution alone is not sufficient. The client also calculates a 32-bit Blake2b hash, $R$, of the challenge and solution; the solution is acceptable only if $R \cdot E \le 2^{32} - 1$. Otherwise, it changes the nonce and tries again.
+  \item \textbf{Proof in the introduction message.} The client includes the nonce, effort, first 4 bytes of the seed, and solution in an extension of the encrypted portion of \texttt{INTRODUCE1}, which only the service can read.
+  \item \textbf{The priority queue.} The service verifies the proof---far faster than finding one---and places the request in a queue ordered by effort. It serves the highest-effort requests first; those without proof have effort zero. If the queue fills, it immediately discards the lowest-effort half.
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig15-pow}
+\caption{Onion service proof of work. The client reads the seed and suggested effort from the descriptor, finds a solution passing the test, and sends it in the encrypted portion of \texttt{INTRODUCE1}. The service verifies it and orders requests by effort.}
+\label{fig:pow}
+\end{figure}
+
+\begin{approfondimento}[Why Equi-X?]
+Equi-X, designed by tevador for this purpose, is an \emph{asymmetric} problem: finding a solution takes memory and substantial computation, but checking it takes very little. It builds on HashX, a family of hash functions whose implementation changes with each seed and which exploits the parallel execution capabilities of modern CPUs. This makes dedicated-hardware acceleration difficult, limiting an adversary's advantage over a user with an ordinary computer. There are two implementations, one in C included in tor and another in Rust written for Arti, kept compatible by automated tests. The C code is licensed under the LGPL: to include it, tor must be compiled with \texttt{--enable-gpl}. A build without that option has no PoW support: \cmd{tor --list-modules} then reports \texttt{pow: no} rather than the \texttt{pow: yes} we will encounter in \cref{cap:17-torrc}. This is not the usual case: both the laboratory image and Debian's \texttt{tor} package are compiled with the option, and the module is present in both.
+\end{approfondimento}
+
+\subsection{Linear effort}
+
+Why add the Blake2b check? The cost of finding an individual Equi-X solution is roughly fixed. A random solution satisfies $R \cdot E \le 2^{32}-1$ with probability about $1/E$, so the client must try an average of $E$ solutions. Effort thus increases \emph{linearly} with $E$, making it straightforward to adjust. Many proof-of-work systems instead require some number of leading zero bits in a hash, doubling the cost with each additional bit: too coarse a scale for fine-grained control. Effort is also declared \emph{before} searching for a solution and forms part of the challenge. A client cannot hope for a lucky result and then claim to have expended greater effort than it actually did.
+
+\subsection{Controlling effort}
+
+Suggested effort is not fixed permanently. The service begins with a suggested effort of zero, meaning the defense is dormant. Every five minutes it updates the suggestion based on queue conditions: it increases the value if the queue has remained full or if it has had to discard requests with the suggested effort, and decreases it otherwise. The control logic is inspired by TCP congestion control (additive increase, multiplicative decrease). Clients in turn raise their effort after a connection attempt times out. The result is a two-loop feedback system in which more determined users can offer greater effort to move ahead in the queue.
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: Triggering the Defenses}\label{sec:lab-dos}
+
+\begin{laboratorio}[9]{Anti-DoS limits and proof of work on the laboratory network}
+\textbf{Objective.} Enable a relay's circuit-creation limits and exceed them; enable onion service proof of work and read its parameters; study the Blake2b effort test using \file{labs/en/code/torlab/pow.py}.\\
+\textbf{Prerequisites.} Laboratories~1--8; the laboratory network running with an image compiled with \texttt{--enable-gpl}.\\
+\textbf{Estimated time.} 2 hours.
+\end{laboratorio}
+
+\begin{attenzione}[Only on your own network]
+This laboratory deliberately generates abnormal traffic. Run it exclusively on the book's private network. Doing the same against real relays or services is an attack that harms other people and is illegal in many jurisdictions (\cref{cap:25-legale}).
+\end{attenzione}
+
+\paragraph{Step 1: enable limits on a relay.} We add very low limits to the \file{torrc} of relay \texttt{test003r} so that they trigger quickly, and tell it to reload its configuration with a \texttt{HUP} signal:
+\begin{lstlisting}[language=torrc,numbers=none]
+DoSCircuitCreationEnabled 1
+DoSCircuitCreationMinConnections 2
+DoSCircuitCreationRate 1
+DoSCircuitCreationBurst 10
+DoSCircuitCreationDefenseType 2
+DoSCircuitCreationDefenseTimePeriod 60 seconds
+\end{lstlisting}
+Defense type 2 means \enquote{reject new circuits}.
+
+\paragraph{Step 2: exceed the limits.} We open one or two channels to the relay and request 30 circuits in rapid succession using \cella{CREATE\_FAST}. To obtain separate counters for each run, we originate connections from different loopback addresses (127.0.0.2, 127.0.0.3), using the new \texttt{source\_address} parameter of \file{open\_channel}:
+\begin{lstlisting}[numbers=none]
+source 127.0.0.2, 2 channels: 9 ok, 21 DESTROY(5); first rejection: 10
+source 127.0.0.3, 1 channel: 30 ok
+source 127.0.0.1, 2 channels: 9 ok, 21 DESTROY(5); first rejection: 10
+\end{lstlisting}
+Three observations follow:
+\begin{itemize}
+  \item The relay rejects requests with a \cella{DESTROY} cell carrying reason 5, \texttt{RESOURCELIMIT}.
+  \item With a \emph{burst} of 10, nine circuits succeed rather than ten. The code (\file{cc\_has\_exhausted\_circuits} in \file{src/core/or/dos.c}) marks the client as soon as the bucket reaches zero, so the tenth request is already rejected.
+  \item With only one channel, no restriction triggers: the defense requires at least \texttt{MinConnections} concurrent connections. This avoids penalizing an ordinary client, which usually keeps just one connection open to its guard.
+\end{itemize}
+We had predicted that connections from 127.0.0.1, the laboratory relays' address, would be exempt. The experiment disproved that prediction, and \file{dos.c} confirms that no such exemption exists for circuits. At the end, we restore the original \file{torrc}.
+
+\paragraph{Step 3: onion service proof of work.} We add the following after the \texttt{HiddenService\ldots} lines in the \file{torrc} of \texttt{test009h}:
+\begin{lstlisting}[language=torrc,numbers=none]
+HiddenServicePoWDefensesEnabled 1
+\end{lstlisting}
+After the \texttt{HUP} signal, the service publishes a new descriptor. Downloading and decrypting it with Laboratory~8 reveals the following line in the second layer:
+\begin{lstlisting}[numbers=none]
+pow-params v1 tx2Mtmzw5GHgWjcDoivTvWzwQPNZONwMwSMddOc+ZVQ= 0 2026-09-23T18:20:53
+\end{lstlisting}
+It records scheme \texttt{v1}, the base64 seed, suggested effort \textbf{zero} (the service has not yet experienced a queue), and seed expiration, one hour and fifty minutes after publication, within the specified 105--120-minute range.
+
+\paragraph{Step 4: effort is linear.} The \file{pow.py} module implements the Blake2b check and simulates Equi-X solutions with random bytes, which have the same distribution for the purposes of this test:
+\begin{lstlisting}[language=Python]
+def check_value(service_id, seed, nonce, effort, solution):
+    challenge = P_STRING + service_id + seed + nonce + struct.pack(">I", effort)
+    h = hashlib.blake2b(challenge + solution, digest_size=4).digest()
+    return int.from_bytes(h, "big")
+
+def valid_effort(r, effort):
+    return r * effort <= UINT32_MAX
+\end{lstlisting}
+Measuring the average number of solutions required over 400 trials for each effort value gives:
+\begin{lstlisting}[numbers=none]
+effort     1: 1.0 attempts
+effort    10: 9.7
+effort   100: 102.3
+effort  1000: 1068.8
+\end{lstlisting}
+The number of attempts grows in proportion to effort, as predicted. The expected value equals the effort because each attempt succeeds with probability $1/\mathit{effort}$ and the number of attempts follows a geometric distribution. Its standard deviation is as large as its mean. Thus the average over 400 trials has a typical relative deviation of $1/\sqrt{400} = 5\,\%$. Two runs may differ by ten percent even when nothing has changed; on repeating the measurement, we indeed obtained 969.9 where the listing shows 1068.8. This is a useful reminder that a sample mean must be considered alongside its uncertainty. Notice another detail: \texttt{blake2b} with \file{digest\_size=4} does not equal the first four bytes of a 64-byte Blake2b result because output length affects the function's initial state. The specification emphasizes this subtlety, which is easy to overlook.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item In Tor, DoS attacks are also attacks on anonymity: disabling relays on demand or causing them to fail can redirect traffic toward an adversary.
+  \item Memory is protected by a self-imposed limit, \opt{MaxMemInQueues}, beyond which tor evicts caches and closes circuits accumulating data.
+  \item Guards impose per-address connection and circuit limits on clients using token buckets. Disabled in the code defaults, these defenses are enabled and adjusted through the consensus.
+  \item Onion services face amplification: initiating a request is cheap, responding to it is expensive.
+  \item V1 proof of work combines Equi-X with a Blake2b test that makes effort linear. The service prioritizes higher-effort requests and adjusts suggested effort according to queue conditions.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:15-bucket}
+With \texttt{DoSCircuitCreationRate} 2 and \texttt{Burst} 60, as in the public consensus, how many circuits can a client create in one minute starting with a full bucket? And in one hour? Assume the defense has already been triggered, meaning the address has reached \texttt{DoSCircuitCreationMinConnections} concurrent connections. Below that threshold there is no limit.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:15-guard}
+Why do per-address limits apply only to clients and only at the first hop? What would happen if a middle tried to limit circuits \enquote{per address}?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:15-amplificazione}
+Estimate the ratio between the client's work and the network's work for a single introduction request: how many circuits, handshakes, and cells does the service's response generate?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:15-bit}
+Compare Tor's proof of work with a scheme requiring $k$ leading zero bits in a hash. Which effort values can each scheme express? Why is a linear scale preferable for feedback control?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:15-sforzo}
+A client declares effort $E = 50$, but by luck it immediately finds a solution with very small $R$ that would also satisfy $E = 5000$. Can it submit the solution while claiming $E = 5000$? Why?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:15-oom}
+On the laboratory network, set \opt{MaxMemInQueues} to its minimum value on a middle relay and build a circuit through it, downloading a large file \emph{without reading} incoming data (and without sending SENDME). What happens to accumulated cells? Look for messages from the memory manager in that relay's logs.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:15-coda}
+Write a small simulator of an onion service's priority queue. Requests arrive with random effort (many at zero, a few at higher values); the service handles a certain number per second and discards the lowest-effort half whenever the queue exceeds a threshold. Measure average waiting time as a function of effort.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item \titolo{Tor denial-of-service mitigations} (dos-spec) and \titolo{Onion service proof-of-work} (hspow-spec)~\cite{torspec}.
+  \item R.~Jansen, F.~Tschorsch, A.~Johnson, B.~Scheuermann, \titolo{The Sniper Attack: Anonymously Deanonymizing and Disabling the Tor Network}~\cite{jansen2014sniper}.
+  \item tevador's Equi-X repository and development journal, cited in the specification.
+\end{itemize}

@@ -1,0 +1,26 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Schema dei ruoli nella rete Tor. In alto, per raggiungere un sito web, il client attraversa guard, middle ed exit. Tre simboli rappresentano schematicamente le nove directory authority che votano e firmano il consenso, diffuso nella rete. Un bridge può fungere da primo nodo in caso di censura. In basso, per raggiungere un servizio onion senza relay di uscita, il client e il servizio stabiliscono ciascuno un circuito Tor verso il rendezvous point; i due collegamenti tratteggiati non mostrano tutti i relay intermedi.}
+% Ruoli nella rete Tor
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  aut/.style={relay,fill=torviola!15,draw=torviola,font=\sffamily\scriptsize},
+  ex/.style={relay,fill=torverde!30}]
+  \node[client] (c) at (0,0) {Client};
+  \node[relay] (g) at (2.8,0) {Guard};
+  \node[relay] (m) at (5.3,0) {Middle};
+  \node[ex] (e) at (7.8,0) {Exit};
+  \node[server] (s) at (10.6,0) {Sito web};
+  \draw[cellaf] (c) -- (g); \draw[cellaf] (g) -- (m); \draw[cellaf] (m) -- (e); \draw[->,thick,torgrigio] (e) -- (s);
+  \foreach \x/\n in {3.8/1,5.3/2,6.8/3} \node[aut] (a\n) at (\x,2.4) {aut.};
+  \node[font=\sffamily\scriptsize,above=1pt of a2] {directory authority (9): consenso firmato};
+  \draw[dotted,thick,torviola] (a2) -- node[font=\sffamily\scriptsize,right]{consenso} (m);
+  \node[relay,fill=torgrigio!10,draw=torgrigio,font=\sffamily\scriptsize] (b) at (1.4,-2.2) {bridge};
+  \node[font=\sffamily\scriptsize,align=center] at (1.4,-3.1) {primo salto al posto\\del guard, se censurati};
+  \draw[dashed,torgrigio,->] (c) -- (b);
+  \node[client,fill=torverde!15,draw=torverde!60!black] (o) at (8.8,-2.3) {Onion service};
+  \node[relay,fill=torverde!25,font=\sffamily\scriptsize,align=center] (rp) at (5.3,-2.3) {rendez-\\vous};
+  \draw[dashed,torverde!60!black,->] (o) -- node[font=\sffamily\scriptsize,below]{circuito} (rp);
+  \draw[dashed,torverde!60!black,->] (c) to[bend right=18] node[font=\sffamily\scriptsize,above,pos=.68]{circuito client} (rp);
+  \node[font=\sffamily\scriptsize,align=center] at (5.3,-3.35) {client e servizio si incontrano\\senza passare da un exit};
+\end{tikzpicture}

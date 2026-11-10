@@ -1,0 +1,411 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{A Private Tor Network: Chutney and Shadow}\label{cap:19-rete-privata}
+\aggiornatoal{23 September 2026}{tor 0.4.9.13; Chutney commit \texttt{6cc1588}; Shadow 3.3.0}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item explain why Tor experiments should run on a private network rather than the public network;
+  \item build and start, with two separate commands, the laboratory network used throughout the book;
+  \item identify the configuration options that distinguish a test network from the real network;
+  \item navigate a node's state files, including keys, consensus documents, and logs;
+  \item inspect client circuits with Stem and send web and onion-service traffic across the network;
+  \item understand when to use a simulator such as Shadow instead of an emulated network such as Chutney.
+\end{itemize}
+\end{obiettivi}
+
+This chapter appears in Part~III, but it is worth reading early: every laboratory in the book, beginning with Laboratory~1 in \cref{cap:07-canali}, runs on the network we build here. Readers working through Part~II can read \cref{sec:rp-perche,sec:rp-avvio} first and return to the remaining material later.
+
+% ---------------------------------------------------------------------------
+\section{Why a Private Network?}\label{sec:rp-perche}
+
+The public Tor network consists of thousands of volunteer-operated relays and is used daily by millions of people, many of whom rely on it for their safety. Experimenting on it raises two problems: one ethical and one practical.
+
+\paragraph{The ethical problem.} Any experiment that measures, changes, or even merely observes real-network traffic involves users who have not given consent and may be harmed. Even a seemingly harmless experiment, such as a relay recording more information than necessary, can create data that could deanonymize someone if disclosed. For this reason, the Tor Project maintains a \emph{Tor Research Safety Board} to review researchers' experimental plans and recommends a general principle: if a research question can be answered without involving real users, it should be. We revisit these principles in \cref{cap:29-ricerca}.
+
+\paragraph{The practical problem.} We have little control over the public network: we cannot predict which relays will be selected, circuits change, the consensus updates hourly, and an experiment cannot be repeated under identical conditions. On a private network, by contrast, we can choose the number of nodes, read detailed logs, stop and restart the whole network in minutes, and repeat experiments until we understand the results.
+
+\begin{attenzione}[Laboratory Rule]
+Every practical exercise in this book that sends hand-built cells, modifies node behavior, or captures traffic must run \textbf{exclusively} on the private network. The educational \file{torlab} code does not protect anonymity and must never be used on the public network.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Emulation or Simulation?}\label{sec:rp-strumenti}
+
+There are two ways to build a laboratory Tor network, both used by the Tor Project.
+
+\begin{description}
+  \item[Emulation] Many real \texttt{tor} processes run on the same computer and communicate through the loopback interface. Time is real, the code is real, and networking is provided by the operating system. This is \textbf{Chutney}'s approach. Chutney is a Tor Project tool created for integration testing of tor and Arti.
+  \item[Simulation] Real programs run inside a discrete-event simulator that intercepts system calls and provides a virtual network and virtual clock. This is \textbf{Shadow}'s approach~\cite{jansen2012shadow}, developed to study Tor at scale.
+\end{description}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+ & Chutney (emulation) & Shadow (simulation) \\
+\midrule
+Typical scale & A few to a few dozen nodes & Hundreds to thousands of nodes \\
+Time & Real & Virtual and deterministic \\
+Network & Loopback, without latency or loss & Topology with configurable latency and bandwidth \\
+Reproducibility & Limited by operating-system scheduling & Complete with the same random seed \\
+Typical use & Development, testing, education & Research on performance and attacks \\
+In this book & All laboratories & \cref{sec:rp-shadow} and Part~V \\
+\bottomrule
+\end{tabularx}
+\caption{Chutney and Shadow compared.}
+\label{tab:chutney-shadow}
+\end{table}
+
+Chutney is the natural choice for learning the protocol. It is lightweight, starts within minutes, and lets us interact with running nodes. This chapter therefore focuses on Chutney and introduces Shadow at the end.
+
+% ---------------------------------------------------------------------------
+\section{The Book's Laboratory}\label{sec:rp-avvio}
+
+To avoid differences between operating systems, the whole laboratory is packaged in a Docker image described by the repository's \file{labs/en/lab/Dockerfile}. The image:
+\begin{itemize}
+  \item compiles tor \textbf{from official source} at the book's reference version, 0.4.9.13, using \texttt{--enable-gpl} to include the onion-service proof-of-work module (\cref{cap:15-dos});
+  \item installs Chutney at a pinned revision, along with Stem and the traffic-capture tools (\cmd{tcpdump}, \cmd{tshark}) used in \cref{cap:20-traffico}.
+\end{itemize}
+Pinning versions matters: a book describing protocol messages byte by byte must ensure that readers observe the same bytes.
+
+\begin{approfondimento}[When a New Version of tor Is Released]
+The outputs reported in this chapter and in Part~II come from the laboratory network running tor 0.4.9.13, the book's reference version. Some were recorded with its predecessor, 0.4.9.12, released only days earlier, and then reproduced: the script \file{scripts/verify\_labs.py}, which reruns all the laboratories live and checks their results, gives the same outcomes with both versions (currently 53 checks, plus 14 for the bridge laboratory). The script runs the laboratories of the original Italian edition, in \file{labs/it}, from which this edition's laboratory code is translated; in the listings, names and messages follow this edition's code. Only execution-specific elements change: keys, fingerprints, \texttt{.onion} addresses, timestamps, and certificate sizes, which vary even from one relay to another. The same script lets you check, with the version you use, that what the book describes still holds.
+\end{approfondimento}
+
+\subsection{Requirements}
+
+You need Linux with Docker and approximately \SI{1}{\giga\byte} of free disk space. Docker Desktop works on macOS and Windows, but the host networking mode used here behaves differently; run the experiments inside the container in that case (\cref{sec:rp-shell}). The network occupies ports beginning at 5100, 7100, 8000, and 9000 on the host. Check that these ports are free.
+
+\subsection{Building the Image and Starting the Network}
+
+From the \textbf{repository root} (not from within \file{labs/en/lab}):
+\begin{lstlisting}[language=bash,numbers=none]
+$ make -C labs/en/lab image        # build tor and prepare Chutney (once)
+$ make -C labs/en/lab start           # configure and start the network; wait for bootstrap
+\end{lstlisting}
+
+Building the image takes a few minutes. On the machine used to write this chapter, starting the network took around two and a half minutes and ended with the following abbreviated summary:
+\begin{lstlisting}[numbers=none]
+  test006e:
+    bootstrap progress: 100 (SUCCESS), done, Done
+    desc publishing: 100 (SUCCESS), all nodes, DESC MD MD_CONS NS_CONS
+  test008c:
+    bootstrap progress: 100 (SUCCESS), done, Done
+  test009h:
+    bootstrap progress: 100 (SUCCESS), done, Done
+    oniondesc publishing: 200 (ONIONDESC_PUBLISHED), hidden service v3
+\end{lstlisting}
+
+Each node has completed bootstrap, each relay sees its descriptor published in the consensus, and the onion service has published its descriptor. The \cmd{make -C labs/en/lab verify} command then runs Chutney's test, transferring data through both an exit and an onion service and checking that it arrives intact:
+\begin{lstlisting}[numbers=none]
+  not-done:0 successes:4 failures:0
+Transmission: Success
+\end{lstlisting}
+
+\cmd{make -C labs/en/lab status} shows node status. \cmd{make -C labs/en/lab shell} opens a shell inside the container, \cmd{make -C labs/en/lab stop} stops the network, and \cmd{make -C labs/en/lab clean} also deletes generated data.
+
+% ---------------------------------------------------------------------------
+\section{Network Topology}\label{sec:rp-topologia}
+
+The book's network is described by a short Python file, \file{labs/en/lab/chutney/networks/book}, written in Chutney's configuration language:
+\begin{lstlisting}[language=Python]
+Authority = Node(tag="a", authority=1, relay=1)
+Middle    = Node(tag="r", relay=1)
+Exit      = Node(tag="e", relay=1, exit=1)
+Client    = Node(tag="c", client=1, launch_phase=2)
+Onion     = Node(tag="h", hs=1, launch_phase=2)
+
+NODES = (Authority.getN(3) + Middle.getN(3) + Exit.getN(2)
+         + Client.getN(1) + Onion.getN(1))
+ConfigureNodes(NODES)
+\end{lstlisting}
+
+Each \texttt{Node} is a template, and \texttt{getN} creates multiple instances. The client and onion service start in a second phase (\file{launch\_phase=2}), once authorities have produced a consensus. Chutney numbers nodes in order and names each one by combining its number and tag: \texttt{test000a}, \ldots, \texttt{test009h}. Node numbers also determine port assignments, as shown in \cref{fig:rete-privata}.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig19-network}
+\caption{Chutney lab topology bound to \texttt{127.0.0.1}: three directory authorities/relays, three middle relays, two exits, one client, and one onion service. ORPort $5100+n$ applies only to authorities and other relays, including exits; all nodes have ControlPort $8000+n$. Authorities use DirPort $7100+n$, the client SocksPort $9008$, and the onion service virtual port $5858$ mapped to \texttt{127.0.0.1:4747}. The example HTTP circuit through an exit is separate from onion-service traffic, which does not use an exit relay. Loopback is not a separate container network.}
+\label{fig:rete-privata}
+\end{figure}
+
+\begin{center}\small
+\begin{tabular}{lllll}
+\toprule
+Node & Role & ORPort & ControlPort & Other \\
+\midrule
+\texttt{test000a}--\texttt{002a} & directory authority & 5100--5102 & 8000--8002 & DirPort 7100--7102 \\
+\texttt{test003r}--\texttt{005r} & middle relay & 5103--5105 & 8003--8005 & \\
+\texttt{test006e}--\texttt{007e} & exit & 5106--5107 & 8006--8007 & \\
+\texttt{test008c} & client & --- & 8008 & SocksPort 9008 \\
+\texttt{test009h} & onion service & --- & 8009 & virtual port 5858 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{approfondimento}[Why Three Authorities?]
+A consensus must be signed by a majority of directory authorities (\cref{cap:12-directory}). With only one, we could not observe voting; with three, we can observe the process and, in an exercise, see what happens if one authority stops. The public network has nine, plus a separate bridge authority. Their list is compiled into tor itself (\file{src/app/config/auth\_dirs.inc}).
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{A Test Network Is Not the Real Network}\label{sec:rp-opzioni}
+
+Chutney generates a \file{torrc} for each node. These files reveal exactly what must change to make a miniature Tor network work, and therefore which assumptions about the public network do not hold. Here are the most important options from an authority's torrc (\file{net/nodes/000a/torrc}):
+\begin{lstlisting}[language=torrc,numbers=none]
+TestingTorNetwork 1
+AuthoritativeDirectory 1
+V3AuthoritativeDirectory 1
+AssumeReachable 1
+V3AuthVotingInterval 20 seconds
+V3AuthVoteDelay 4
+V3AuthDistDelay 4
+TestingDirAuthVoteGuard *
+TestingDirAuthVoteHSDir *
+\end{lstlisting}
+
+\begin{description}
+  \item[\opt{TestingTorNetwork}] Enables test mode. It can only be used alongside an explicit directory-authority list (\opt{DirAuthority}), preventing test nodes from accidentally joining the public network. It also changes many defaults to speed up operation.
+  \item[\opt{V3AuthVotingInterval}] On the real network, authorities vote on a new consensus hourly. Here, they do so every 20 seconds, as the consensus itself shows:
+\begin{lstlisting}[numbers=none]
+valid-after 2026-09-23 14:37:40
+fresh-until 2026-09-23 14:38:00
+valid-until 2026-09-23 14:38:20
+\end{lstlisting}
+  \item[\opt{AssumeReachable}] A relay normally verifies that it is externally reachable before advertising itself. That test is meaningless on loopback and is skipped.
+  \item[\opt{TestingDirAuthVoteGuard} \texttt{*}] On the real network, relays earn the Guard flag through weeks of stability and adequate bandwidth. Here, authorities assign it to all relays. Therefore \textbf{every relay in our consensus is a potential guard}, unlike on the public network.
+\end{description}
+
+The exits' torrc files also contain:
+\begin{lstlisting}[language=torrc,numbers=none]
+ExitPolicyRejectPrivate 0
+ExitPolicy accept private:*
+\end{lstlisting}
+By default, exits reject connections to private and loopback addresses to avoid exposing their local networks. In this laboratory, \texttt{127.0.0.1} is the only available \enquote{Internet}, so that policy must be reversed.
+
+\begin{attenzione}[Do Not Copy These Options Elsewhere]
+\texttt{Testing\ldots} options, \opt{AssumeReachable}, and especially \texttt{ExitPolicy accept private:*} are only for test networks. On a public relay, these settings would be incorrect or dangerous to its host network.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Inside a Node's Directory}\label{sec:rp-file}
+
+Each node has its own data directory under \file{labs/en/lab/net/nodes/NNNx/}. Among other files, an authority's directory contains:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+File or directory & Contents \\
+\midrule
+\file{torrc} & Chutney-generated configuration \\
+\file{keys/} & node identity and onion keys (\cref{cap:05-crittografia,cap:06-architettura}) \\
+\file{fingerprint}, \file{fingerprint-ed25519} & RSA and Ed25519 identity fingerprints \\
+\file{cached-consensus}, \file{cached-microdesc-consensus} & both consensus flavors (\cref{cap:12-directory}) \\
+\file{cached-microdescs.new} & downloaded microdescriptors \\
+\file{v3-status-votes} & authority votes (authorities only) \\
+\file{sr-state} & shared-randomness protocol state (authorities only) \\
+\file{notice.log}, \file{info.log} & logs at \emph{notice} and \emph{info} levels \\
+\file{control\_auth\_cookie} & control-port authentication cookie \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The onion service's directory additionally holds \file{hidden\_service/}, with its keys and a \file{hostname} file containing the \texttt{.onion} address, for example:
+\begin{lstlisting}[numbers=none]
+rpns2r36zn5u46wctlgnvtwjotxaf7iflsc3k5eas3lqoxeesv4zwyad.onion
+\end{lstlisting}
+The address changes with each fresh configuration because a new key is generated (\cref{cap:14-onion-services}).
+
+A consensus is a human-readable text file. Extracting the \texttt{r} lines (relay identities and addresses) and \texttt{s} lines (flags) gives these two example relays:
+\begin{lstlisting}[numbers=none]
+r test000a H+9DDHx4rEo6I6Jdn8gIyKyi3jk ... 127.0.0.1 5100 7100
+s Authority Fast Guard HSDir Running Stable V2Dir Valid
+r test006e dEPHoFFHamQyy6pRzlsLB9/ilzU ... 127.0.0.1 5106 0
+s Exit Fast Guard HSDir Running Stable V2Dir Valid
+\end{lstlisting}
+Notice that all relays carry the Guard flag, as expected, while only the two exits carry Exit. The fields are explained in \cref{cap:12-directory}.
+
+% ---------------------------------------------------------------------------
+\section{Using the Network}\label{sec:rp-uso}
+
+\subsection{Browsing Through the Private Network}
+
+Run both HTTP examples \emph{inside the laboratory container}, in \file{/lab}, after opening it with \cmd{make -C labs/en/lab shell} from a separate host terminal. Using \texttt{--noproxy} with an empty string forces curl to use the SOCKS proxy even when the destination is \texttt{127.0.0.1} and \texttt{NO\_PROXY} is set. Port 4747 serves the \file{index.html} created in the first example.
+
+Client \texttt{test008c} exposes SOCKS on port 9008. Any SOCKS5-capable program can use it. Start a small local web server and access it through Tor:
+\begin{lstlisting}[language=bash,numbers=none]
+$ echo "Hello from the private network" > index.html
+$ python3 -m http.server 8080 --bind 127.0.0.1 &
+$ curl --noproxy "" --socks5-hostname 127.0.0.1:9008 http://127.0.0.1:8080/index.html
+Hello from the private network
+\end{lstlisting}
+The request traveled through a three-relay circuit before one of the exits connected to the server. Using \texttt{--socks5-hostname} rather than \texttt{--socks5} makes the exit resolve destination names, instead of our own system. On the real network, this is essential to avoid leaking visited destinations to the local DNS resolver (\cref{cap:11-stream}).
+
+\subsection{Reaching the Onion Service}
+
+Chutney configures the onion service with:
+\begin{lstlisting}[language=torrc,numbers=none]
+HiddenServicePort 5858 127.0.0.1:4747
+\end{lstlisting}
+This maps virtual port 5858 at the \texttt{.onion} address to local port 4747. All we need is a server listening there:
+\begin{lstlisting}[language=bash,numbers=none]
+$ python3 -m http.server 4747 --bind 127.0.0.1 &
+$ curl --noproxy "" --socks5-hostname 127.0.0.1:9008 \
+    http://$(cat net/nodes/009h/hidden_service/hostname):5858/index.html
+Hello from the private network
+\end{lstlisting}
+This time, no exit is involved. The client and service meet at a rendezvous point within the network (\cref{cap:14-onion-services}).
+
+\subsection{Observing Circuits with Stem}\label{sec:rp-stem}
+
+The control port lets us inspect a running node. With Stem (\cref{cap:18-stem}), included in the image, we list the client's circuits:
+\begin{lstlisting}[language=Python]
+from stem.control import Controller
+
+with Controller.from_port(port=8008) as c:
+    c.authenticate()                    # authenticate using the configured cookie
+    print(c.get_version())
+    for circ in c.get_circuits():
+        print(circ.id, circ.status, circ.purpose,
+              [name for _, name in circ.path])
+\end{lstlisting}
+An excerpt from the output after \cmd{make -C labs/en/lab verify}:
+\begin{lstlisting}[numbers=none]
+0.4.9.13 (git-3c575400909efe65)
+10 BUILT GENERAL ['test004r', 'test005r', 'test007e']
+124 BUILT CONFLUX_LINKED ['test006e', 'test004r', 'test007e']
+114 BUILT CONFLUX_UNLINKED ['test007e', 'test004r', 'test006e']
+128 BUILT CIRCUIT_PADDING ['test004r', 'test001a', 'test007e', 'test006e']
+163 BUILT HS_CLIENT_REND ['test004r', 'test001a', 'test006e']
+166 BUILT HS_CLIENT_HSDIR ['test004r', 'test006e', 'test007e', 'test003r']
+181 BUILT HS_VANGUARDS ['test004r', 'test007e', 'test006e']
+\end{lstlisting}
+
+Even on a network this small, the list previews much of this book:
+\begin{itemize}
+  \item Nearly all circuits start with \texttt{test004r}: the client's \textbf{guard}, selected once and reused (\cref{cap:13-percorso}). The exceptions are the legs of a Conflux tunnel starting with the second guard (\cref{cap:18-stem}).
+  \item Three-hop \texttt{GENERAL} circuits carry ordinary traffic; single-hop circuits, omitted here, fetch directory information.
+  \item \file{CONFLUX\_LINKED} circuits come in pairs used together for the same traffic: the Conflux feature (\proposta{329}, \cref{cap:31-futuro}).
+  \item \file{HS\_VANGUARDS}, \file{HS\_CLIENT\_HSDIR}, and \file{HS\_CLIENT\_REND} identify circuits involved in reaching an onion service (\cref{cap:14-onion-services}).
+  \item Under the control-protocol specification, \file{CIRCUIT\_PADDING} identifies a circuit retained to mask when it really stopped being used. Its closure thus does not necessarily reveal when user activity ended.
+\end{itemize}
+
+\subsection{Working Inside the Container}\label{sec:rp-shell}
+
+The container uses host networking, making all node ports directly reachable from the host computer. If this is unavailable, for example with Docker Desktop, \cmd{make -C labs/en/lab shell} opens a shell inside the container with tor, Chutney, Stem, Python, and capture tools installed; laboratory files are available under \file{/lab}.
+
+% ---------------------------------------------------------------------------
+\section{First Contact with a Relay}\label{sec:rp-contatto}
+
+The following Python snippet imports the teaching package \file{torlab} from \file{labs/en/code/}; the Chutney container mounts only \file{labs/en/lab/} at \file{/lab}, so the package is \emph{not automatically importable inside that container}. On Linux with host networking, save the snippet as a script and run it from the repository root with \texttt{PYTHONPATH=labs/en/code python3 script.py}, or explicitly make the code package available in the container. This example is intended only for the private network.
+
+We return to \cref{cap:08-celle}. With \file{labs/en/code/torlab/cells.py} from Laboratory~2, we can open a TLS connection to a laboratory relay's ORPort, send a \cella{VERSIONS} cell, and decode the reply. Laboratory~1 in \cref{cap:07-canali} provides the complete code with certificate verification. Here, we only observe the initial exchange:
+\begin{lstlisting}[language=Python]
+import socket, ssl
+from torlab.cells import *
+
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE   # private lab only; TLS certificates NOT verified
+s = ctx.wrap_socket(socket.create_connection(("127.0.0.1", 5103)))
+s.sendall(encode(versions_cell([3, 4, 5]), 0))
+
+buf, version, received = b"", 0, 0
+while received < 4:
+    chunk = s.recv(4096)
+    if not chunk:
+        raise ConnectionError("TLS channel closed early")
+    buf += chunk
+    while (r := decode(buf, version)) is not None:
+        cell, buf = r
+        received += 1
+        print(describe(cell, version))
+        if cell.command == CellCommand.VERSIONS:
+            version = negotiate_version([3, 4, 5], cell.body)
+s.close()
+\end{lstlisting}
+
+\textbf{Caution:} this short demonstration deliberately disables TLS certificate verification with \texttt{ssl.CERT\_NONE}; it does \emph{not} actually validate the relay identity from the CERTS cell. Do not run it against public relays. Laboratory~1 supplies the complete verification procedure.
+
+The following excerpt comes from a previous reference session; circuit IDs, fingerprints, onion addresses, timestamps, and certificate sizes may change between runs.
+
+Relay \texttt{test003r} responds:
+\begin{lstlisting}[numbers=none]
+CircID=0x0000 VERSIONS body=6 bytes
+CircID=0x00000000 CERTS body=1451 bytes
+CircID=0x00000000 AUTH_CHALLENGE body=36 bytes
+CircID=0x00000000 NETINFO body=509 bytes
+\end{lstlisting}
+
+This is exactly the sequence described in \cref{sec:sessione}: first, \cella{VERSIONS} with a two-byte CircID; after negotiating version 5, subsequent cells use a four-byte CircID. \cella{CERTS} and \cella{AUTH\_CHALLENGE} have variable lengths and retain their exact message bodies; \cella{NETINFO} is fixed-length and carries all 509 bytes. Notice that \texttt{version = ...} is assigned immediately after \cella{VERSIONS}: decoding the following cells depends on the freshly negotiated version.
+
+% ---------------------------------------------------------------------------
+\section{Shadow: A Network Inside a Simulator}\label{sec:rp-shadow}
+
+Chutney is not enough for questions about the behavior of the network \emph{as a whole}. How would a different congestion-control algorithm affect latency? How much traffic would an adversary need for a particular attack? Answering these questions requires thousands of nodes, realistic latencies across continents, and, above all, reproducible experiments.
+
+Shadow, originally developed by Rob Jansen and Nicholas Hopper~\cite{jansen2012shadow}, meets these needs. Current versions run real programs, including tor, as normal Linux processes, while intercepting networking and time-related system calls. A virtual graph supplies user-defined latency and bandwidth, and time advances only when the simulator chooses. One simulated hour may therefore take more or less than an hour of real time, depending on processing power, and repeating an experiment with the same random seed produces the same result.
+
+To build realistic Tor networks in Shadow, researchers use \textbf{tornettools}. Based on public Tor Metrics data (\cref{cap:24-metrics}), it generates a scaled-down network with distributions of bandwidth, flags, and roles matching those of the real network.
+
+We will use Shadow in a guided experiment in \cref{cap:29-ricerca}. For now, it is enough to know when the simulator is the appropriate tool.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item Run Tor experiments on private networks. On the public network, they could involve users without consent and would not be reproducible.
+  \item Chutney emulates a Tor network with real \texttt{tor} processes on loopback. Shadow runs the real software inside a discrete-event simulator suited to large networks and repeatable experiments.
+  \item The book's laboratory (\file{labs/en/lab/}) builds tor 0.4.9.13 from source. \cmd{make -C labs/en/lab start} starts a ten-node network: three authorities, three middles, two exits, a client, and an onion service.
+  \item Node $n$ uses ORPort $5100+n$, ControlPort $8000+n$, and SocksPort $9000+n$.
+  \item Test settings (\opt{TestingTorNetwork}, voting every 20 seconds, assigning Guard to all relays, and permitting private exit addresses) make the miniature network work but distinguish it from the real one. Measurements from it require caution before extrapolation.
+  \item SocksPort 9008 carries application traffic through the network; Stem observes circuits; \file{torlab} speaks directly with relays.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:19-porte}
+Without reading the torrc, give the ORPort and ControlPort of \texttt{test006e}. Does \texttt{test009h} have an ORPort? Why?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:19-guard}
+Every relay on the private network has the Guard flag. Which option causes this, and why does it not happen on the real network? What effect does it have on laboratory path-selection measurements?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:19-socks}
+Repeat the \texttt{curl} request from \cref{sec:rp-uso}, using \texttt{--socks5} instead of \texttt{--socks5-hostname} and \texttt{localhost} instead of \texttt{127.0.0.1}. What changes in what the exit receives? Why does that matter on the public network?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-consenso}
+Observe the client's consensus \texttt{valid-after} field for several minutes (\cmd{grep valid-after net/nodes/008c/cached-microdesc-consensus}). How often does it change? Calculate how many consensuses are produced per day on the laboratory network and on the real network.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-autorita}
+Stop one of the three authorities (\cmd{make -C labs/en/lab shell}, then \cmd{kill} the corresponding process using its \file{pid} file). Does the network continue to produce consensuses? What happens if you stop two? Explain the result; the underlying reason appears in \cref{cap:12-directory}.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-stem}
+Modify the Stem script from \cref{sec:rp-stem} to print the ORPorts of all relays on each three-hop circuit, obtaining them from the consensus with \file{get\_network\_status}.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-rete}
+Create \file{labs/en/lab/chutney/networks/book-large} with five authorities, ten middle relays, and four exits, then start it by setting \texttt{NETWORK=book-large} in the \texttt{make} command. How does bootstrap time compare with the book's network?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:19-log}
+Find the messages in the client's \file{info.log} relating to circuit construction, from node selection to completion. Match each message to a cell in \cref{fig:sessione}.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:19-cattura}
+Inside the container, capture traffic to port 5103 with \cmd{tcpdump -i lo} while running the script from \cref{sec:rp-contatto}. Can you see the cells? Why not? What remains observable: sizes, timing? \Cref{cap:20-traffico} shows how to go further.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item Chutney, \url{https://gitlab.torproject.org/tpo/core/chutney}: its README and \file{networks/} directory contain many example networks, including examples with bridges and Arti.
+  \item R.~Jansen, N.~Hopper, \titolo{Shadow: Running Tor in a Box for Accurate and Efficient Experimentation}~\cite{jansen2012shadow}.
+  \item Shadow and tornettools documentation, \url{https://shadow.github.io/}.
+  \item Tor Research Safety Board, \url{https://research.torproject.org/safetyboard/}: guidance for ethical research on Tor.
+\end{itemize}

@@ -1,0 +1,161 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{安装 Tor 与配置 torrc}\label{cap:17-torrc}
+\aggiornatoal{2026 年 9 月 23 日}{tor 0.4.9.13；同版本的 \texttt{tor(1)} 手册}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 根据使用目的选择适当的 Tor 安装方式；
+  \item 阅读和编写 \file{torrc} 文件，并知道从哪里查找每个选项的文档；
+  \item 把 tor 配置为客户端，设置 SOCKS 端口、流隔离和受保护的控制端口；
+  \item 在投入使用前验证配置，并根据日志诊断问题。
+\end{itemize}
+\end{obiettivi}
+
+本章开始介绍本书的实践内容。前面的章节解释了协议如何工作；现在我们来学习使用和配置实现这一协议的程序。本章提到的所有选项都收录在 tor 手册（\cmd{man tor}）中。手册是权威参考，因为默认值可能随版本改变。
+
+% ---------------------------------------------------------------------------
+\section{应该安装哪一种 Tor？}\label{sec:torrc-installare}
+
+\begin{description}
+  \item[Tor Browser] 如果目的是浏览网页，它几乎总是正确选择。它包含预先配置的 tor 和经过修改的浏览器，以避免泄露会削弱网络保护能力的信息（\cref{cap:23-browser}）。相反，直接把普通浏览器连接到 tor 仍可能暴露多种可用于识别用户的特征。
+  \item[\texttt{tor} 软件包] 适用于需要让其他应用程序通过 Tor 通信，或运营中继、洋葱服务的情况。Linux 发行版通常提供它，但不一定是最新版本。Tor Project 为 Debian 和 Ubuntu 维护自己的软件仓库，并为 Windows 与 macOS 发布包含 tor 和可插拔传输程序的 \emph{Tor Expert Bundle}。
+  \item[从源代码构建] 适合研究 tor 或需要某个精确版本的场景，例如本书的实验网络（\cref{sec:rp-avvio}）。
+  \item[Arti] 使用 Rust 编写的客户端（\cref{cap:30-arti}），功能正逐渐成熟，但配置方法不同。
+\end{description}
+
+无论选择哪一种方法，都只能从官方网站下载软件，并验证其签名。如果 tor 已被攻击者篡改，它所提供的保护将失去意义。
+
+% ---------------------------------------------------------------------------
+\section{torrc 配置文件}\label{sec:torrc-formato}
+
+tor 从文本文件中读取配置；作为系统服务运行时，该文件通常位于 \file{/etc/tor/torrc}。格式很简单：每行写一个选项，后面跟随参数值。以 \texttt{\#} 开头的行是注释。有些选项可以出现多次，例如可以指定多个 SOCKS 端口。也可以在命令行中使用双连字符传递选项：
+\begin{lstlisting}[language=bash,numbers=none]
+$ tor --SocksPort 9150 --DataDirectory /tmp/tor-test
+\end{lstlisting}
+手册记录了数百种选项，\cmd{tor --list-torrc-options} 可以列出全部选项。发行版还可能通过 \texttt{--defaults-torrc} 指定另外一个默认配置文件。使用 \texttt{-f} 指定的文件具有更高的优先级。
+
+\subsection{使用前先检查}
+
+下面三个命令可以避免许多意外：
+\begin{lstlisting}[language=bash,numbers=none]
+$ tor --verify-config -f /etc/tor/torrc     # 检查配置是否有效
+Configuration was valid
+$ tor --dump-config short -f /etc/tor/torrc # 查看与默认值不同的设置
+$ tor --list-modules                        # 查看编译了哪些模块
+relay: yes
+dirauth: yes
+dircache: yes
+pow: yes
+\end{lstlisting}
+正如 \cref{cap:15-dos} 所述，最后一个命令可以显示是否支持洋葱服务的工作量证明等功能。上面保留的是软件的实际英文输出，而非人为翻译后的字符串。
+
+% ---------------------------------------------------------------------------
+\section{客户端配置}\label{sec:torrc-client}
+
+客户端只需要很少的配置。事实上，最简配置文件可以是空文件：默认情况下，tor 会在本机的 9050 端口启动 SOCKS 代理。下面是一个写得更明确、带注释的系统服务配置示例：运行 tor 的服务账户需要能够访问 \file{/var/lib/tor} 和 \file{/var/log/tor}，不能假定普通用户直接运行时也具有这些权限。
+\begin{lstlisting}[language=torrc]
+# tor 存储状态、密钥和缓存的位置
+DataDirectory /var/lib/tor
+
+# 供应用程序使用的 SOCKS 端口（只能在本机监听！）
+SocksPort 127.0.0.1:9050
+
+# 使用 cookie 保护的控制端口（参见第 18 章）
+ControlPort 127.0.0.1:9051
+CookieAuthentication 1
+
+# 以 notice 级别记录日志
+Log notice file /var/log/tor/notice.log
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering
+\input{图/图17-端口}
+\caption{tor 进程的示例端口和目录。9050 上的 SOCKS 服务于本机应用；ControlPort 9051 不是默认开启的，启用后必须进行身份认证。这些本地监听端口不应暴露到网络。DataDirectory 是文件目录而非端口。ORPort 443 只是中继或网桥的一种配置示例，并非固定端口。}
+\label{fig:porte}
+\end{figure}
+
+\begin{attenzione}[不要暴露 SOCKS 端口]
+手册明确指出：SOCKS 协议既不加密，也不认证。如果 \opt{SocksPort} 监听网络上其他主机可以访问的地址，这台计算机就会变成开放代理，而且应用程序的请求会以明文形式暴露在本地网络上。
+\end{attenzione}
+
+\subsection{流隔离}\label{sec:torrc-isolamento}
+
+多个流可以共用一条电路。这样效率较高，但出口中继也就可能把同一用户进行的不同活动关联起来。如果个人邮箱和使用化名的论坛共用一条电路，出口中继便可以看出两种活动来自同一个人。因此，tor 提供\textbf{流隔离}：用规则决定哪些流可以共用电路。这些规则通过 \opt{SocksPort} 的选项表达：
+\begin{description}
+  \item[\texttt{IsolateClientAddr}] 来自不同客户端地址的流不能共用电路（默认启用）。
+  \item[\texttt{IsolateSOCKSAuth}] 使用不同 SOCKS 凭据的流不能共用电路（默认启用）。
+  \item[\texttt{IsolateDestAddr}、\texttt{IsolateDestPort}] 根据目的地址和目的端口隔离。
+  \item[\texttt{IsolateClientProtocol}] 根据客户端协议隔离（SOCKS4、SOCKS5、DNS 等）。
+\end{description}
+默认情况下，不同 SOCKS 监听端口也互相隔离：每个监听器都有自己的\emph{会话组}。可以通过 \opt{SessionGroup} 改变这一行为，允许不同端口共用电路。应用最广泛的是 SOCKS 认证隔离：Tor Browser 为不同网站发送不同的 SOCKS 凭据，因此每个网站会使用不同的电路。我们将在 \cref{cap:18-stem} 中观察到这一点。
+
+电路也不会被无限期重复使用。经过 \opt{MaxCircuitDirtiness} 规定的时间后——默认从首次使用起计算 10 分钟——该电路就不再接收新流，tor 会建立另一条电路。
+
+\subsection{谨慎选择中继}
+
+\opt{EntryNodes}、\opt{ExitNodes} 和 \opt{ExcludeNodes} 选项可以通过指纹、昵称、地址或国家代码强制选择或排除中继。即使会损害可用性，\opt{StrictNodes} 也可以强制执行 \opt{ExcludeNodes}。这些工具适用于实验和特殊场景。但如果只是为了\enquote{感觉更安全}而使用它们，结果通常适得其反：缩小中继选择范围，会降低路径多样性，让用户的行为更加显眼，并破坏加权路径选择和守卫机制原本提供的保护（\cref{cap:13-percorso}）。
+
+\subsection{其他端口}
+
+\begin{description}
+  \item[\opt{DNSPort}] tor 响应 DNS 请求，并通过 Tor 网络解析域名（\cref{sec:stream-dns}）。
+  \item[\opt{TransPort}] 接受由系统防火墙重定向的\emph{透明代理} TCP 连接。Whonix 等系统使用这一机制，把应用程序流量送入 Tor（\cref{cap:23-browser}）。
+  \item[\opt{AutomapHostsOnResolve}] 为经 DNS 查询的 \texttt{.onion} 名称分配虚拟地址，使不支持 SOCKS 的应用也可以通过 \opt{TransPort} 访问洋葱服务。
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{控制端口}\label{sec:torrc-controllo}
+
+其他程序可以通过 \opt{ControlPort} 在 tor 运行期间控制它：读取状态、请求建立新电路，或者动态创建洋葱服务。该接口功能非常强大，因此必须受到保护。可用的两种认证方式是：
+\begin{description}
+  \item[Cookie] 当 \opt{CookieAuthentication} 设置为 1 时，tor 在数据目录中写入一个包含 32 个随机字节的文件。任何能读取该文件的进程都能通过认证，因此安全性取决于文件权限。
+  \item[密码] 使用 \opt{HashedControlPassword} 时，tor 存储通过 \cmd{tor --hash-password} 生成的密码哈希：
+\begin{lstlisting}[language=bash,numbers=none]
+$ tor --hash-password test
+16:458528FE0C0AF36260B5071446823FB789212185D7EE7F615BC120D55D
+\end{lstlisting}
+这里的哈希是使用固定盐值、针对示例密码 \texttt{test} 验证过的演示结果。实际执行命令时，tor 会随机生成盐值，因此即使密码不变，输出通常也不同。切勿在真实配置中复用示例密码或哈希。
+\end{description}
+与 SOCKS 端口一样，控制端口绝不能暴露给网络。有关控制协议的详细内容，参见 \cref{cap:18-stem}。
+
+% ---------------------------------------------------------------------------
+\section{日志}\label{sec:torrc-log}
+
+tor 以不同详细程度记录活动：\texttt{err}、\texttt{warn}、\texttt{notice}、\texttt{info} 和 \texttt{debug}。日常运行使用 \texttt{notice} 即可。研究协议问题时，\texttt{info} 和 \texttt{debug} 很有价值，正如我们在实验中所做的那样，但它们也会产生大量日志。默认启用的 \opt{SafeLogging} 会把日志中的地址和目的地替换为 \texttt{[scrubbed]}。遗留的日志文件不应该成为用户活动记录。为了观察所有细节，实验网络特意关闭这项保护（\texttt{SafeLogging 0}）。
+
+启动过程中最有用的是\emph{引导}（bootstrap）消息。它们显示连接网络的各个阶段，最后到达 \texttt{Bootstrapped 100\% (done): Done}。如果启动长期停留在某一百分比，相应阶段可以帮助定位故障。例如，连接第一个中继时受阻，通常意味着受到审查或防火墙限制，可以考虑使用网桥（\cref{cap:16-censura}）。
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item 浏览网页应使用 Tor Browser；\texttt{tor} 软件包则适合其他应用、中继和洋葱服务。
+  \item \file{torrc} 每行包含一个选项；手册是权威参考，\texttt{--verify-config} 可以验证配置。
+  \item SOCKS 和控制端口只应监听 localhost。控制端口须使用 cookie 或密码保护。
+  \item 流隔离可以避免无关活动共用一条电路。Tor Browser 通过为不同网站使用不同的 SOCKS 凭据来实现这一点。
+  \item 强制选择或排除中继通常会降低安全性；\opt{SafeLogging} 用于保护日志中的敏感信息。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:17-verifica}
+在实验容器内，创建一个选项名称存在拼写错误的 \file{torrc}，使用 \texttt{--verify-config} 检查。你得到了什么消息？然后在实验网络客户端的 \file{torrc} 上运行 \texttt{--dump-config short}。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:17-isolamento}
+某用户使用同一个 \opt{SocksPort}，既以真实身份登录个人邮箱，也以化名访问论坛。出口中继可能推断出什么？请提出两种能避免此问题的配置。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:17-exitnodes}
+为什么 \texttt{ExitNodes \{it\}}（只使用意大利出口中继）可能降低访问意大利网站的意大利用户的匿名性？请结合 \cref{cap:04-modello-minaccia} 中的威胁模型说明。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item tor 手册 \cmd{man tor}，以及源码树中的 \file{doc/man/tor.1.txt}。
+  \item Tor Project 关于安装和软件仓库的支持文档：\url{https://support.torproject.org/}。
+\end{itemize}

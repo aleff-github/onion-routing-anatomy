@@ -1,0 +1,103 @@
+network-status-version 3 microdesc
+vote-status consensus
+consensus-method 36
+valid-after 2026-09-23 15:37:20
+fresh-until 2026-09-23 15:37:40
+valid-until 2026-09-23 15:38:00
+voting-delay 4 4
+client-versions 
+server-versions 
+known-flags Authority Exit Fast Guard HSDir NoEdConsensus Running Stable StaleDesc Sybil V2Dir Valid
+recommended-client-protocols Cons=2 Desc=2-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4 HSRend=2 Link=4-5 Microdesc=2-3 Relay=2-6
+recommended-relay-protocols Cons=2 Desc=2-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5 HSRend=2 Link=4-5 LinkAuth=3 Microdesc=2-3 Relay=2-6
+required-client-protocols Cons=2 Desc=2 FlowCtrl=1 Link=4 Microdesc=2 Relay=2
+required-relay-protocols Cons=2 Desc=2 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5 HSRend=2 Link=4-5 LinkAuth=3 Microdesc=2 Relay=2-4
+params AuthDirMaxServersPerAddr=0 cc_alg=2
+shared-rand-previous-value 3 pER93IP+H7JZng5PaVK6QlSjAzw2gvypvpmJubrV5H0=
+shared-rand-current-value 3 QpFt73a9FfZNt0NEL06wHLJ8dqFHF9T37DmTc+TztAA=
+dir-source test002a 3776EF73A9214587AEFB3D732FA4A443CFF491BA 127.0.0.1 127.0.0.1 7102 5102
+contact auth2@test.test
+vote-digest FFD197D729F6930FEC233FC2DCA00DABA74A3DEF
+dir-source test000a 436A7E9155DE20987864B28C1D4A86DEE6844E8D 127.0.0.1 127.0.0.1 7100 5100
+contact auth0@test.test
+vote-digest 843E3CA05DCB31984C35ED042B57A83E857DFECA
+dir-source test001a 9C6458465D1CED07DD7C426E7D2B24DC4347974D 127.0.0.1 127.0.0.1 7101 5101
+contact auth1@test.test
+vote-digest 0769FD2D457A36D8B20F3969E9AB6ED3185C5288
+r test001a EOynP9M5wr1DoeNhPOb3Lu8uz+8 2038-01-01 00:00:00 127.0.0.1 5101 7101
+m JMxzj5hy0lX+JR/oL9uLSfouYUGQe713Q6V3XImpvVM
+s Authority Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5 HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+w Bandwidth=20 Unmeasured=1
+r test005r eHTmDT0YDT5FVQbJ/4/stMUB0cE 2038-01-01 00:00:00 127.0.0.1 5105 0
+m Aq1XE14TT60hCiegzpHk20BH8svkD2crjOT5ZDJ7oHY
+s Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5 HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+w Bandwidth=4096
+r test003r fGMIiH2lI8UUAfa/Vh6E2K66LgE 2038-01-01 00:00:00 127.0.0.1 5103 0
+m 0pF43BbaMuA+w7mFJ2bVt8RitvDBNZ0+SfJh4GpxWXE
+s Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5 HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+w Bandwidth=4096
+r test004r kC0lvVveW2y1E6Y/7scx6Ma4Vs0 2038-01-01 00:00:00 127.0.0.1 5104 0
+m rP5EEF/yab5W4lXJXPS/YFJuHX6puYiIsqXOx3gd+Gk
+s Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5 HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+w Bandwidth=4096
+r test006e ml1aPg9UFy4VCx85YcpsRs/9shc 2038-01-01 00:00:00 127.0.0.1 5106 0
+m FfrgO+s4VYS6WKBq3pjfMDs+uZ2uVsvgG88JilbhIOo
+s Exit Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5 HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+w Bandwidth=4096
+r test007e pXlQbFEZtaQf0c778t/tgaBlZms 2038-01-01 00:00:00 127.0.0.1 5107 0
+m UKm49sW3wp+G9IRIwCYdhWidUfEiql8q7FmisuzOnqI
+s Exit Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5 HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+w Bandwidth=4096
+r test002a qFdB7fVz2RFeR01dGJUuSjvT63I 2038-01-01 00:00:00 127.0.0.1 5102 7102
+m nDloMkZ9+H3dzgbROtKxlA0O2fHVm4bBsM2lYXjxXN4
+s Authority Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5 HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+w Bandwidth=20 Unmeasured=1
+r test000a zpBIt71ZFJnPbkjm7QGb/OOcNLE 2038-01-01 00:00:00 127.0.0.1 5100 7100
+m hhht4kzr5v5834r8U1dO2oUh+kiQ96RBBMduWthjw/o
+s Authority Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5 HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+w Bandwidth=20 Unmeasured=1
+directory-footer
+bandwidth-weights Wbd=821 Wbe=0 Wbg=5000 Wbm=10000 Wdb=10000 Web=10000 Wed=8357 Wee=10000 Weg=8357 Wem=10000 Wgb=10000 Wgd=821 Wgg=5000 Wgm=5000 Wmb=10000 Wmd=821 Wme=0 Wmg=5000 Wmm=10000
+directory-signature sha256 3776EF73A9214587AEFB3D732FA4A443CFF491BA 79E102D226590BC5D1D1EBBAD8A16122EC0F9801
+-----BEGIN SIGNATURE-----
+Ehv1Fhto9354YRJCpikJxtAUMX7p7vttnKztjdabeR4ypiEprhfHZn7RlaYVLDia
+ZEYvoPFQlsgNpi8fmAwWno/+YY8ZqrhxBeEaJhWmUqqpgbEF/pPG5YDKPj85H5ua
+EyJ8od2paSrSVb7ubrS2fnnk5lgUKd/EEnfWUuVgqk9yxdfPSXPkUzeBVTNga+DZ
+TAr6g8n9+C5Xm2aawGvTKPpiayNT4R/seosIN1jxiBiBubQuqZ24heRK0ojkgkgZ
+yxdcV7syA4lv4/DtO8FidO1wuTMlN4t+JpHzDAIgQaHpQhuyaAtzGgDv+cXuhiS9
+IYUFmm6mNENceMKjIPBnkg==
+-----END SIGNATURE-----
+directory-signature sha256 436A7E9155DE20987864B28C1D4A86DEE6844E8D 938E90A3A5080331306779B9ABEA86A38FF0EE08
+-----BEGIN SIGNATURE-----
+TfetnSjFmYOCs5oG3O9WZGhc9Ls7JXe9osuhk8B2lPrPWOYwxV7Xw7xdcwn+JV5S
+eIoJ6ZdW9qVPmVjq59VDgyh0sdV+UWBJhaWIvllnJ+pMBCUWP4OEBK/0WbP4LPZH
+FgPhiS4CiyKI4Ccu3cJ2k1Cs/MPQUzYzoZXZjGzaw1wWeaa67PXRDbAT2rUt3ZiA
+/Av0O+I+X3QoXc8/it66D9C368i7ZJy8utbU79Xk9DHd+WrGIK88z3LMquGYx9rN
+QOGnXSMRQfRuhol00a8RCQBXyA2jscmWMm0KbxnsDsVkdfWuzBlhpYmyLDxMHMz+
+5MuqX7PvUl2teptXwP4xgQ==
+-----END SIGNATURE-----
+directory-signature sha256 9C6458465D1CED07DD7C426E7D2B24DC4347974D 76062641F7346158190832E0F6509348073E3D89
+-----BEGIN SIGNATURE-----
+X40xmZE6kYKYFEUtYgLFQgYZoBvGQNK7jPiSlwcmd2DivzJbKSou9vRtvcgZL9Hc
+ucZBzmNkhi9YnpXks9nyutynZEefXw9gPZEFqhcM0xHAKSB3qx2I6VBwIgc/HsMG
+5u6rQuigBfN00X7+FhAMfnuoI13qdvdpM7oqEBTtZ200vAykJ1rxqiXy1MVVmp16
+q9ndshQzyh653OUVR3R4N0a+LXr7Y8Pdz7mp4UE+/QHM4um1qL221N0oOFRqzXg2
+C8vfzzsZWk5VhJN3yNC+hQMQseYcKHspM2FMur1p7YQV2S+VLwQQl8geVGssgcI8
+TP//DEWx3R2IDl4wg808cA==
+-----END SIGNATURE-----

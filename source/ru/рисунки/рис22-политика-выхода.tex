@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Политика выхода узла Chutney: только в тестовой сети ExitPolicyRejectPrivate 0 отключает предварительное отклонение приватных адресов. Два запроса BEGIN к 127.0.0.1 на порты 8080 и 8081 проходят правила в порядке записи. Порт 8080 совпадает с reject 127.0.0.1:8080, результат END EXITPOLICY. Порт 8081 пропускает это правило и совпадает с accept 127.0.0.0/8:*, что разрешает попытку TCP-подключения; CONNECTED возможен лишь при работающем сервере. Если поменять правила местами, запрет не сработает. На публичном выходном реле отключать ExitPolicyRejectPrivate нельзя.}
+% Политика выхода только в лаборатории
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.45cm,
+  reg/.style={draw,rounded corners=1pt,minimum height=0.6cm,text width=4.6cm,font=\ttfamily\scriptsize},
+  esito/.style={draw,rounded corners=2pt,minimum height=0.6cm,text width=2.5cm,align=center}]
+  \node[font=\sffamily\scriptsize] (top) at (0,1.25) {два BEGIN: 127.0.0.1:8080 / :8081};
+  \node[draw,rounded corners=2pt,fill=torviola!10,font=\ttfamily\tiny] (r0) at (0,0.15) {ExitPolicyRejectPrivate 0};
+  \node[reg,fill=avviso!12,below=of r0] (r1) {reject 127.0.0.1:8080};
+  \node[reg,fill=torverde!12,below=of r1] (r2) {accept 127.0.0.0/8:*};
+  \node[reg,fill=torgrigio!10,below=of r2] (r3) {(прочие правила по умолчанию)};
+  \draw[->] (top) -- (r0); \draw[->] (r0) -- (r1); \draw[->] (r1) -- node[right,font=\sffamily\tiny] {8081: не совпадает} (r2); \draw[->] (r2) -- node[right,font=\sffamily\tiny] {иначе} (r3);
+  \node[esito,fill=avviso!15,draw=avviso,right=1.2cm of r1] (e1) {\texttt{END} причина\\\texttt{EXITPOLICY}};
+  \draw[->,avviso,thick] (r1) -- node[above,font=\sffamily\tiny] {8080 совпадает} (e1);
+  \node[esito,fill=torverde!15,draw=torverde!60!black,right=1.2cm of r2] (e2) {попытка TCP\\CONNECTED лишь\\при сервере};
+  \draw[->,torverde!60!black,dashed] (r2) -- node[above,font=\sffamily\tiny] {8081 совпадает} (e2);
+  \node[anchor=west,font=\sffamily\tiny,text=torgrigio,align=left] at (-5.9,-0.55) {первое совпавшее\\правило решает};
+  \node[anchor=west,font=\sffamily\tiny,text=avviso] at (-5.9,-1.95) {не для публичного exit};
+  \node[font=\sffamily\tiny,text=torgrigio,anchor=south] at (r0.north) {только тест: ExitPolicyRejectPrivate 0};
+\end{tikzpicture}

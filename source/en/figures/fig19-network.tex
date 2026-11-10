@@ -1,0 +1,29 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text (EPUB).
+\altfig{Chutney test topology bound to 127.0.0.1: three directory authorities test000a through 002a, also relays, with ORPorts 5100–5102 and DirPorts 7100–7102; three middle relays 003r–005r, two exit relays 006e and 007e, client 008c on SOCKS 9008, and onion service 009h with virtual port 5858 mapped to 127.0.0.1:4747. In this lab the authorities vote every 20 seconds. An example HTTP circuit crosses 003r and 005r to exit 006e and the loopback test server 127.0.0.1:8080; the special lab exit policy permits private destinations. The onion service is separate and does not use an exit relay. Only selected ports appear in the diagram; the chapter table lists the rest. Loopback does not imply isolation from the host network.}
+% Private lab network: simplified topology
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  aut/.style={relay,fill=torviola!15,draw=torviola},
+  ex/.style={relay,fill=torverde!30}]
+  \foreach \i/\x in {0/0,1/2,2/4} \node[aut] (a\i) at (\x,3.2) {00\i a};
+  \node[above=1pt of a1,font=\sffamily\scriptsize,align=center] {directory authorities\\ORPort 5100--5102, DirPort 7100--7102};
+  \node[font=\sffamily\scriptsize,text=torgrigio,align=center] at (6.6,3.2) {vote every 20 s\\signed consensus};
+  \foreach \i/\x in {3/0,4/2,5/4} \node[relay] (r\i) at (\x,1.2) {00\i r};
+  \node[ex] (e6) at (6.6,1.2) {006e};
+  \node[ex] (e7) at (6.6,-0.6) {007e};
+  \node[client] (c) at (-2.4,1.2) {008c client};
+  \node[font=\ttfamily\scriptsize,below=1pt of c] {SOCKS 9008};
+  \node[client,fill=torverde!10,draw=torverde!60!black] (h) at (2,-1.2) {009h onion service};
+  \node[font=\ttfamily\scriptsize,below=1pt of h] {5858 $\to$ 127.0.0.1:4747};
+  \node[server] (w) at (9.4,1.2) {\texttt{127.0.0.1:8080}};
+  \begin{scope}[on background layer]
+    \foreach \n in {r3,r4,r5,e6,e7} \draw[dotted,torgrigio] (\n) -- (a1);
+  \end{scope}
+  \draw[cellaf] (c) -- (r3);
+  \draw[cellaf] (r3) to[bend right=40] (r5);
+  \draw[cellaf] (r5) -- (e6);
+  \draw[cellaf] (e6) -- (w);
+  \node[font=\sffamily\scriptsize,text=torviola] at (2,-0.05) {example HTTP circuit};
+  \node[font=\sffamily\tiny,text=torgrigio] at (4,-2.4) {onion: no exit relay};
+\end{tikzpicture}

@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Catena di autenticazione di un relay Tor: la chiave d'identità Ed25519 KP\_relayid\_ed certifica la chiave di firma KP\_relaysign\_ed (CertType 4). Quest'ultima certifica il digest SHA-256 del certificato TLS presentato dal rispondente (CertType 5) oppure la chiave KP\_link\_ed dell'iniziatore che si autentica (CertType 6). L'identità legacy RSA KP\_relayid\_rsa firma il certificato incrociato che collega l'identità Ed25519 (tipo 7) e possiede un certificato X.509 autofirmato (tipo 2). I valori 30 e 2 giorni indicano la validità esemplificativa dei certificati di firma e di collegamento, non una durata fissa di ogni chiave; alcune frecce certificano un digest o sono firmate RSA, non semplicemente una chiave Ed25519 con un'altra.}
+% Catena di certificati di un relay
+\begin{tikzpicture}[font=\sffamily\small,node distance=1.1cm,
+  chiave/.style={draw=torviola,fill=torviola!10,rounded corners,minimum width=3.6cm,minimum height=0.9cm,align=center},
+  legacy/.style={draw=torgrigio,fill=torgrigio!8,rounded corners,minimum width=3.4cm,minimum height=0.9cm,align=center},
+  cert/.style={-{Stealth[length=2.5mm]},thick,torverde!60!black},
+  etich/.style={font=\sffamily\scriptsize,fill=white,inner sep=1pt}]
+  \node[chiave] (id) {\texttt{KP\_relayid\_ed}\\identità Ed25519 (permanente)};
+  \node[chiave,below=of id] (sign) {\texttt{KP\_relaysign\_ed}\\chiave di firma (cert. 30 gg)};
+  \node[chiave,below left=1.1cm and -1.2cm of sign] (tls) {SHA-256 del\\certificato TLS (cert. 2 gg)};
+  \node[chiave,below right=1.1cm and -1.2cm of sign] (link) {\texttt{KP\_link\_ed}\\autenticazione (cert. 2 gg)};
+  \node[legacy,right=2.2cm of id] (rsa) {\texttt{KP\_relayid\_rsa}\\identità RSA (legacy)};
+  \draw[cert] (id) -- node[etich,right] {4 \texttt{IDENTITY\_V\_SIGNING}} (sign);
+  \draw[cert] (sign) -- node[etich,left] {5 \texttt{SIGNING\_V\_TLS\_CERT}} (tls);
+  \draw[cert] (sign) -- node[etich,right] {6 \texttt{SIGNING\_V\_LINK\_AUTH}} (link);
+  \draw[cert,torgrigio] (rsa) -- node[etich,above] {7} (id);
+  \draw[cert,torgrigio] (rsa.north east) to[out=60,in=0,looseness=4] node[etich,right] {2 (autofirmato)} (rsa.east);
+  \node[font=\sffamily\scriptsize,text=torgrigio,below=2pt of tls] {inviato dal rispondente};
+  \node[font=\sffamily\scriptsize,text=torgrigio,below=2pt of link] {inviato da un iniziatore che si autentica};
+\end{tikzpicture}

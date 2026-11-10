@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{Ilustración sintética, no una medición real, de correlación de tráfico Tor en una dirección. La gráfica superior muestra el volumen relativo de tráfico cifrado cada 250 milisegundos en el enlace cliente--guardia; la inferior, el volumen relativo entre salida y servidor. Dos series de ejemplo definidas por separado tienen ráfagas semejantes pero no idénticas, desplazadas un intervalo solo a modo de ejemplo y con diferencias en sus alturas y ruido adicional. El cifrado no oculta necesariamente el tiempo y el volumen. El almacenamiento intermedio, la sobrecarga, la multiplexación y otros flujos pueden alterar las formas; Tor no impone un retardo fijo y una correlación estadística no garantiza una coincidencia.}
+% Series sintéticas, no observaciones reales
+\begin{tikzpicture}[font=\sffamily\scriptsize,x=0.32cm,y=0.09cm]
+  \def\serieIngresso{0/6,1/0,2/0,3/9,4/12,5/2,6/0,7/0,8/0,9/5,10/14,11/14,12/3,13/0,14/0,15/7,16/0,17/0,18/11,19/4,20/0,21/0,22/8,23/2}
+  \def\serieUscita{0/0,1/5,2/0,3/0,4/8,5/11,6/3,7/0,8/0,9/1,10/4,11/13,12/12,13/4,14/0,15/0,16/6,17/0,18/1,19/10,20/5,21/0,22/1,23/7,24/3}
+  \foreach \x/\h in \serieIngresso {
+    \fill[torviola!70] (\x,20) rectangle ++(0.8,\h);
+  }
+  \foreach \x/\h in \serieUscita {
+    \fill[torverde!70!black] (\x,0) rectangle ++(0.8,\h);
+  }
+  \draw[->] (-0.5,20) -- (27,20) node[right] {$t$};
+  \draw[->] (-0.5,0) -- (27,0) node[right] {$t$};
+  \node[left,align=right] at (-0.6,26) {observador de\\entrada\\(cliente--guardia)};
+  \node[left,align=right] at (-0.6,6) {observador de\\salida\\(salida--servidor)};
+  \draw[<->,torgrigio] (10,17) -- node[above,font=\sffamily\tiny] {ejemplo: desfase de un intervalo} (11,17);
+  \node[text=torgrigio] at (13,40) {volumen relativo por 250\,ms};
+  \node[text=torgrigio,font=\sffamily\tiny] at (13,36.5) {trazas sintéticas, no medidas};
+\end{tikzpicture}

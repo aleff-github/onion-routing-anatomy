@@ -1,0 +1,29 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Texto alternativo accesible (EPUB).
+\altfig{Topología de pruebas Chutney ligada a 127.0.0.1: tres autoridades de directorio 000a a 002a que también son repetidores, con ORPort 5100–5102 y DirPort 7100–7102; tres repetidores intermedios 003r–005r, dos salidas 006e y 007e, cliente 008c con SOCKS 9008 y servicio onion 009h con puerto virtual 5858 redirigido a 127.0.0.1:4747. En el laboratorio las autoridades votan cada 20 segundos. Un circuito HTTP de ejemplo pasa por 003r y 005r hasta la salida 006e y el servidor de pruebas 127.0.0.1:8080; una política especial del laboratorio permite los destinos privados. El servicio onion es independiente y no utiliza salidas. El dibujo muestra solo algunos puertos, mientras que la tabla del capítulo recoge los demás. El uso de loopback no supone aislamiento de la red del anfitrión.}
+% Red privada de laboratorio: topología simplificada
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  aut/.style={relay,fill=torviola!15,draw=torviola},
+  ex/.style={relay,fill=torverde!30}]
+  \foreach \i/\x in {0/0,1/2,2/4} \node[aut] (a\i) at (\x,3.2) {00\i a};
+  \node[above=1pt of a1,font=\sffamily\scriptsize,align=center] {autoridades de directorio\\ORPort 5100--5102, DirPort 7100--7102};
+  \node[font=\sffamily\scriptsize,text=torgrigio,align=center] at (6.6,3.2) {votan cada 20 s\\consenso firmado};
+  \foreach \i/\x in {3/0,4/2,5/4} \node[relay] (r\i) at (\x,1.2) {00\i r};
+  \node[ex] (e6) at (6.6,1.2) {006e};
+  \node[ex] (e7) at (6.6,-0.6) {007e};
+  \node[client] (c) at (-2.4,1.2) {008c cliente};
+  \node[font=\ttfamily\scriptsize,below=1pt of c] {SOCKS 9008};
+  \node[client,fill=torverde!10,draw=torverde!60!black] (h) at (2,-1.2) {009h servicio onion};
+  \node[font=\ttfamily\scriptsize,below=1pt of h] {5858 $\to$ 127.0.0.1:4747};
+  \node[server] (w) at (9.4,1.2) {\texttt{127.0.0.1:8080}};
+  \begin{scope}[on background layer]
+    \foreach \n in {r3,r4,r5,e6,e7} \draw[dotted,torgrigio] (\n) -- (a1);
+  \end{scope}
+  \draw[cellaf] (c) -- (r3);
+  \draw[cellaf] (r3) to[bend right=40] (r5);
+  \draw[cellaf] (r5) -- (e6);
+  \draw[cellaf] (e6) -- (w);
+  \node[font=\sffamily\scriptsize,text=torviola] at (2,-0.05) {circuito HTTP de ejemplo};
+  \node[font=\sffamily\tiny,text=torgrigio] at (4,-2.4) {onion: sin nodo de salida};
+\end{tikzpicture}

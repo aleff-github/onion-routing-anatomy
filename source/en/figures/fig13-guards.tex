@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Tor guard selection is not a chain of nested sets. Relays currently carrying the Guard flag can be newly sampled; the persistent SAMPLE may retain previously listed relays. FILTERED and CONFIRMED are separate, potentially overlapping subsets of SAMPLE, rather than one containing the other. PRIMARY guards (three by default) come from FILTERED: previously confirmed guards are preferred, then other filtered guards fill vacant positions. Sample limits are normally 60 guards and a 20\% threshold; default removal timers are 120 days if never confirmed, 60 days since confirmation, or 20 days unlisted. A primary guard may temporarily be unreachable.}
+% Relationships among Tor guard sets and lists
+\begin{tikzpicture}[font=\sffamily\scriptsize,>=Stealth,
+  guardbox/.style={draw=torviola,fill=torviola!6,rounded corners=4pt,align=center,minimum height=1.1cm},
+  guardarrow/.style={-Stealth,thick,torgrigio}]
+  \node[guardbox,draw=torgrigio,fill=torgrigio!6,text width=10.5cm] (cons) at (5.8,5.1) {\textbf{Guard-flagged relays}: candidates from consensus};
+  \node[guardbox,text width=10.5cm] (sample) at (5.8,3.7) {\textbf{SAMPLED}: persisted; max 60, threshold 20\,\%};
+  \node[guardbox,text width=4.4cm] (filtered) at (2.7,2.0) {\textbf{FILTERED}: listed and permitted now};
+  \node[guardbox,text width=4.4cm] (confirmed) at (8.9,2.0) {\textbf{CONFIRMED}: used for traffic before};
+  \node[guardbox,draw=torverde!60!black,fill=torverde!15,text width=10.5cm] (primary) at (5.8,0.2) {\textbf{PRIMARY}: normally 3, subset of FILTERED};
+  \draw[guardarrow] (cons) -- (sample);
+  \draw[guardarrow] (sample.south west) to[out=235,in=90] (filtered.north);
+  \draw[guardarrow] (sample.south east) to[out=305,in=90] (confirmed.north);
+  \draw[guardarrow] (filtered.south) to[out=270,in=160] (primary.west);
+  \draw[guardarrow] (confirmed.south) to[out=270,in=20] (primary.east);
+  \node[align=center,text=torgrigio,font=\sffamily\tiny] at (5.8,-1.05) {prefer confirmed filtered, fill with others; expiry defaults 120/60/20 days};
+\end{tikzpicture}

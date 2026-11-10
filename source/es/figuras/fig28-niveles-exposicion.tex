@@ -1,0 +1,18 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{Cuatro capas donde puede exponerse la identidad: red (direcciones IP y circuitos), aplicación (DNS, complementos y huellas), contenido (metadatos, cuentas y estilo) y comportamiento (horarios, hábitos y contactos). Tor mitiga ciertos riesgos de red; sistemas y herramientas específicos ayudan en otras capas, junto con las decisiones del usuario. Ninguna capa garantiza por sí sola el anonimato.}
+% Capas de filtración de identidad y sus protecciones correspondientes
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  liv/.style={draw,rounded corners=2pt,minimum width=5.2cm,minimum height=0.75cm,align=center},
+  chi/.style={align=left,text width=5cm}]
+  \node[liv,fill=torviola!15] (r) at (0,0) {red: direcciones IP y circuitos};
+  \node[liv,fill=torviola!9] (a) at (0,0.95) {aplicación: DNS, complementos, huellas};
+  \node[liv,fill=torgrigio!10] (c) at (0,1.9) {contenido: metadatos, cuentas, estilo};
+  \node[liv,fill=avviso!12] (b) at (0,2.85) {comportamiento: horarios, hábitos, contactos};
+  \node[chi,right=0.4cm of r] {tor: protección de red no absoluta};
+  \node[chi,right=0.4cm of a] {Tor Browser, Tails, Whonix (\cref{cap:23-browser})};
+  \node[chi,right=0.4cm of c] {herramientas y decisiones sobre contenido};
+  \node[chi,right=0.4cm of b] {decisiones, hábitos y herramientas};
+  \draw[->,thick,torgrigio] (-3.1,-0.3) -- node[left,rotate=90,anchor=south] {la protección no es del todo automática} (-3.1,3.2);
+\end{tikzpicture}

@@ -1,0 +1,29 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 替代文本。
+\altfig{客户端与守卫之间 TLS 通道的示例时序。TLS 建立后双方各发送 CircID 为 0 的 VERSIONS；守卫的一根箭头简写四个独立信元：VERSIONS、CERTS、AUTH\_CHALLENGE、NETINFO。客户端发送 NETINFO，使用 CREATE2/CREATED2 建立第一跳，再以两个 RELAY\_EARLY [EXTEND2] 扩展到中间和出口中继，收到 RELAY [EXTENDED2]。图中 BEGIN 使用 RELAY\_EARLY 只是允许的示例，并非强制；随后为 CONNECTED、请求和响应 DATA、必要时的 SENDME，最后 DESTROY。守卫能观察本通道信元，但看不到发给后续中继的明文。方括号内的名称说明逻辑命令，并非守卫能读取的内容。}
+% 客户端到守卫通道上的信元序列。
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth]
+  \node[client] (c) at (0,0) {客户端};
+  \node[relay] (g) at (7,0) {守卫};
+  \draw[torgrigio] (c.south) -- ++(0,-12.2);
+  \draw[torgrigio] (g.south) -- ++(0,-12.2);
+  \newcommand{\av}[3]{\draw[cellaf] (0,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (7,#1);
+    \node[font=\scriptsize,text=torgrigio,anchor=west] at (7.4,#1) {#3};}
+  \newcommand{\ind}[3]{\draw[risposta] (7,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (0,#1);
+    \node[font=\scriptsize,text=torgrigio,anchor=west] at (7.4,#1) {#3};}
+  \av{-1.1}{VERSIONS}{CircID 0}
+  \ind{-1.8}{VERSIONS, CERTS, AUTH\_CHALLENGE, NETINFO}{CircID 0}
+  \av{-2.5}{NETINFO}{通道就绪}
+  \av{-3.5}{CREATE2}{CircID 0x8\ldots，第 1 跳}
+  \ind{-4.2}{CREATED2}{}
+  \av{-5.2}{RELAY\_EARLY [EXTEND2]}{发往中间中继}
+  \ind{-5.9}{RELAY [EXTENDED2]}{}
+  \av{-6.9}{RELAY\_EARLY [EXTEND2]}{发往出口}
+  \ind{-7.6}{RELAY [EXTENDED2]}{}
+  \av{-8.6}{RELAY\_EARLY [BEGIN]}{到网站的数据流}
+  \ind{-9.3}{RELAY [CONNECTED]}{}
+  \av{-10.1}{RELAY [DATA]}{HTTP 请求}
+  \ind{-10.8}{RELAY [DATA] \ldots}{响应、SENDME}
+  \av{-11.7}{DESTROY}{电路结束}
+\end{tikzpicture}

@@ -1,0 +1,283 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{La cipolla: cifratura dei relay cell e CGO}\label{cap:10-cifratura-relay}
+\aggiornatoal{23 settembre 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; proposta 359}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item descrivere come il client avvolge un messaggio in uno strato di cifratura per ogni salto e come i relay li tolgono;
+  \item spiegare il ruolo di Recognized e del digest progressivo e perché servono entrambi;
+  \item riconoscere le debolezze dello schema tradizionale: malleabilità e attacchi di \emph{tagging};
+  \item descrivere a grandi linee Counter Galois Onion (CGO), lo schema che lo sostituisce;
+  \item estendere un circuito reale fino a tre salti con il tuo codice (Laboratorio~4).
+\end{itemize}
+\end{obiettivi}
+
+Nel \cref{cap:09-circuiti} il client ha concordato con ogni relay del circuito quattro chiavi: Kf e Kb per cifrare, Df e Db per il controllo di integrità. In questo capitolo le mettiamo al lavoro. È il meccanismo che dà il nome all'onion routing: il messaggio viene avvolto in tanti strati quanti sono i relay, e ogni relay ne toglie uno, come si sbuccia una cipolla.
+
+% ---------------------------------------------------------------------------
+\section{Lo schema tradizionale}\label{sec:tor1}
+
+Lo schema in uso dalla nascita di Tor, che nel codice più recente prende il nome di \emph{tor1}, combina due strumenti per ciascun salto e ciascuna direzione:
+\begin{itemize}
+  \item un cifrario a flusso, \textbf{AES-128 in modalità contatore} (CTR), con chiave Kf o Kb;
+  \item un \textbf{digest progressivo} SHA-1, inizializzato con Df o Db.
+\end{itemize}
+Entrambi hanno uno \emph{stato} che dura quanto il circuito. Il contatore di AES-CTR non riparte da zero a ogni cella: la prima cella usa i primi 509 byte del flusso di chiavi, la seconda i 509 successivi, e così via. Allo stesso modo il digest non è calcolato sulla singola cella, ma su \emph{tutte} le celle scambiate finora con quel salto. Di conseguenza client e relay devono elaborare le celle esattamente nello stesso ordine: una cella persa o duplicata desincronizzerebbe entrambi gli stati. Il canale TLS, che garantisce ordine e integrità, lo rende possibile.
+
+\subsection{In avanti: dal client verso il circuito}
+
+Per inviare un messaggio al salto $d$ di un circuito, il client~\spec{tor-spec}{Routing relay cells}:
+\begin{enumerate}
+  \item prepara il corpo in chiaro del messaggio relay (\cref{sec:relay}), con Recognized e Digest a zero;
+  \item aggiorna il digest in avanti del salto $d$ con quel corpo e scrive i primi 4 byte del risultato nel campo Digest;
+  \item cifra il corpo con Kf del salto $d$, poi con Kf del salto $d-1$, e così via fino al salto 1: lo strato più esterno è quello del primo relay.
+\end{enumerate}
+Ogni relay che riceve la cella la decifra con la propria Kf, togliendo uno strato, e controlla se la cella è destinata a lui. Se no, la inoltra al salto successivo, che ne toglierà un altro. La \cref{fig:cipolla} mostra gli strati.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig10-cipolla}
+\caption{Una cella RELAY nella cifratura tradizionale tor1: il client applica Kf$_3$, Kf$_2$, Kf$_1$ e ogni relay rimuove il proprio strato. L'exit riconosce il messaggio con Recognized = 0 e digest progressivo corretto; il contenuto applicativo può restare cifrato con HTTPS. Le scatole interne rappresentano schematicamente dati ancora cifrati.}
+\label{fig:cipolla}
+\end{figure}
+
+\subsection{All'indietro: dal circuito verso il client}
+
+Nel verso opposto i ruoli si invertono. Il relay che origina un messaggio lo firma con il proprio digest all'indietro e lo cifra con Kb. Ogni relay successivo verso il client \emph{aggiunge} uno strato con la propria Kb. Il client, che conosce tutte le chiavi, toglie gli strati uno per uno, dal primo salto in poi, e dopo ciascuno controlla se la cella è stata originata da quel salto.
+
+\subsection{Il circuito come \enquote{tubo che perde}}
+
+Il client può inviare un messaggio a \emph{qualsiasi} salto del circuito, non solo all'ultimo, semplicemente fermando la cifratura a quel salto. È così che l'\texttt{EXTEND2} per il terzo salto viene consegnato al secondo relay. La specifica chiama questa proprietà \emph{leaky pipe topology}: il circuito è un tubo da cui i messaggi possono uscire a metà strada. Nell'articolo originale di Tor~\cite{dingledine2004tor} la si propone anche come difesa: far uscire alcuni stream da un relay intermedio renderebbe più difficile a un osservatore dell'uscita capire di quale circuito si tratta. Nella pratica, però, tor fa uscire gli stream solo dall'ultimo salto.
+
+% ---------------------------------------------------------------------------
+\section{Riconoscere una cella}\label{sec:riconoscere}
+
+Come fa un relay a sapere, dopo aver tolto il proprio strato, se la cella è per lui? Non può semplicemente \enquote{guardare se il contenuto ha senso}: una cella ancora cifrata e una cella in chiaro sono, per un programma, entrambe sequenze di byte. Lo schema tradizionale usa due controlli in cascata~\spec{tor-spec}{Relay cells}:
+
+\begin{enumerate}
+  \item \textbf{Recognized}: i 2 byte devono valere zero. Se la cella è ancora cifrata, questi byte sono pseudocasuali e valgono zero solo una volta su \num{65536}. Il controllo costa quasi nulla e scarta subito la stragrande maggioranza delle celle in transito.
+  \item \textbf{Digest}: se Recognized è zero, il relay calcola il digest progressivo \emph{come se} la cella fosse sua, azzerando il campo Digest, e confronta i primi 4 byte con quelli presenti. Se coincidono, la cella è riconosciuta: il relay aggiorna il proprio stato del digest e la elabora.
+\end{enumerate}
+
+Un dettaglio facile da sbagliare: se Recognized è zero ma il digest non coincide, si tratta di un falso positivo, e lo stato del digest \textbf{non} deve essere aggiornato. Nel Laboratorio~4 lo si ottiene lavorando su una copia dello stato (\texttt{self.digest.copy()}) e conservandola solo in caso di successo.
+
+Il digest copre l'intero corpo, compresi i byte di padding, che per questo sono casuali (\cref{sec:relay}). Per i circuiti degli onion service, dove client e servizio condividono chiavi di un \enquote{salto virtuale} (\cref{cap:14-onion-services}), la funzione è SHA3-256 invece di SHA-1.
+
+Che cosa succede se nessuno riconosce la cella? Se l'ultimo relay del circuito riceve in avanti una cella che non riconosce, c'è stato un errore: distrugge il circuito con \cella{DESTROY}. Il client, se nessun salto riconosce una cella in arrivo, fa altrettanto.
+
+% ---------------------------------------------------------------------------
+\section{Le debolezze di tor1}\label{sec:tor1-debolezze}
+
+\subsection{Malleabilità}
+
+La modalità contatore ha una proprietà scomoda: il testo cifrato è semplicemente $C = P \oplus S$, dove $S$ è il flusso di chiavi. Chi modifica un bit di $C$ modifica lo stesso bit di $P$, senza conoscere la chiave. Se un avversario conosce, o indovina, una parte del testo in chiaro, può sostituirla con un testo a sua scelta: basta applicare lo XOR con la differenza tra i due. Il Laboratorio~4 contiene un test che fa esattamente questo, trasformando \enquote{paga 10 euro} in \enquote{paga 99 euro}.
+
+In tor1 l'integrità è verificata solo \emph{all'estremo}: il digest viene controllato dal relay destinatario, non dai relay intermedi. Una cella alterata viaggia quindi indisturbata fino alla destinazione, e solo lì il digest non corrisponde.
+
+\subsection{L'attacco di tagging}
+
+Questa combinazione permette un attacco specifico, il \emph{tagging}. Immaginiamo un avversario che controlla il guard e l'exit di un circuito:
+\begin{enumerate}
+  \item il guard altera alcuni bit di una cella in transito, secondo uno schema riconoscibile (il \enquote{marchio}, o \emph{tag});
+  \item la cella attraversa il middle, che non può accorgersene;
+  \item l'exit, prima di verificare il digest, controlla se nella cella c'è il marchio. Se c'è, sa che quel circuito passa dal guard complice, e quindi può associare la destinazione del traffico all'indirizzo del client, noto al guard.
+\end{enumerate}
+Se invece l'exit non è complice, il digest fallisce, il circuito viene distrutto e il client ne costruisce un altro: l'avversario ci riprova, e ogni tentativo fallito gli dice qualcosa. Il marchio può anche essere applicato all'indietro, dall'exit verso il client.
+
+\begin{approfondimento}[Quanto conta il tagging?]
+Un avversario che controlla sia il guard sia l'exit può già correlare i tempi e i volumi del traffico, senza alcun marchio (\cref{cap:26-attacchi}). Per questo i progettisti di Tor hanno a lungo considerato il tagging un problema reale ma non prioritario~\cite{dingledine2004tor}. Il tagging però è più affidabile della correlazione statistica e funziona anche con pochissimo traffico. Le proposte per risolverlo si sono succedute per oltre dieci anni: le proposte 202, 261 (basata sul cifrario AEZ), 295 e 308, fino alla 359, che ha portato a CGO.
+\end{approfondimento}
+
+\subsection{Altri limiti}
+
+Il digest è di soli 4 byte, e l'algoritmo alla sua base, SHA-1, non è più considerato sicuro per nuove applicazioni. Inoltre lo schema non offre forward secrecy \emph{all'interno} del circuito: chi ottenesse le chiavi di un salto mentre il circuito è attivo potrebbe decifrare anche tutte le celle precedenti che avesse registrato, perché il flusso di chiavi è determinato dalla sola chiave iniziale.
+
+% ---------------------------------------------------------------------------
+\section{Counter Galois Onion}\label{sec:cgo}
+
+\textbf{CGO} (\emph{Counter Galois Onion}) è lo schema di cifratura dei relay cell progettato da Degabriele, Melloni, Münch e Stam e adottato con la \proposta{359}. Qui ne diamo una descrizione funzionale; la costruzione crittografica completa è nella proposta e negli articoli degli autori.
+
+\subsection{Le proprietà}
+
+Secondo la proposta, CGO offre tre miglioramenti:
+\begin{itemize}
+  \item è \textbf{non malleabile}: qualsiasi modifica a una cella la rende indecifrabile, e con essa tutte le celle successive del circuito. Un marchio non può essere letto né rimosso: può solo distruggere il circuito;
+  \item offre \textbf{forward secrecy a livello di cella}: dopo aver elaborato una cella, una parte non possiede più il materiale necessario a decifrarla di nuovo;
+  \item l'autenticazione è di 128 bit, invece dei pochi bit dello schema tradizionale.
+\end{itemize}
+Non usando più SHA-1, CGO dovrebbe anche essere, nel complesso, più veloce.
+
+\subsection{Come funziona, a grandi linee}
+
+Gli ingredienti di base sono AES-128 e POLYVAL, una funzione di hash universale (la stessa famiglia usata nella modalità AES-GCM-SIV). Con essi la proposta costruisce un cifrario a blocchi \emph{ampio} e \emph{modificabile}: un cifrario che agisce su tutti i 509 byte della cella come se fossero un unico blocco, così che cambiare un solo bit in un punto qualsiasi cambi in modo imprevedibile tutto il risultato. La cella decifrata ha la forma \emph{tag} (16 byte) più corpo (493 byte), come abbiamo visto nella \cref{sec:nuovo-formato}.
+
+Per ogni salto e ogni direzione, client e relay condividono:
+\begin{itemize}
+  \item una chiave $K$ di 64 byte e un valore $N$ di 16 byte, derivati dall'handshake del circuito;
+  \item il \emph{tag} $T'$ dell'ultima cella elaborata, inizialmente zero.
+\end{itemize}
+Tre idee rendono lo schema resistente al tagging:
+\begin{description}
+  \item[Riconoscimento con il tag] Quando un relay ha tolto il proprio strato, la cella è sua se il tag risultante coincide con $N$. È un controllo di 16 byte, invece dei 2 di Recognized più i 4 del digest.
+  \item[Concatenamento] Il tag dell'ultima cella entra, come parametro del cifrario, nell'elaborazione della cella successiva. Una cella alterata produce un tag sbagliato, che a sua volta rende indecifrabili tutte le celle seguenti: il circuito non può più funzionare.
+  \item[Aggiornamento delle chiavi] Ogni volta che una cella viene riconosciuta, o originata, da un salto, $K$ e $N$ vengono sostituiti da nuovi valori derivati dai precedenti. I vecchi valori si cancellano: è la forward secrecy a livello di cella.
+\end{description}
+Il byte di comando della cella (\cella{RELAY} o \cella{RELAY\_EARLY}) entra nei calcoli come \emph{dato associato}: un relay non può trasformare l'una nell'altra senza che la cella diventi indecifrabile.
+
+\begin{attenzione}[Direzioni non intercambiabili]
+La costruzione alla base di CGO è non malleabile in un verso e malleabile nell'altro. La proposta sceglie con cura quale verso usare nel client e quale nei relay, e avverte esplicitamente gli implementatori di non invertirli: un esempio di come, in crittografia, una scelta che sembra un dettaglio di implementazione possa annullare la sicurezza di tutto lo schema.
+\end{attenzione}
+
+\subsection{CGO in pratica}
+
+\begin{itemize}
+  \item \textbf{Chiavi}: dal flusso prodotto dall'handshake si ricavano, per ciascuna direzione, $K$ (64 byte) e $N$ (16 byte), invece di Df, Db, Kf, Kb.
+  \item \textbf{SENDME}: con tor1 il controllo di flusso autenticato della \proposta{289} usa il digest progressivo; con CGO questo digest non esiste e il \texttt{SENDME} riporta invece il tag $T$ della cella che conferma (\cref{cap:11-stream}). La \proposta{359} precisa un limite importante: il tag prova la ricezione della specifica cella, \emph{non} prova da solo che siano state ricevute tutte quelle intermedie o che il contenuto sia stato decifrato. Per confrontare lo stesso valore, chi riceve la cella conserva $T$ \emph{prima} dell'elaborazione UIV, mentre chi la origina lo conserva \emph{dopo}.
+  \item \textbf{Negoziazione}: un client usa CGO con un relay solo se questo annuncia il sottoprotocollo \texttt{Relay=6} e se lo chiede nell'handshake ntor-v3 (\cref{sec:ntor3}). Nel \cref{cap:09-circuiti} abbiamo visto che il relay rifiuta la richiesta se non è accompagnata da quella del controllo della congestione.
+  \item \textbf{Diffusione}: tor supporta CGO dalla serie 0.4.9 e Arti lo ha sempre attivo. In un circuito possono convivere salti che usano CGO e salti che usano ancora tor1: la scelta è fatta salto per salto.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: un circuito di tre salti}\label{sec:lab-cifratura}
+
+\begin{laboratorio}[4]{Cifrare a strati ed estendere un circuito}
+\textbf{Obiettivo.} Scrivere \file{labs/it/codice/torlab/cifratura.py}, con lo schema tor1 lato client, e usarlo per estendere un circuito reale fino all'exit.\\
+\textbf{Prerequisiti.} Laboratori~1--3; la rete di laboratorio avviata.\\
+\textbf{Tempo stimato.} 3 ore.
+\end{laboratorio}
+
+\paragraph{Passo 1: una direzione di un salto.} Il cuore del laboratorio è una piccola classe che tiene insieme il cifrario AES-CTR e il digest SHA-1 di una direzione:
+\begin{lstlisting}[language=Python]
+class Direzione:
+    @classmethod
+    def nuova(cls, chiave, seme_digest):
+        d = hashlib.sha1(); d.update(seme_digest)
+        return cls(_aes_ctr(chiave), d)
+
+    def applica(self, dati):             # cifra o decifra: in CTR coincidono
+        return self.cifrario.update(dati)
+
+    def firma(self, corpo):              # scrive il campo Digest
+        self.digest.update(_senza_digest(corpo))
+        return corpo[:5] + self.digest.digest()[:4] + corpo[9:]
+
+    def riconosce(self, corpo):
+        if corpo[1:3] != b"\x00\x00":
+            return False
+        prova = self.digest.copy()
+        prova.update(_senza_digest(corpo))
+        if prova.digest()[:4] != corpo[5:9]:
+            return False                 # falso positivo: stato invariato
+        self.digest = prova
+        return True
+\end{lstlisting}
+L'oggetto \texttt{cifrario} di \texttt{cryptography} conserva il contatore tra una chiamata e l'altra: è esattamente il comportamento richiesto.
+
+\paragraph{Passo 2: il client.} Con una \texttt{Direzione} per verso e per salto, cifrare e decifrare sono due cicli:
+\begin{lstlisting}[language=Python]
+def cifra(self, msg, destinazione):
+    corpo = self.salti[destinazione].avanti.firma(codifica_relay(msg))
+    for i in range(destinazione, -1, -1):
+        corpo = self.salti[i].avanti.applica(corpo)
+    return corpo
+
+def decifra(self, corpo):
+    for i, salto in enumerate(self.salti):
+        corpo = salto.indietro.applica(corpo)
+        if salto.indietro.riconosce(corpo):
+            return i, decodifica_relay(corpo)
+    raise ErroreCella("cella non riconosciuta")
+\end{lstlisting}
+
+\paragraph{Passo 3: test in memoria, e i loro limiti.} Il file \file{test/test\_cifratura.py} costruisce un circuito simulato di tre relay e verifica che ogni salto riconosca solo le proprie celle, che i relay intermedi vedano solo byte pseudocasuali, che una modifica venga rilevata a destinazione, e dimostra la malleabilità di AES-CTR. Questi test però hanno un limite importante: client e relay simulati usano \emph{lo stesso codice}. Se sbagliassimo, per esempio, l'ordine in cui aggiornare il digest, lo sbaglieremmo in modo identico da entrambe le parti, e i test passerebbero comunque. L'unica verifica vera è parlare con un'implementazione indipendente.
+
+\paragraph{Passo 4: estendere un circuito reale.} Creiamo il primo salto con ntor-v3 verso \texttt{test003r}, come nel Laboratorio~3, poi estendiamo verso \texttt{test004r} e verso l'exit \texttt{test006e}. Il modulo \file{torlab/laboratorio.py} legge per noi identità e chiavi ntor dei relay dai file della rete di laboratorio:
+\begin{lstlisting}[language=Python]
+for r, est in ((middle, []), (exit_, [(1, b"")])):
+    st, hd = ntor3_client_inizio(r.id_ed, r.ntor, codifica_estensioni(est))
+    corpo = corpo_extend2("127.0.0.1", r.porta, r.id_rsa, r.id_ed,
+                          HTYPE_NTOR_V3, hd)
+    msg = MessaggioRelay(ComandoRelay.EXTEND2, 0, corpo)
+    c.invia(Cella(CIRC, Comando.RELAY_EARLY, circ.cifra(msg)))
+    i, risposta = circ.decifra(c.ricevi().corpo)
+    sm, k = ntor3_client_fine(st, hdata_created2(risposta.dati))
+    circ.salti.append(Salto.da_chiavi(ChiaviCircuito.da_flusso(k)))
+\end{lstlisting}
+Il messaggio \texttt{EXTEND2} ha StreamID zero (è un messaggio di controllo) e viaggia in una cella \cella{RELAY\_EARLY}. Per l'exit chiediamo anche il controllo della congestione, come fa tor. L'esecuzione produce:
+\begin{lstlisting}[numbers=none]
+salto 1: 003r
+  <- CircID=0x80000100 RELAY corpo=509 byte
+  dal salto 1 EXTENDED2 67 byte
+salto 2: 004r  estensioni dal relay: []
+  <- CircID=0x80000100 RELAY corpo=509 byte
+  dal salto 2 EXTENDED2 70 byte
+salto 3: 006e  estensioni dal relay: [(2, b'\x1f')]
+\end{lstlisting}
+Il circuito ha tre salti. Ogni riga \enquote{dal salto} è la prova che il nostro codice ha cifrato correttamente per il relay destinatario e che il relay ha cifrato correttamente per noi: se una sola chiave, un solo byte del digest o l'ordine degli strati fossero sbagliati, il relay avrebbe distrutto il circuito. Le lunghezze dei messaggi \texttt{EXTENDED2} tornano con la \cref{sec:ntor3}: 2 byte di HLEN, 32 di $Y$, 32 di $\mathit{AUTH}$ e il messaggio $SM$, di 1 byte (nessuna estensione) per il middle e di 4 byte (un'estensione di 1 byte) per l'exit.
+
+\paragraph{Passo 5: finalmente il padding.} Restiamo in ascolto sul canale dopo l'estensione:
+\begin{lstlisting}[numbers=none]
+  4.1 s  <- CircID=0x00000000 PADDING corpo=509 byte
+  7.1 s  <- CircID=0x00000000 PADDING corpo=509 byte
+ 12.8 s  <- CircID=0x00000000 PADDING corpo=509 byte
+ 21.5 s  <- CircID=0x00000000 PADDING corpo=509 byte
+ 28.3 s  <- CircID=0x00000000 PADDING corpo=509 byte
+\end{lstlisting}
+È la previsione fatta nei capitoli \ref{cap:07-canali} e~\ref{cap:09-circuiti}: ora che sul canale passa un circuito di più salti, il guard lo considera \enquote{in uso} e, quando il canale è inattivo, invia celle \cella{PADDING} a intervalli casuali. Gli intervalli osservati, tra 3 e 8,7 secondi, cadono nella finestra di 1,5--9,5 secondi prevista dalla specifica del padding.
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item In tor1, ogni salto ha per direzione un flusso AES-128-CTR e un digest SHA-1 progressivo, entrambi con stato che dura quanto il circuito.
+  \item In avanti il client applica gli strati dall'ultimo salto al primo, e ogni relay ne toglie uno; all'indietro ogni relay aggiunge uno strato e il client li toglie tutti.
+  \item Il client può indirizzare qualsiasi salto (\emph{leaky pipe}).
+  \item Una cella è riconosciuta se Recognized vale zero e il digest progressivo corrisponde; un falso positivo di Recognized non deve alterare lo stato del digest.
+  \item AES-CTR è malleabile e l'integrità è controllata solo all'estremo: questo rende possibile il tagging.
+  \item CGO rende la cella non malleabile, concatena i tag delle celle, aggiorna le chiavi dopo ogni messaggio e autentica con 128 bit; si negozia salto per salto con ntor-v3.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:10-ordine}
+Un client con un circuito di tre salti vuole inviare un messaggio al secondo salto. Con quali chiavi cifra, e in quale ordine? Che cosa vede il terzo salto?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:10-contatore}
+Dopo che il client ha inviato 1000 celle al circuito, a quale posizione del flusso di chiavi AES-CTR del primo salto si trova? Perché non si può riusare la stessa chiave per un secondo circuito?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-falso}
+Spiega che cosa succederebbe se un relay aggiornasse il digest progressivo anche quando Recognized vale zero ma il digest non corrisponde. Dopo quante celle, in media, il problema si manifesterebbe?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-tag}
+Un guard complice vuole marcare una cella in avanti in modo che l'exit complice possa riconoscerla. Quali byte della cella conviene alterare, sapendo come è fatto un messaggio \texttt{DATA} in chiaro? Che cosa vede un exit onesto?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-cgo-tag}
+Ripeti lo scenario dell'esercizio precedente con CGO. Che cosa vede l'exit complice? E che cosa succede alle celle successive del circuito?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-padding}
+Nel passo 5 del laboratorio, calcola gli intervalli tra le celle \cella{PADDING} osservate. Secondo la specifica, il ritardo è estratto dalla distribuzione del massimo di due valori uniformi. Qual è il valore atteso di questo ritardo, nell'intervallo di 1,5--9,5 secondi? È compatibile con le osservazioni?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:10-drop}
+Estendi il laboratorio inviando al secondo salto un messaggio \texttt{DROP} (comando relay 10, padding a lungo raggio). Il relay risponde? Come puoi verificare che lo abbia riconosciuto e non abbia distrutto il circuito?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:10-alterazione}
+Nel laboratorio, altera di proposito un bit di una cella \cella{RELAY\_EARLY} con \texttt{EXTEND2} dopo averla cifrata. Quale relay se ne accorge, e come reagisce? Prevedi il risultato, poi verificalo.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification}, capitoli \enquote{Relay cells} e \enquote{Routing relay cells}~\cite{torspec}.
+  \item Proposta 359, \titolo{Counter Galois Onion, Updated}, con i riferimenti agli articoli di Degabriele, Melloni, Münch e Stam.
+  \item Proposte 202, 261, 295 e 308: la lunga storia delle soluzioni al tagging.
+  \item R.~Dingledine, N.~Mathewson, P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}, sezione 4 (circuiti, leaky pipe e controllo di integrità).
+\end{itemize}

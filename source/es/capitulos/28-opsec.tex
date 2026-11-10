@@ -1,0 +1,145 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Errores de seguridad operativa y desanonimización: lecciones}\label{cap:28-opsec}
+% Encabezado más corto: el título completo no cabe junto al número de página.
+\chaptermark{Errores de seguridad operativa y desanonimización}
+\aggiornatoal{23 de septiembre de 2026}{asistencia del Tor Project; advertencias de Tails; tor 0.4.9.13; red de laboratorio}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item distinguir las capas en las que puede filtrarse la identidad e identificar qué herramientas protegen cada una;
+  \item reconocer errores operativos frecuentes, desde filtraciones DNS hasta conjuntos de anonimato demasiado pequeños;
+  \item utilizar tor para comprobar si una aplicación le delega la resolución de nombres (laboratorio~18);
+  \item analizar un incidente real mediante un modelo de amenazas.
+\end{itemize}
+\end{obiettivi}
+
+\Cref{cap:26-attacchi} terminó con una observación incómoda: los ataques contra el protocolo pueden ser costosos y exigir puntos de observación privilegiados. En numerosos casos documentados, el anonimato también se ha perdido por errores en el uso de las herramientas que el protocolo de red por sí solo no puede impedir. Este capítulo examina tales errores, no para explicar cómo identificar personas, sino para aclarar dónde terminan las protecciones de Tor y comienzan las responsabilidades de los propios usuarios.
+
+\begin{attenzione}[Alcance de este capítulo]
+Analizamos errores y prácticas defensivas desde la perspectiva de quienes desean protegerse. No ofrecemos procedimientos para identificar personas. Los incidentes mencionados son públicos y se han reconstruido a partir de las fuentes citadas.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Cuatro capas}\label{sec:opsec-livelli}
+
+La identidad puede filtrarse en cuatro capas (\cref{fig:livelli}). La primera, la red, es la que protege tor: en una conexión habitual a través de Tor, el destino no ve la IP original del cliente y un repetidor individual normalmente no conoce ambos extremos. Esta separación no impide todos los ataques de correlación ni otros riesgos. La segunda, la aplicación, está cubierta por Tor Browser, Tails y Whonix (\cref{cap:23-browser}). Las dos últimas, contenido y comportamiento, no quedan automáticamente protegidas por tor. Otras herramientas pueden mitigar algunos riesgos, pero también importan los datos que los usuarios escriben, suben y las actividades que realizan.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig28-niveles-exposicion}
+\caption{Esquema didáctico de cuatro capas donde puede exponerse la identidad. Tor reduce ciertos riesgos de red; las protecciones de aplicación y las herramientas para el contenido ayudan, pero lo que el usuario divulga y hace importa en todas las capas. Ninguna capa garantiza por sí sola el anonimato.}
+\label{fig:livelli}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{Errores de aplicación}\label{sec:opsec-applicazione}
+
+\paragraph{Tráfico fuera de Tor.} tor solo protege las aplicaciones configuradas para utilizarlo~\cite{torsafety}. El software que establece conexiones directas, incluso para actualizaciones o vistas previas, puede revelar una dirección IP real. La asistencia del Tor Project destaca dos casos conocidos. Las aplicaciones BitTorrent pueden ignorar la configuración del proxy y, además, revelar sus direcciones a los rastreadores. Los documentos descargados que se abren mientras hay conexión también suponen un riesgo: los archivos DOC o PDF pueden incluir recursos remotos que las aplicaciones descargan sin utilizar Tor.
+
+\paragraph{Filtraciones DNS.} Un caso más sutil implica SOCKS. Una aplicación puede transmitir a tor el \emph{nombre} del destino y permitir que la salida lo resuelva (\cref{sec:stream-dns}), o resolverlo ella misma mediante el DNS del sistema y transmitir a tor únicamente una dirección IP. En el segundo caso, la conexión posterior también utiliza Tor, pero el dominio podría haberse revelado previamente a un resolvedor situado fuera del circuito Tor, asociándolo con la conexión del cliente. No es inevitable una consulta DNS en claro: el resultado puede proceder de una caché, un archivo local o DNS cifrado. tor no puede demostrar una filtración ya ocurrida, pero sí señalar que recibió una solicitud SOCKS con solo una IP, como veremos en el laboratorio.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: tor detecta un indicio de filtración DNS}\label{sec:lab-opsec}
+
+\begin{laboratorio}[18]{SOCKS con nombre de host y sin él}
+\textbf{Objetivo.} Observar cómo distingue tor una aplicación que le delega la resolución de nombres de otra que la realiza por sí misma, y cómo puede rechazar esta última.\\
+\textbf{Requisitos previos.} Laboratorio~11; red de laboratorio en ejecución.\\
+\textbf{Tiempo estimado.} 30 minutos.
+\end{laboratorio}
+
+\cmd{curl} admite ambos comportamientos. Con \texttt{-{}-socks5}, resuelve el nombre localmente y transmite a tor una IP; con \texttt{-{}-socks5-hostname}, le transmite el nombre. El script \file{labs/es/laboratorio/fuga\_dns.py} se conecta al ControlPort del cliente \texttt{008c} y activa \opt{TestSocks}, que hace que tor registre el tipo de cada solicitud SOCKS. El script escucha los mensajes de registro y comprueba ambas formas con \texttt{http://localhost:8080/}.
+
+El laboratorio demuestra el \emph{mecanismo}, no una filtración DNS real observada en el cable. \texttt{localhost} se resuelve localmente sin contactar con un servidor DNS, por lo que ninguna consulta abandona el equipo. tor observa una IP en lugar de un nombre de host: un posible indicio de resolución local anterior, no una prueba de fuga DNS (la aplicación podría utilizar directamente una IP). Con un dominio ordinario en lugar de \texttt{localhost}, una resolución local semejante podría generar una consulta externa, quizá en claro según la configuración DNS. Evitamos deliberadamente generar ese tráfico y permanecemos en la red privada. El script también fuerza el paso por SOCKS para \texttt{localhost} aunque \texttt{NO\_PROXY} esté configurada. Por último, activa \opt{SafeSocks}, que rechaza solicitudes con una IP aunque no haya existido fuga DNS:
+
+\begin{lstlisting}[numbers=none]
+--socks5           HTTP 200  tor: Your application (using socks5 to port
+                   8080) is giving Tor only an IP address. Applications
+                   that do DNS resolves themselves may leak information...
+--socks5-hostname  HTTP 200  tor: Your application (using socks5 to port
+                   8080) instructed Tor to take care of the DNS resolution
+                   itself if necessary. This is good.
+--socks5 SafeSocks HTTP 000
+\end{lstlisting}
+
+En la salida ilustrativa ambas solicitudes iniciales funcionan, pero solo la segunda delega la resolución a tor; la primera no demuestra una fuga DNS porque utiliza \texttt{localhost}. En el código de tor (\file{src/core/proto/proto\_socks.c}), la primera advertencia se registra con nivel \texttt{warn}, limitando su frecuencia para no inundar los registros, y va acompañada de un evento \texttt{STATUS\_CLIENT} con acción \texttt{DANGEROUS\_SOCKS} en el ControlPort. Por tanto, un controlador puede advertir al usuario. Con \opt{SafeSocks} activado, esa solicitud se rechaza y \cmd{curl} no recibe respuesta. Este laboratorio forma parte de \texttt{make verifica-lab} en la edición inglesa.
+
+% ---------------------------------------------------------------------------
+\section{Errores de contenido}\label{sec:opsec-contenuto}
+
+\paragraph{Metadatos.} Muchos archivos contienen datos que sus autores ni siquiera advierten: las fotografías pueden revelar ubicaciones o modelos de cámara; los documentos, autores y fechas de creación. Tails incluye una herramienta para eliminar metadatos y sus advertencias mencionan casos en los que los metadatos de fotografías revelaron dónde se encontraba quien las tomó~\cite{tailswarnings}.
+
+\paragraph{Cuentas e identidad.} Iniciar sesión en una cuenta personal indica al sitio quién eres, independientemente de la dirección IP aparente de la conexión~\cite{torsafety}. Utilizar dos identidades en el mismo sitio durante una sesión también puede vincularlas mediante cookies, datos de sesión, identificadores de aplicación y otros indicios; el sitio no puede observar directamente el identificador del circuito Tor. Tails recomienda reiniciar entre actividades que deban permanecer separadas~\cite{tailswarnings}. El requisito de desvinculación de Tor Browser (\cref{sec:browser-tb}) se refiere a sitios diferentes, no a identidades distintas utilizadas en uno solo.
+
+\paragraph{Estilo de escritura.} Incluso sin metadatos, los hábitos de escritura, temas tratados, errores recurrentes y horarios de publicación pueden vincular un texto anónimo con otro firmado. Ninguna herramienta automática puede eliminar todos esos indicios.
+
+% ---------------------------------------------------------------------------
+\section{Errores de comportamiento: un conjunto de anonimato demasiado pequeño}\label{sec:opsec-insieme}
+
+\Cref{cap:01-anonimato} definió el anonimato mediante la indistinguibilidad dentro de un conjunto. Tor puede reducir algunos rasgos que distinguen la actividad de red, pero no puede garantizar que suficientes personas utilicen Tor en un lugar y momento determinados. Si muy pocas personas lo hacen, conocer \emph{quién utilizó Tor} puede reducir considerablemente las posibilidades.
+
+\paragraph{Un incidente.} En diciembre de 2013, una universidad estadounidense recibió falsas amenazas de bomba por correo electrónico poco antes de un examen. El remitente había utilizado un servicio de correo temporal y Tor. Según la declaración jurada del FBI que acompañó a la denuncia, y como informaron varios medios, la universidad identificó quiénes habían utilizado Tor en su red inalámbrica durante las horas anteriores a la llegada de los mensajes~\cite{wbur2013harvard,sandvik2013harvard}. Posteriormente, el estudiante admitió haber enviado los mensajes durante un interrogatorio. No fue necesario romper el cifrado de Tor para reducir el grupo de sospechosos: los observadores locales podían reconocer el uso de Tor sin que ello implicase conocer contenidos ni destinos. Sin embargo, podían saber \emph{quién} estaba utilizando Tor durante ese intervalo y reducir el grupo de sospechosos a unos pocos nombres.
+
+El incidente ilustra tres principios del modelo de amenazas (\cref{cap:04-modello-minaccia}):
+\begin{itemize}
+  \item Tor sin un puente no oculta que se está utilizando: los observadores de la red local pueden reconocerlo~\cite{tailswarnings}. Los puentes con transportes conectables (\cref{cap:16-censura}) pueden reducir esa exposición.
+  \item La correlación no exige un adversario global cuando el conjunto de candidatos es pequeño y el suceso ocurre en un intervalo temporal reducido. Es un problema básico de intersección.
+  \item El anonimato mejora con la compañía~\cite{dingledine2006company}. Cuantas más personas con motivos diferentes utilicen Tor en un mismo entorno, menos información aporta observar que una persona concreta lo utiliza. La asistencia del Tor Project anima expresamente a ampliar su adopción~\cite{torsafety}.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{Una lista de comprobación}\label{sec:opsec-lista}
+
+La lista no es exhaustiva, pero cubre las capas en orden:
+\begin{enumerate}
+  \item Utiliza Tor Browser o un sistema como Tails o Whonix, no un navegador convencional con un proxy configurado manualmente.
+  \item Evita instalar extensiones o modificar ajustes que hagan destacar a tu navegador.
+  \item Para otras aplicaciones, verifica que transmitan a tor los nombres de host (\opt{SafeSocks}, \opt{TestSocks}).
+  \item No abras documentos descargados mientras estés conectado, o utiliza para ello un entorno aislado.
+  \item Prefiere HTTPS y los servicios onion, porque una salida puede ver el contenido no cifrado.
+  \item Elimina los metadatos de los archivos antes de compartirlos.
+  \item No combines identidades que deban permanecer separadas en una misma sesión.
+  \item Si resulta peligroso que se sepa que utilizas Tor, considera un puente ofuscado apropiado, sin asumir que te vuelva invisible.
+  \item Recuerda que los horarios, hábitos y estilos de escritura también transmiten información.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item La identidad puede filtrarse en las capas de red, aplicación, contenido y comportamiento. tor protege directamente solo la primera.
+  \item Las aplicaciones que eluden Tor, los documentos descargados abiertos con conexión y las filtraciones DNS son errores de la capa de aplicación. tor puede advertir sobre solicitudes SOCKS que contienen únicamente IP y rechazarlas.
+  \item Los metadatos, las cuentas y el estilo de escritura pueden relacionar contenidos con personas.
+  \item Cuando el conjunto de usuarios Tor es pequeño, saber quién lo utilizó y cuándo puede bastar para acotar una identificación. Los puentes y una comunidad amplia de usuarios contribuyen a reducir ese riesgo.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:28-livello}
+Para cada error explicado aquí, identifica su capa en \cref{fig:livelli} y la herramienta o el hábito que ayuda a evitarlo.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:28-dns}
+Explica por qué una filtración DNS divulga información aunque la conexión posterior atraviese Tor. ¿Quién observa esa información?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:28-evento}
+En el laboratorio~18, suscríbete a los eventos \texttt{STATUS\_CLIENT} mediante Stem y muestra la acción \texttt{DANGEROUS\_SOCKS} generado por una solicitud que solo contiene una IP. ¿Cómo podría aprovecharlo una interfaz gráfica?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:28-insieme}
+Reconsidera el incidente de 2013 suponiendo que el estudiante hubiera utilizado un puente obfs4 desde la misma red. ¿Qué podrían haber visto los observadores locales y qué otros datos aún permitirían reducir el grupo de candidatos?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:28-modello}
+Elige una persona real o ficticia con una necesidad legítima de anonimato, como una fuente periodística, un activista o un investigador, y redacta un plan operativo que incluya amenazas, capas relevantes, herramientas y hábitos, y riesgos residuales.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item Recomendaciones de asistencia del Tor Project sobre anonimato~\cite{torsafety}.
+  \item Advertencias de Tails, \titolo{Tails is safe but not magic}~\cite{tailswarnings}.
+  \item R.~Dingledine y N.~Mathewson, \titolo{Anonymity Loves Company}~\cite{dingledine2006company}.
+\end{itemize}

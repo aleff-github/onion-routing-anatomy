@@ -1,0 +1,62 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Glossario italiano--inglese}\label[appendice]{cap:A-glossario}
+
+Questo glossario raccoglie i termini tecnici usati nel libro, con il corrispondente inglese delle specifiche e il capitolo in cui sono introdotti. Nel libro si è tradotto quando esiste un termine italiano consolidato e si è mantenuto l'inglese negli altri casi; per i termini inglesi usati così come sono, la seconda colonna ripete il termine.
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{6.6cm}r@{}}
+\toprule
+Termine & Inglese & Significato & Cap. \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+analisi del traffico & traffic analysis & ricavare informazioni da tempi, volumi e indirizzi delle comunicazioni, senza leggerne il contenuto & \ref{cap:01-anonimato} \\
+anonimato & anonymity & non essere identificabili all'interno di un insieme di soggetti, l'insieme di anonimato & \ref{cap:01-anonimato} \\
+attacco Sybil & Sybil attack & presentarsi alla rete con molte identità, per esempio molti relay, per essere scelti più spesso & \ref{cap:26-attacchi} \\
+autorità di directory & directory authority & uno dei pochi server che votano e firmano il consenso & \ref{cap:12-directory} \\
+bridge & bridge & relay non elencato nel consenso, usato come primo salto da chi è sottoposto a censura & \ref{cap:16-censura} \\
+canale & channel & connessione TLS tra due nodi adiacenti, su cui viaggiano le celle di molti circuiti & \ref{cap:07-canali} \\
+cella & cell & unità sul canale: 514 byte per le celle fisse con link protocol moderno (512 in quello precedente); lunghezza variabile per alcuni comandi & \ref{cap:08-celle} \\
+chiave accecata & blinded key & chiave derivata per ciascun periodo temporale (normalmente di 24 ore) dalla chiave d'identità di un onion service, che impedisce agli HSDir di ricavare direttamente l'indirizzo del servizio & \ref{cap:14-onion-services} \\
+chiave di famiglia & family key & chiave condivisa dai relay di uno stesso operatore, che ne certifica l'appartenenza alla famiglia & \ref{cap:22-relay} \\
+CircID & circuit ID & identificativo di un circuito su un singolo canale; cambia a ogni salto & \ref{cap:08-celle} \\
+circuito & circuit & percorso cifrato a strati attraverso più relay, costruito un salto alla volta & \ref{cap:09-circuiti} \\
+consenso & consensus & documento firmato dalle autorità che elenca i relay, i loro flag e i pesi & \ref{cap:12-directory} \\
+controllo della congestione & congestion control & regolazione della quantità di dati in transito su un circuito in base al tempo di andata e ritorno & \ref{cap:11-stream} \\
+controllo di flusso & flow control & meccanismo che impedisce a un estremo di inviare più dati di quanti l'altro possa ricevere (finestre, SENDME) & \ref{cap:11-stream} \\
+correlazione del traffico & traffic correlation & riconoscere che due flussi osservati in punti diversi appartengono alla stessa comunicazione & \ref{cap:26-attacchi} \\
+descrittore & descriptor & documento con cui un relay, o un onion service, pubblica chiavi, indirizzi e caratteristiche & \ref{cap:12-directory} \\
+exit & exit relay & ultimo relay di un circuito, che apre la connessione verso la destinazione & \ref{cap:06-architettura} \\
+famiglia & family & insieme di relay gestiti dallo stesso operatore, che non devono comparire nello stesso circuito & \ref{cap:13-percorso} \\
+flag & flag & etichetta assegnata dalle autorità a un relay nel consenso (\texttt{Guard}, \texttt{Exit}, \texttt{Stable}\ldots) & \ref{cap:12-directory} \\
+forward secrecy & forward secrecy & proprietà per cui la compromissione di una chiave a lungo termine non permette di decifrare il traffico passato & \ref{cap:05-crittografia} \\
+guard & guard, entry guard & primo relay dei circuiti di un client, scelto una volta e usato per mesi & \ref{cap:13-percorso} \\
+handshake & handshake & scambio di messaggi con cui due parti concordano chiavi (ntor, ntor-v3) & \ref{cap:09-circuiti} \\
+HSDir & hidden service directory & relay che conserva e distribuisce i descrittori degli onion service & \ref{cap:14-onion-services} \\
+intermedio & middle relay & relay in posizione centrale di un circuito, che non conosce né il client né la destinazione & \ref{cap:06-architettura} \\
+isolamento degli stream & stream isolation & assegnazione di stream diversi a circuiti diversi, per esempio in base alle credenziali SOCKS & \ref{cap:18-stem} \\
+link protocol & link protocol & versione del protocollo usato su un canale, negoziata con la cella \cella{VERSIONS} & \ref{cap:07-canali} \\
+messaggio relay & relay message & contenuto di una cella \cella{RELAY}, destinato a un salto del circuito (\texttt{BEGIN}, \texttt{DATA}\ldots) & \ref{cap:08-celle} \\
+microdescrittore & microdescriptor & versione ridotta del descrittore, con le sole informazioni che servono al client & \ref{cap:12-directory} \\
+modello di minaccia & threat model & descrizione esplicita di contro chi e contro che cosa un sistema vuole proteggere & \ref{cap:04-modello-minaccia} \\
+non collegabilità & unlinkability & impossibilità, per un osservatore, di stabilire se due azioni appartengono allo stesso soggetto & \ref{cap:01-anonimato} \\
+onion service & onion service (un tempo hidden service) & servizio raggiungibile attraverso Tor, con indirizzo \texttt{.onion} v3 che codifica chiave pubblica Ed25519, checksum e versione & \ref{cap:14-onion-services} \\
+padding & padding & dati di riempimento, nelle celle o sul canale, che nascondono lunghezze e tempi & \ref{cap:07-canali} \\
+pesi di banda & bandwidth weights & coefficienti del consenso che bilanciano la scelta dei relay nelle diverse posizioni & \ref{cap:13-percorso} \\
+pluggable transport & pluggable transport (PT) & programma che trasforma il traffico di Tor perché non sia riconoscibile o bloccabile (obfs4, Snowflake, WebTunnel) & \ref{cap:16-censura} \\
+politica di uscita & exit policy & regole con cui un exit indica quali destinazioni accetta & \ref{cap:22-relay} \\
+prova di lavoro & proof of work (PoW) & problema computazionale che un client risolve per ottenere priorità presso un onion service sotto attacco & \ref{cap:15-dos} \\
+proposta & proposal & documento numerato con cui si discute una modifica al protocollo & \ref{cap:31-futuro} \\
+pseudonimo & pseudonym & identificativo diverso dal nome reale, che permette di collegare più azioni senza rivelare l'identità & \ref{cap:01-anonimato} \\
+punto di introduzione & introduction point & relay presso cui un onion service accetta le richieste di contatto & \ref{cap:14-onion-services} \\
+punto di rendezvous & rendezvous point & relay scelto dal client dove il suo circuito e quello dell'onion service si uniscono & \ref{cap:14-onion-services} \\
+relay & relay, onion router & nodo della rete Tor che inoltra celle & \ref{cap:06-architettura} \\
+SENDME & SENDME & messaggio con cui un estremo del circuito conferma di aver ricevuto dati, riaprendo la finestra & \ref{cap:11-stream} \\
+sottoprotocollo & subprotocol & famiglia di funzioni con versioni proprie, dichiarate da relay e client (\texttt{Link}, \texttt{Relay}\ldots) & \ref{cap:30-arti} \\
+stream & stream & flusso di dati di un'applicazione, per esempio una connessione TCP, trasportato su un circuito & \ref{cap:11-stream} \\
+vanguard & vanguard & relay intermedi fissati per un certo tempo, che proteggono il guard di un onion service & \ref{cap:13-percorso} \\
+website fingerprinting & website fingerprinting & riconoscere la pagina visitata dalla sola sequenza di dimensioni e tempi del traffico cifrato & \ref{cap:26-attacchi} \\
+\end{longtable}
+}

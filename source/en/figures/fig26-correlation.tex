@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Synthetic illustration, not a real measurement, of one-direction end-to-end Tor traffic correlation. The upper chart shows relative encrypted traffic volume in 250-millisecond bins on the client-to-guard link; the lower chart shows relative volume on the exit-to-server link. The two separately specified toy series contain similar but nonidentical bursts, shifted by one bin in this illustration and with differences in burst height and extra noise. Encryption does not necessarily hide timing and volume. Buffering, protocol overhead, multiplexing and competing traffic can modify both patterns. Neither a fixed delay nor a constant scaling factor is a general Tor property; matching remains statistical rather than certain.}
+% Synthetic sample traces, not observations
+\begin{tikzpicture}[font=\sffamily\scriptsize,x=0.32cm,y=0.09cm]
+  \def\serieIngresso{0/6,1/0,2/0,3/9,4/12,5/2,6/0,7/0,8/0,9/5,10/14,11/14,12/3,13/0,14/0,15/7,16/0,17/0,18/11,19/4,20/0,21/0,22/8,23/2}
+  \def\serieUscita{0/0,1/5,2/0,3/0,4/8,5/11,6/3,7/0,8/0,9/1,10/4,11/13,12/12,13/4,14/0,15/0,16/6,17/0,18/1,19/10,20/5,21/0,22/1,23/7,24/3}
+  \foreach \x/\h in \serieIngresso {
+    \fill[torviola!70] (\x,20) rectangle ++(0.8,\h);
+  }
+  \foreach \x/\h in \serieUscita {
+    \fill[torverde!70!black] (\x,0) rectangle ++(0.8,\h);
+  }
+  \draw[->] (-0.5,20) -- (27,20) node[right] {$t$};
+  \draw[->] (-0.5,0) -- (27,0) node[right] {$t$};
+  \node[left,align=right] at (-0.6,26) {entry\\observer\\(client--guard)};
+  \node[left,align=right] at (-0.6,6) {exit\\observer\\(exit--server)};
+  \draw[<->,torgrigio] (10,17) -- node[above,font=\sffamily\tiny] {illustrative lag: one bin} (11,17);
+  \node[text=torgrigio] at (13,40) {relative volume per 250\,ms bin};
+  \node[text=torgrigio,font=\sffamily\tiny] at (13,36.5) {synthetic example, not measured data};
+\end{tikzpicture}

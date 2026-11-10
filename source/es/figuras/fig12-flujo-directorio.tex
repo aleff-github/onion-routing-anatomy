@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible utilizada en EPUB.
+\altfig{Flujo simplificado del directorio Tor: los repetidores cargan descriptores a las autoridades conocidas, normalmente renovados al cabo de unas 18 horas o antes si cambian campos relevantes; la flecha hacia una sola autoridad es esquemática. Tres símbolos representan las autoridades, que intercambian votos, calculan consensos a partir de los votos disponibles e intercambian firmas; votos ausentes o distintos pueden producir resultados divergentes. Las cachés sirven el consenso de microdescriptores y los propios microdescriptores. El cliente verifica firmas válidas de más de la mitad de autoridades de confianza y solicita por resumen los microdescriptores faltantes. El consenso suele publicarse cada hora.}
+% Circulación de documentos de directorio
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  aut/.style={relay,fill=torviola!15,draw=torviola,minimum size=1cm,font=\sffamily\scriptsize},
+  doc/.style={font=\sffamily\scriptsize,fill=white,inner sep=1pt,align=center}]
+  \node[aut] (a1) at (0,2.2) {autor.~1};
+  \node[aut] (a2) at (1.8,3.2) {autor.~2};
+  \node[aut] (a3) at (3.6,2.2) {autor.~3};
+  \draw[<->,thick,torviola!70] (a1) -- (a2); \draw[<->,thick,torviola!70] (a2) -- (a3); \draw[<->,thick,torviola!70] (a1) -- (a3);
+  \node[doc,text=torviola] at (1.8,1.75) {votos y firmas};
+  \node[relay] (r) at (-3.2,2.2) {repetidor};
+  \draw[cellaf] (r) -- node[doc,above]{descriptor\\(normalmente 18 h)} (a1);
+  \node[relay,fill=torgrigio!10,draw=torgrigio] (c) at (1.8,-0.4) {\scriptsize caché};
+  \draw[risposta] (a1) -- node[doc,left=2pt]{consenso,\\microdescriptores} (c);
+  \draw[risposta] (a3) -- (c);
+  \node[client] (cl) at (6.2,-0.4) {Cliente};
+  \draw[risposta] (c) -- node[doc,above]{consenso de microdesc\\(aprox. cada hora)} (cl);
+  \draw[risposta] (c) to[bend right=25] node[doc,below]{microdescriptores faltantes, por resumen} (cl);
+  \node[font=\sffamily\scriptsize,text=torgrigio,align=center] at (6.2,2.6) {verificación: firmas válidas de\\más de la mitad de autoridades};
+  \draw[dotted,torgrigio] (6.2,2.2) -- (cl);
+\end{tikzpicture}

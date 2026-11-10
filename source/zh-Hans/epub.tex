@@ -1,0 +1,55 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% 简体中文版：EPUB 入口。
+\documentclass[11pt]{book}
+\input{导言}
+\input{宏}
+\input{版权}
+\makeatletter
+\@ifundefined{Configure}{}{\renewcommand{\altfig}[1]{\Configure{Picture-alt}{#1}}}
+\makeatother
+
+% 仅用于 EPUB（tex4ht）：标识符在各次构建间保持不变，封面在 OPF 中声明，插图和长字符串
+% 不超出窄屏，版权与无障碍元数据只声明本书实际具备的内容（构建时传入 daisy-）。
+% \mathit 改为 \textit：tex4ht 会把数学斜体的斜体校正变成空格（“KEY _SEED”）。
+\makeatletter
+\@ifundefined{Configure}{}{\AtBeginDocument{%
+  \renewcommand{\mathit}[1]{\textit{#1}}%
+  % 章、附录与部分的中文编号（PDF 中由 ctex 提供）。
+  \ConfigureMark{chapter}{\HCode{<span class="titlemark">}第\thechapter 章\HCode{</span>}}%
+  \ConfigureMark{appendix}{\HCode{<span class="titlemark">}附录\thechapter\HCode{</span>}}%
+  \ConfigureMark{part}{\HCode{<span class="titlemark">}第\ifcase\value{part}\or 一\or 二\or 三\or 四\or 五\or 六\or 七\or 八\or 九\fi 部分\HCode{</span>}}%
+  % 未加载 polyglossia 时 tex4ebook 无法识别语言，会写成 en-US。
+  \Configure{DocumentLanguage}{zh-Hans}%
+  \Configure{UniqueIdentifier}{urn:uuid:7e121532-2156-48e7-93cf-9c597b158ec1}%
+  \Configure{CoverMimeType}{image/jpeg}%
+  \CoverMetadata{epub-cover.jpg}%
+  \Css{img{max-width:100\%;height:auto;}}%
+  \Css{p,li,dd,td,pre,code{overflow-wrap:anywhere;}}%
+  \Configure{OpfMetadata}{\HCode{<dc:publisher>Alessandro Greco</dc:publisher>}}%
+  \Configure{OpfMetadata}{\HCode{<dc:rights>Copyright 2026 Alessandro Greco. GNU 通用公共许可证第 3 版或更新版本（GPL-3.0-or-later）。源文件：https://github.com/aleff-github/onion-routing-anatomy</dc:rights>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessMode">textual</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessMode">visual</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">alternativeText</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">tableOfContents</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">readingOrder</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityHazard">none</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilitySummary">正文按章组织，带可导航目录；插图和公式为带替代文本的 SVG 图像。尚未进行 WCAG 符合性检查。</meta>}}%
+}}
+\makeatother
+
+\title{Tor 解剖：逐字节解析匿名协议}
+\author{Alessandro Greco}
+\date{}
+\begin{document}
+\frontmatter
+\maketitle
+\Colophon
+\tableofcontents
+\include{章节/00-前言}
+
+\mainmatter
+\input{结构}
+\backmatter
+\printbibliography[heading=bibintoc,title={参考文献}]
+\end{document}

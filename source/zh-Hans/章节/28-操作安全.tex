@@ -1,0 +1,141 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{操作安全失误与去匿名化：经验教训}\label{cap:28-opsec}
+\aggiornatoal{2026 年 9 月 23 日}{Tor Project 支持文档；Tails 安全警告；tor 0.4.9.13；实验网络}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 区分身份信息可能泄露的不同层次，并判断哪些工具能够保护每一层；
+  \item 识别常见的操作安全失误，包括 DNS 泄露以及匿名集过小；
+  \item 使用 tor 本身检查应用程序是否把域名解析交给 tor（实验~18）；
+  \item 根据威胁模型分析真实事件。
+\end{itemize}
+\end{obiettivi}
+
+\Cref{cap:26-attacchi} 末尾指出了一个令人不安的事实：攻击 Tor 协议有时成本高昂，而且要求攻击者占据特殊观察位置。但在许多有记录的事件中，匿名性也因工具使用失误而受损，仅靠网络协议无法避免这类问题。本章从试图保护自己的人所处的视角研究这些错误，以明确 Tor 的保护边界，以及用户本人需要承担的责任，而不是介绍如何识别他人身份。
+
+\begin{attenzione}[本章的讨论范围]
+我们只从自我保护的角度讨论失误与防御习惯，不提供识别个人身份的操作流程。提到的事件都已公开，并依据引用来源重建。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{四个层次}\label{sec:opsec-livelli}
+
+身份可能在四个层次泄露（\cref{fig:livelli}）。第一层是网络，也是 tor 直接保护的层次：在常规 Tor 连接中，目的地看不到客户端的原始 IP 地址，单个电路中继通常也不掌握通信两端的完整信息；不过这不能消除流量关联等风险。第二层是应用程序，需要 Tor Browser、Tails 和 Whonix（\cref{cap:23-browser}）提供保护。最后两层是内容和行为，tor 并不会自动保护它们。专门工具可以减轻部分风险，但用户所写、所上传和所做的事情也至关重要。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图28-暴露层级}
+\caption{身份线索可能暴露的四个层次（教学示意图）。Tor 能减少部分网络风险，应用层防护与内容处理工具有所帮助，但用户披露的信息及行为在各层次都很重要。任何一层都不能单独保证匿名。}
+\label{fig:livelli}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{应用程序层面的失误}\label{sec:opsec-applicazione}
+
+\paragraph{流量绕过 Tor。}tor 只保护已经配置为使用它的应用程序~\cite{torsafety}。直接联网的软件，即使只是获取更新或生成预览，也可能暴露真实 IP 地址。Tor Project 的支持文档特别提到两种常见情况。BitTorrent 程序可能忽略代理设置，或者仍向跟踪器透露自己的地址。下载后在联网状态下打开的文档也是一种风险：DOC 或 PDF 文件可能包含远程资源，被不使用 Tor 的程序自动获取。
+
+\paragraph{DNS 泄露。}更隐蔽的问题与 SOCKS 有关。应用程序可以将目的地的\emph{域名}交给 tor，让出口进行解析（\cref{sec:stream-dns}）；也可以先调用系统的 DNS 服务自行解析，然后只向 tor 提供 IP 地址。后一种情况下，后续连接仍经过 Tor，但\enquote{这个网站在哪里？}的解析可能已在 Tor 电路之外向解析器暴露域名，并与客户端的网络连接关联。但并非必然发生明文 DNS 查询：答案也可能来自缓存、本地文件或加密 DNS。tor 无法证明此前已经发生泄露，只能提示 SOCKS 请求仅携带 IP 地址这一风险信号，下面的实验将展示这一点。
+
+% ---------------------------------------------------------------------------
+\section{实验：tor 识别 DNS 泄露的警讯}\label{sec:lab-opsec}
+
+\begin{laboratorio}[18]{携带域名与不携带域名的 SOCKS 请求}
+\textbf{目标。}观察 tor 如何区分让自己解析域名的应用程序与自行解析的应用程序，并了解 tor 如何拒绝后一类请求。\\
+\textbf{前置条件。}实验~11；实验网络正在运行。\\
+\textbf{预计时间。}30 分钟。
+\end{laboratorio}
+
+\cmd{curl} 支持两种行为。\texttt{-{}-socks5} 在本地解析域名，只向 tor 提供 IP 地址；\texttt{-{}-socks5-hostname} 则直接传递域名。\file{labs/zh-Hans/实验室/dns\_leak.py} 脚本连接客户端 \texttt{008c} 的 ControlPort，启用 \opt{TestSocks}，让 tor 记录每个 SOCKS 请求的类型。随后脚本监听日志消息，使用两种方式访问 \texttt{http://localhost:8080/}。
+
+本实验展示的是\emph{机制}，而不是真正从网络中观察到了 DNS 泄露。\texttt{localhost} 在本机解析，不会联系外部解析器，因此没有 DNS 查询离开计算机。tor 发现收到的是 IP 地址而非域名，这是此前本地解析的可能迹象，却不能证明发生了 DNS 泄露（程序也可能直接使用 IP 地址）。若换成普通域名，类似的本地解析可能产生外部查询，其是否为明文取决于 DNS 配置。为了避免此类流量，我们有意只使用私有网络。脚本还会覆盖可能让 \texttt{localhost} 绕过代理的 \texttt{NO\_PROXY} 设置，强制使用 SOCKS。最后，它启用 \opt{SafeSocks}，即使没有 DNS 泄露也拒绝仅携带 IP 地址的请求：
+\begin{lstlisting}[numbers=none]
+--socks5           HTTP 200  tor: Your application (using socks5 to port
+                   8080) is giving Tor only an IP address. Applications
+                   that do DNS resolves themselves may leak information...
+--socks5-hostname  HTTP 200  tor: Your application (using socks5 to port
+                   8080) instructed Tor to take care of the DNS resolution
+                   itself if necessary. This is good.
+--socks5 SafeSocks HTTP 000
+\end{lstlisting}
+在示例输出中，前两种请求都能成功，但只有第二种将域名解析交给 tor；第一种使用 \texttt{localhost}，不足以证明 DNS 泄露。在 tor 源码（\file{src/core/proto/proto\_socks.c}）中，第一条警告以 \texttt{warn} 级别记录，并进行速率限制以免日志被淹没；同时 ControlPort 会产生动作类型为 \texttt{DANGEROUS\_SOCKS} 的 \texttt{STATUS\_CLIENT} 事件。因此，控制程序能够向用户发出警告。当 \opt{SafeSocks} 启用后，相同请求会遭到拒绝，\cmd{curl} 也得不到响应。此实验包含在 \texttt{make verifica-lab} 中。
+
+% ---------------------------------------------------------------------------
+\section{内容层面的失误}\label{sec:opsec-contenuto}
+
+\paragraph{元数据。}许多文件包含作者甚至没有注意到的信息：照片可能泄露位置或相机型号，文档可能透露作者姓名和创建时间。Tails 内置元数据清除工具，其安全警告也提到过照片元数据泄露拍摄者所在位置的情况~\cite{tailswarnings}。
+
+\paragraph{账户与身份。}登录个人账户就等于直接告诉网站自己是谁，不论连接使用什么 IP 地址~\cite{torsafety}。在同一网站、同一会话中使用两个身份，也可能因 Cookie、会话标识符、应用层特征等被关联；但网站无法直接读取 Tor 电路标识符。Tails 建议在需要彼此隔离的活动之间重启系统~\cite{tailswarnings}。Tor Browser 的不可关联性设计（\cref{sec:browser-tb}）保护不同网站之间的活动，并不自动分离同一网站上的多个身份。
+
+\paragraph{写作风格。}即使没有元数据，语言习惯、话题、反复出现的错误以及发布时间，也可能将匿名文本与署名作品联系起来。没有任何自动化工具能够消除所有此类线索。
+
+% ---------------------------------------------------------------------------
+\section{行为失误：匿名集过小}\label{sec:opsec-insieme}
+
+\Cref{cap:01-anonimato} 以在某个集合内无法彼此区分来定义匿名性。Tor 能减少某些使网络活动容易区分的特征，但无法保证在特定时间、特定地点有足够多人同时使用 Tor。如果使用者寥寥无几，仅仅知道\emph{谁使用了 Tor}，就可能大幅缩小候选范围。
+
+\paragraph{一起事件。}2013 年 12 月，美国一所大学在考试前夕收到虚假的炸弹威胁电子邮件。发送者使用临时电子邮件服务和 Tor。根据多家媒体对随刑事诉状附上的 FBI 宣誓书的报道，校方调查了相关邮件发出前几小时内，哪些人在校园无线网络上使用过 Tor~\cite{wbur2013harvard,sandvik2013harvard}。随后，这名学生在接受询问时承认发送了邮件。调查并不需要破解 Tor 的加密：本地网络观察者可以看到 Tor 的使用情况，但这并不表示他们能看到连接内容或目的地；他们可以知道\emph{谁}在那段时间使用 Tor，于是将调查范围缩小到少数人。
+
+这起事件说明威胁模型中的三个原则（\cref{cap:04-modello-minaccia}）：
+\begin{itemize}
+  \item 不使用网桥时，Tor 不会隐藏正在使用 Tor 这一事实：本地网络观察者可能识别其连接~\cite{tailswarnings}。带可插拔传输的网桥（\cref{cap:16-censura}）有助于减少这种暴露。
+  \item 如果候选集合很小，且事件发生在狭窄时间窗口内，即使没有全球性观察能力，攻击者也可能通过集合交集缩小候选范围。
+  \item 匿名需要同伴~\cite{dingledine2006company}。同一环境中使用 Tor 的人越多、使用原因越多样，任何一个人使用 Tor 这一事实就越不具有识别力。Tor Project 也明确鼓励更广泛地使用 Tor~\cite{torsafety}。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{自我检查清单}\label{sec:opsec-lista}
+
+这份清单并不穷尽所有问题，但按照不同层次提供了主要建议：
+\begin{enumerate}
+  \item 使用 Tor Browser，或者 Tails、Whonix 等系统，而不是手动设置代理的普通浏览器。
+  \item 避免安装扩展或改变会让浏览器显得独特的设置。
+  \item 对其他应用程序，验证它们是否把域名交给 tor（\opt{SafeSocks}、\opt{TestSocks}）。
+  \item 联网期间不要直接打开下载的文档，或者在隔离环境中处理。
+  \item 优先使用 HTTPS 和洋葱服务，因为出口能够看到未加密的内容。
+  \item 分享文件前清除元数据。
+  \item 不要在同一会话中混合必须分离的身份。
+  \item 如果仅仅被发现使用 Tor 就有风险，应考虑适当的混淆网桥，但不能假定它能使活动完全不可见。
+  \item 记住时间安排、习惯和写作风格也会传递信息。
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item 身份可能从网络、应用、内容和行为四个层次泄露；tor 直接保护的只有第一层。
+  \item 绕过 Tor 的应用程序、在联网时打开下载文档，以及 DNS 泄露，都属于应用层失误。tor 可以针对只提供 IP 地址的 SOCKS 请求发出警告并拒绝它们。
+  \item 元数据、账户和写作风格，可能把内容与特定个人联系起来。
+  \item 如果 Tor 用户集合很小，知道谁在何时使用了 Tor，就可能足以缩小识别范围。网桥与广泛的用户群体有助于降低这一风险。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:28-livello}
+针对本章讨论的每一种失误，在 \cref{fig:livelli} 中找出对应层次，并指出有助于预防该失误的工具或习惯。
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:28-dns}
+解释为什么即使后续连接通过 Tor，DNS 泄露仍然会暴露信息。谁能够看到这些信息？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:28-evento}
+在实验~18 中，通过 Stem 订阅 \texttt{STATUS\_CLIENT} 事件，显示仅提供 IP 地址的请求所触发的 \texttt{DANGEROUS\_SOCKS} 动作。图形界面可以如何利用它？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:28-insieme}
+重新分析 2013 年事件，假设当事人从同一网络使用 obfs4 网桥。本地网络观察者可能看到什么？还有哪些信息可能缩小候选集合？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:28-modello}
+选择一名因正当理由需要匿名的真实或虚构人物，例如新闻消息来源、活动人士或研究人员，编写一份操作安全计划，涵盖威胁、相关层次、工具与习惯，以及残余风险。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item Tor Project 关于匿名性的支持指南~\cite{torsafety}。
+  \item Tails 警告，\titolo{Tails is safe but not magic}~\cite{tailswarnings}。
+  \item R.~Dingledine 和 N.~Mathewson，\titolo{Anonymity Loves Company}~\cite{dingledine2006company}。
+\end{itemize}

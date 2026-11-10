@@ -1,0 +1,197 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Administrar un repetidor o un puente}\label{cap:22-relay}
+\aggiornatoal{23 de septiembre de 2026}{tor 0.4.9.13 (manual); red de laboratorio}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item elegir entre repetidor intermedio, salida y puente según sus recursos y los riesgos que pueda asumir;
+  \item escribir la configuración esencial de cada uno, incluidos límites de ancho de banda y almacenamiento de claves fuera de línea;
+  \item leer y escribir una política de salida y comprobar sus efectos en la red de laboratorio (laboratorio~14);
+  \item declarar correctamente una familia de repetidores.
+\end{itemize}
+\end{obiettivi}
+
+La red Tor existe porque miles de personas y organizaciones aportan ancho de banda y equipos. En capítulos anteriores examinamos los repetidores desde la perspectiva del cliente; ahora cambiaremos de lado. Este no es un manual de administración de sistemas ---el Tor Project mantiene una guía actualizada para operadores---, sino una explicación de lo que significan las principales decisiones operativas en términos del protocolo.
+
+% ---------------------------------------------------------------------------
+\section{¿Qué tipo de nodo?}\label{sec:relay-tipi}
+
+\begin{description}
+  \item[Repetidor intermedio] Puede acabar convirtiéndose también en guardia. Reenvía celdas entre repetidores sin abrir conexiones a destinos externos de Internet. Es el papel menos exigente. Su dirección aparece en el consenso, pero los sitios web no ven tráfico procedente de ella.
+  \item[Salida] Abre conexiones a destinos en nombre de los clientes. Es especialmente valiosa porque las salidas escasean en relación con la demanda (\cref{sec:percorso-pesi}), pero también implica mayor exposición: los destinatarios de tráfico abusivo ven la IP de la salida como origen aparente.
+  \item[Puente] Repetidor no publicado que actúa como primer salto para quien no puede acceder a la red pública (\cref{sec:cens-bridge}). Incluso una conexión doméstica modesta puede ayudar si se combina con un transporte conectable como obfs4 o WebTunnel.
+\end{description}
+
+\begin{attenzione}[Antes de comenzar]
+Administrar una salida tiene consecuencias legales y operativas, como denuncias de abusos y solicitudes de autoridades, examinadas en \cref{cap:25-legale}. Considera empezar con un repetidor intermedio o un puente, informa a tu proveedor de conectividad y evita utilizar la misma conexión para administrar un repetidor y realizar actividades delicadas como cliente Tor.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Configuración esencial}\label{sec:relay-config}
+
+Un repetidor intermedio solo requiere unas líneas de \file{torrc}:
+\begin{lstlisting}[numbers=none]
+Nickname        MyRelay
+ContactInfo     operator@example.org
+ORPort          443
+ExitRelay       0
+SocksPort       0
+RelayBandwidthRate  4 MBytes
+RelayBandwidthBurst 8 MBytes
+\end{lstlisting}
+
+\opt{ContactInfo} permite que otras personas contacten con el operador cuando surjan problemas. El manual recuerda que los descriptores se archivan y publican, por lo que esa dirección puede permanecer disponible públicamente indefinidamente. \opt{ExitRelay 0} hace explícito el comportamiento predeterminado de las versiones recientes: con \texttt{auto}, tor solo se convierte en salida cuando el operador escribe una política de salida. \opt{RelayBandwidthRate} y \opt{RelayBandwidthBurst} limitan el ancho de banda medio y máximo. En cambio, \opt{AccountingMax} limita el tráfico total durante un período contable, por ejemplo un mes. Cuando se alcanza ese límite, el repetidor deja de aceptar tráfico nuevo hasta el siguiente período.
+
+\textbf{Nota operativa.} Con \texttt{ExitRelay} en modo \texttt{auto}, las opciones \texttt{ReducedExitPolicy} o \texttt{IPv6Exit} también pueden activar el papel de salida; no solo lo hacen las reglas \texttt{ExitPolicy}. Por el contrario, \texttt{ExitRelay 0}, como en el ejemplo, prohíbe todo tráfico de salida. Comprueba la configuración efectiva antes de desplegar un repetidor público.
+
+\subsection{La vida de un repetidor nuevo}
+
+Un repetidor recién iniciado publica su descriptor ante las autoridades, que lo incluyen en el consenso y comienzan a medirlo (\cref{sec:dir-voto}). Al principio recibe poco tráfico: los clientes seleccionan repetidores de forma proporcional a sus pesos de ancho de banda, que siguen siendo pequeños hasta estabilizarse las mediciones. Los indicadores se obtienen con el tiempo (\cref{sec:dir-flag}). \texttt{Stable} exige funcionamiento prolongado sin interrupciones, y \texttt{Guard} requiere además antigüedad suficiente y alta disponibilidad. Al convertirse en guardia, un repetidor puede observar inicialmente una reducción del tráfico: los clientes que ya eligieron guardias no lo seleccionan como intermedio con la misma frecuencia. Después crece gradualmente el tráfico a medida que nuevos clientes lo adoptan (\cref{sec:guard}).
+
+Dos tipos de contratiempos no son equivalentes. Reiniciar con frecuencia sin cambiar la identidad conserva las mediciones de ancho de banda, pero reduce la disponibilidad sostenida necesaria para \texttt{Stable} y \texttt{Guard}: esos indicadores deben recuperarse. Cambiar las \emph{claves de identidad}, en cambio, crea un repetidor completamente nuevo desde el punto de vista de las autoridades, que vuelve a empezar desde cero incluso en las mediciones de ancho de banda.
+
+\subsection{Claves}
+
+La identidad del repetidor es su clave primaria Ed25519 (\cref{sec:canale-chiavi}). Por defecto, tor la guarda en el disco del repetidor. Con \opt{OfflineMasterKey 1}, la clave maestra permanece en otro ordenador; al servidor solo se transfieren claves de firma temporales, certificadas mediante \cmd{tor --keygen}. Si el servidor se ve comprometido, el adversario obtiene claves que caducan, no la identidad a largo plazo. Este procedimiento exige disciplina: las claves temporales deben renovarse antes de caducar o el repetidor dejará de funcionar.
+
+% ---------------------------------------------------------------------------
+\section{Política de salida}\label{sec:relay-exitpolicy}
+
+Una política de salida es una lista ordenada de reglas \texttt{accept} y \texttt{reject}, cada una con una dirección o red y un puerto o intervalo de puertos. Tor procesa las reglas \textbf{en orden}: se aplica la primera que coincida. Las reglas definidas por el operador preceden a las predeterminadas del manual. Por defecto se rechazan puertos utilizados por correo electrónico (25), NNTP (119), NetBIOS y SMB (135--139, 445) y determinadas aplicaciones de intercambio de archivos; se acepta el tráfico restante. Por separado, tor rechaza por defecto los destinos privados, incluidos \texttt{127.0.0.0/8}, \texttt{10.0.0.0/8} y \texttt{192.168.0.0/16}, además de la dirección pública del propio repetidor. Así protege la red interna del operador (\opt{ExitPolicyRejectPrivate}). Nuestro laboratorio desactiva esa protección para permitir conexiones a \texttt{127.0.0.1}.
+
+\textbf{Orden de las protecciones.} Cuando \texttt{ExitPolicyRejectPrivate} está activo (valor predeterminado), las reglas que rechazan redes privadas y destinos locales se \emph{anteponen} a las reglas de salida definidas por el operador. La red privada Chutney desactiva esa protección deliberadamente; no copies este ajuste en una salida pública.
+
+Una salida limitada a tráfico web puede utilizar:
+\begin{lstlisting}[numbers=none]
+ExitRelay  1
+ExitPolicy accept *:80
+ExitPolicy accept *:443
+ExitPolicy reject *:*
+\end{lstlisting}
+
+El Tor Project también sugiere \opt{ReducedExitPolicy} como compromiso habitual: permite un conjunto de puertos de servicios frecuentes y excluye otros que generan más quejas por abusos.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig22-politica-salida}
+\caption{Política del laboratorio Chutney, donde \opt{ExitPolicyRejectPrivate 0} se utiliza solo para permitir destinos privados en pruebas; normalmente Tor antepone su rechazo a las reglas del operador. \texttt{BEGIN} hacia \texttt{127.0.0.1:8080} coincide con \texttt{reject} y produce \texttt{END EXITPOLICY}; el puerto 8081 omite esa regla y coincide con \texttt{accept}. La aceptación permite intentar una conexión TCP, pero no garantiza \texttt{CONNECTED} sin un servidor que escuche. Invertir las reglas anula el rechazo específico.}
+\label{fig:policy}
+\end{figure}
+
+\paragraph{Qué reciben los clientes.} El descriptor del repetidor contiene la política completa, mientras el consenso y los microdescriptores transportan un resumen basado solo en puertos, como \texttt{p accept 80,443}. El cliente lo utiliza para decidir si una salida podría atender una solicitud (\cref{sec:percorso-vincoli}). Como ese resumen omite las direcciones, puede descubrir un rechazo específico para una dirección únicamente al intentar conectarse, como muestra el laboratorio.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: comprobar una política de salida}\label{sec:lab-relay}
+
+\begin{laboratorio}[14]{Una regla de salida y sus consecuencias}
+\textbf{Objetivo.} Añadir una regla a una salida del laboratorio y utilizar \file{labs/es/codigo/torlab} para observar las respuestas a destinos aceptados y rechazados.\\
+\textbf{Requisitos previos.} Laboratorios~3 y~4; red de laboratorio en funcionamiento.\\
+\textbf{Tiempo estimado.} 1 hora.
+\end{laboratorio}
+
+\paragraph{Paso 1: la regla.} En el \file{torrc} de \texttt{test006e}, insertamos una regla que rechace un puerto antes de las reglas existentes que permiten \texttt{127.0.0.0/8}:
+\begin{lstlisting}[numbers=none]
+ExitPolicy reject 127.0.0.1:8080
+ExitPolicy accept 127.0.0.0/8:*
+\end{lstlisting}
+Estas dos líneas muestran su orden relativo. Al modificar el \file{torrc} existente, inserta únicamente la nueva regla \texttt{reject} antes de la primera línea \texttt{ExitPolicy}; no dupliques un \texttt{accept} ya presente. El orden importa. Si colocáramos el rechazo después de \texttt{accept}, no tendría efecto, porque prevalece la primera regla coincidente. Ese error quedó documentado en el experimento de referencia anterior. Reiniciamos el repetidor y abrimos dos servidores HTTP pequeños en los puertos 8080 y 8081 del contenedor.
+
+\paragraph{Paso 2: tres solicitudes.} Con \texttt{build} y \file{stream.py}, construimos un circuito que termina en \texttt{006e} y enviamos tres mensajes \texttt{BEGIN} hacia los puertos 8080, 8081 y 9999, donde no escucha ningún servidor. Las respuestas, en una de nuestras sesiones (los códigos, la dirección y el TTL pueden cambiar según la versión y el entorno):
+\begin{lstlisting}[numbers=none]
+127.0.0.1:8080 -> END  reason=EXITPOLICY address=127.0.0.1 TTL=1800
+127.0.0.1:8081 -> CONNECTED
+127.0.0.1:9999 -> END  reason=MISC
+\end{lstlisting}
+
+\paragraph{Paso 3: interpretar las respuestas.} El rechazo por política produce la razón \texttt{EXITPOLICY}. La celda \texttt{END} contiene también la dirección resuelta y un TTL. El cliente puede recordar que esa salida no atiende el destino y elegir otra sin esperar un descriptor nuevo. Por el contrario, el puerto sin servidor disponible produce \texttt{MISC}, y no \texttt{CONNECTREFUSED}, aunque la especificación contempla esta última razón para conexiones rechazadas~\spec{tor-spec}{Closing streams}.
+
+\begin{approfondimento}[¿Por qué \texttt{MISC} y no \texttt{CONNECTREFUSED}?]
+La respuesta aparece en los registros \texttt{info} de la salida. Seguir su pista es un buen ejemplo de cómo investigar una discrepancia entre especificación e implementación:
+\begin{lstlisting}[numbers=none]
+[info] connection_handle_write_impl(): in-progress connect failed.
+       Removing. (Connection refused)
+[info] errno_to_stream_end_reason(): Didn't recognize errno 115 (Operation
+       now in progress); telling the client that we are ending a stream
+       for 'misc' reason.
+\end{lstlisting}
+
+La salida \emph{sabe} que se rechazó la conexión, pero obtiene la razón a partir de otro valor. Las conexiones hacia destinos no son bloqueantes: \texttt{connect()} devuelve inicialmente \texttt{EINPROGRESS} (errno 115) y el resultado definitivo está disponible después mediante un evento de escritura. Entonces \file{connection.c} recupera el error real con \texttt{getsockopt(SO\_ERROR)}, registra \enquote{Connection refused} y llama a \file{connection\_edge\_end\_errno()}. Sin embargo, esa función vuelve a calcular la razón mediante \texttt{errno\_to\_stream\_end\_reason(tor\_socket\_errno(\ldots))}. En Unix, \texttt{tor\_socket\_errno} se define como la macro \texttt{(errno)} (\file{src/lib/net/socket.h}), que hace referencia a la variable global donde todavía figura \texttt{EINPROGRESS}. El valor 115 no está entre los reconocidos en \file{src/core/or/reasons.c}, por lo que se devuelve \texttt{MISC}.
+
+La información correcta existe, pero no se utiliza. Las dos ramas del código también difieren: la de conexiones entre repetidores transmite el error recuperado, mientras la correspondiente al flujo lo ignora. Según el informe y el parche conservados en \file{docs/it/segnalazioni/}, una prueba anterior con tor 0.4.9.13 en una red privada, usando el error correcto en esa rama, cambió la tercera respuesta por \texttt{CONNECTREFUSED}. Es un defecto menor sin consecuencias para el anonimato: el cliente sabe que el flujo falló, pero pierde información útil. \texttt{CONNECTREFUSED} indicaría que la salida alcanzó el destino y no tendría sentido repetirlo por otra. El análisis y el parche están disponibles en \file{docs/it/segnalazioni/} para el Tor Project. Este caso también demuestra por qué conviene cotejar especificaciones y comportamiento real.
+\end{approfondimento}
+
+El script \file{labs/es/laboratorio/politica\_salida.py} implementa las tres pruebas, valida las respuestas y utiliza \texttt{finally} para intentar restaurar el \file{torrc} de \texttt{006e}. En una red Chutney dedicada puede invocarse desde la raíz del repositorio con \texttt{make -C labs/es/laboratorio politica-salida}; no forma parte de la comprobación Chutney ordinaria \texttt{make -C labs/es/laboratorio verify}. No lo ejecutes sobre un repetidor real. Un detalle importante: el circuito necesita tres saltos. Una salida rechaza reenviar tráfico de un circuito de un solo salto y devolvería \texttt{END} con razón \texttt{TORPROTOCOL} (\cref{sec:dos-limiti}).
+
+% ---------------------------------------------------------------------------
+\section{Familias de repetidores}\label{sec:relay-famiglie}
+
+Los operadores que administran varios repetidores deben declarar una \textbf{familia}. Los clientes nunca incluyen dos repetidores de la misma familia en un circuito (\cref{sec:percorso-vincoli}), porque un operador común podría correlacionar tráfico. El mecanismo histórico es \opt{MyFamily}: cada repetidor enumera las huellas de todos los demás y la pertenencia cuenta únicamente cuando las declaraciones son recíprocas. Administrar diez repetidores exige mantener diez listas coincidentes, todas las cuales deben modificarse al añadir uno.
+
+El mecanismo introducido con tor 0.4.9 utiliza en su lugar una \textbf{clave de familia}. El operador crea una mediante \cmd{tor --keygen-family MyFamilyKey}, copia el archivo generado \texttt{MyFamilyKey.secret\_family\_key} al directorio de claves (\texttt{KeyDirectory}) de cada repetidor, conservando el sufijo \texttt{.secret\_family\_key}, y añade a cada \file{torrc} la línea \texttt{FamilyId} obtenida. La clave compartida debe protegerse y guardarse en una copia de seguridad; si se filtra, hay que sustituirla en toda la familia. Cada repetidor utiliza esa clave para firmar un certificado que demuestra su pertenencia. Los verificadores ya no necesitan comparar listas. Durante la transición, es recomendable configurar ambos mecanismos.
+
+\begin{approfondimento}[Por qué conviene declarar una familia]
+Nada obliga técnicamente a declarar los repetidores como familia; un adversario incluso podría evitarlo deliberadamente. Sin embargo, las autoridades y los voluntarios que vigilan la red buscan características compartidas, como redes comunes, versiones, horas de inicio simultáneas y datos de contacto. Una familia no declarada puede atraer investigaciones y hacer que se excluyan sus repetidores del consenso. Declararla forma parte de la relación de confianza en que se basa la red.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\textbf{No incluyas puentes en listas públicas \texttt{MyFamily}:} hacerlo podría revelar su relación con repetidores publicados. La guía de Tor aconseja expresamente no utilizar esta opción en puentes. Además, \texttt{tor --keygen-family MyFamilyKey} puede sobrescribir archivos de claves que ya existan con ese nombre: utiliza uno nuevo y protege el archivo secreto.
+
+\section{Administrar un puente}\label{sec:relay-bridge}
+
+Un puente obfs4 puede configurarse como en el laboratorio~10 (\cref{sec:lab-censura}):
+\begin{lstlisting}[numbers=none]
+BridgeRelay 1
+ORPort 9001
+ServerTransportPlugin obfs4 exec /usr/bin/obfs4proxy
+ServerTransportListenAddr obfs4 0.0.0.0:443
+ExtORPort auto
+BridgeDistribution any
+\end{lstlisting}
+
+\opt{BridgeDistribution} indica al sistema de distribución, actualmente rdsys, cómo desea el operador distribuir el puente. \texttt{any} deja la decisión al sistema; \texttt{none} lo excluye completamente, opción útil para compartirlo de forma privada con personas de confianza. Los canales disponibles, como web, correo electrónico y Telegram, figuran en la página de información de puentes. Un puente no aparece en el consenso público, pero su descriptor sí llega a la autoridad de puentes, que comprueba su accesibilidad.
+
+El transporte debe escuchar en un puerto diferente de ORPort y, cuando sea posible, en uno común como el 443. Ese es el puerto que utilizan los clientes y observa el censor (\cref{sec:cens-strategie}).
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item Administrar un repetidor intermedio es la forma menos exigente de contribuir; una salida es especialmente valiosa, pero implica más exposición; un puente ayuda a quienes sufren censura.
+  \item Solo unas pocas opciones son esenciales: identidad, contacto, puertos y límites de ancho de banda. La clave maestra de identidad puede mantenerse fuera de línea.
+  \item La política de salida es una lista ordenada en la que prevalece la primera regla coincidente; los destinos privados se rechazan por defecto.
+  \item El rechazo por política llega al cliente como mensaje \texttt{END} con razón \texttt{EXITPOLICY}, dirección y TTL.
+  \item Quienes administren varios repetidores deben declararlos como familia mediante \opt{MyFamily} o el mecanismo reciente de claves de familia.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:22-ordine}
+Dada la política \texttt{accept *:80}, \texttt{reject 192.0.2.0/24:*}, \texttt{reject *:*}, ¿puede un cliente conectarse por esa salida a \texttt{192.0.2.7:80}? Reescribe la política para impedirlo.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:22-riassunto}
+¿Por qué el resumen basado únicamente en puertos del consenso es insuficiente para decidir si una salida aceptará una conexión? ¿Qué hace el cliente al recibir un \texttt{END} con razón \texttt{EXITPOLICY}?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:22-famiglia}
+Un operador administra cinco repetidores con \opt{MyFamily} y añade un sexto, pero actualiza la configuración solo en el nuevo. ¿Qué observan los clientes? ¿Qué cambia al utilizar una clave de familia?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:22-refused}
+Comprueba la explicación del análisis técnico: activa registros \texttt{info} en la salida y repite las tres solicitudes. ¿Qué cambiaría si \file{connection\_edge\_end\_errno()} recibiera el error devuelto por \texttt{getsockopt}? ¿Qué otras razones de cierre de flujos podrían comunicarse correctamente?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:22-accounting}
+Un repetidor dispone de \texttt{AccountingMax 1 TBytes} al mes y 10\,MB/s de ancho de banda. ¿Después de cuántos días de funcionamiento a velocidad máxima agotaría su cuota? ¿Cómo afecta a la red un repetidor apagado medio mes frente a otro que funciona todo el mes con la mitad del ancho de banda?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item La guía para operadores de repetidores del Tor Project, \url{https://community.torproject.org/relay/}.
+  \item \begin{sloppypar}Las entradas del manual de tor sobre \opt{ExitPolicy}, \opt{ReducedExitPolicy},
+        \opt{FamilyId}, \opt{OfflineMasterKey} y \opt{BridgeDistribution}.\end{sloppypar}
+  \item La especificación de razones de cierre de flujos, \spec{tor-spec}{Closing streams}.
+\end{itemize}

@@ -1,0 +1,34 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Alternative text for accessibility (EPUB only).
+\altfig{Telescopic construction of a three-hop Tor circuit, with client, R1 guard, R2 middle, and R3 exit columns. The client exchanges CREATE2/CREATED2 with R1 and derives keys K1. Next, EXTEND2 travels within the existing circuit: R1 processes it, sends CREATE2 to R2, and CREATED2/EXTENDED2 carry the response back so the client derives K2. For the third hop, EXTEND2 travels through the guard to R2, which processes it and sends CREATE2 to R3; the reply lets the client derive K3. Each handshake establishes separate client-to-relay keys; preceding relays forward messages for later hops after handling their own onion layer. Dashed arrows represent logical paths through intermediate relays, not direct client-to-distant-relay links. Adjacent nodes communicate over separate TLS channels.}
+% Telescopic circuit construction
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  msg/.style={font=\ttfamily\scriptsize,fill=white,inner sep=1pt},
+  indietro/.style={-{Stealth[length=2.5mm]},thick,torverde!60!black},
+  circav/.style={cellaf,dashed},
+  circind/.style={indietro,dashed}]
+  \foreach \n/\x/\t in {c/0/Client,r1/3.4/$R_1$ guard,r2/6.8/$R_2$ middle,r3/10.2/$R_3$ exit}
+    \node[font=\sffamily\small] (\n) at (\x,0) {\t};
+  \foreach \x in {0,3.4,6.8,10.2} \draw[torgrigio] (\x,-0.3) -- (\x,-5.5);
+  % first hop
+  \draw[cellaf] (0,-0.9) -- node[msg,above]{CREATE2} (3.4,-0.9);
+  \draw[indietro] (3.4,-1.5) -- node[msg,above]{CREATED2} (0,-1.5);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-1.2) {keys $K_1$};
+  % second hop
+  \draw[circav] (0,-2.5) -- node[msg,above]{EXTEND2} (3.4,-2.5);
+  \draw[cellaf] (3.4,-2.5) -- node[msg,above]{CREATE2} (6.8,-2.5);
+  \draw[indietro] (6.8,-3.1) -- node[msg,above]{CREATED2} (3.4,-3.1);
+  \draw[circind] (3.4,-3.1) -- node[msg,above]{EXTENDED2} (0,-3.1);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-2.8) {keys $K_2$};
+  % third hop
+  \draw[circav] (0,-4.2) -- node[msg,above]{EXTEND2} (6.8,-4.2);
+  \draw[cellaf] (6.8,-4.2) -- node[msg,above]{CREATE2} (10.2,-4.2);
+  \draw[indietro] (10.2,-4.8) -- node[msg,above]{CREATED2} (6.8,-4.8);
+  \draw[circind] (6.8,-4.8) -- node[msg,above]{EXTENDED2} (0,-4.8);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-4.5) {keys $K_3$};
+  % channels
+  \foreach \a/\b/\y in {0/3.4/-5.8,3.4/6.8/-5.8,6.8/10.2/-5.8}
+    \draw[thick,torgrigio!60,{Bar}-{Bar}] (\a,\y) -- node[below,font=\scriptsize]{TLS channel} (\b,\y);
+  \node[font=\scriptsize,text=torgrigio,align=center] at (5.1,-6.6) {each handshake is between the client and one relay};
+\end{tikzpicture}

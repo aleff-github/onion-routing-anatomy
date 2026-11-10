@@ -1,0 +1,115 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Del encaminamiento cebolla del NRL al Tor Project}\label{cap:03-nascita-tor}
+\aggiornatoal{23 de septiembre de 2026}{Syverson, \emph{A Peel of Onion} (2011); página histórica del Tor Project}
+
+\begin{obiettivi}
+Al terminar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item describir los orígenes del encaminamiento cebolla en el Naval Research Laboratory y sus tres generaciones;
+  \item explicar qué distingue a Tor de las generaciones anteriores;
+  \item reconstruir las principales etapas de la historia del Tor Project desde 2002 hasta la actualidad;
+  \item explicar de dónde procede el nombre \enquote{Tor}.
+\end{itemize}
+\end{obiettivi}
+
+% ---------------------------------------------------------------------------
+\section{En el Naval Research Laboratory}\label{sec:nascita-nrl}
+
+En 1995, tres investigadores del Naval Research Laboratory (NRL) de Estados Unidos ---David Goldschlag, Michael Reed y Paul Syverson--- se preguntaron si era posible establecer conexiones por Internet sin revelar quién se comunicaba con quién~\cite{torhistory}. Su objetivo no era el anonimato como fin en sí mismo, sino, como hemos visto, \enquote{separar la identificación del encaminamiento} (\cref{sec:anon-termini}). Presentaron su primer diseño en el \emph{Information Hiding Workshop} de mayo de 1996~\cite{goldschlag1996hiding}. Antes de terminar ese año desarrollaron un segundo diseño que separaba la aplicación del usuario, encargada de construir los circuitos, de los nodos que transportaban el tráfico~\cite{syverson2011peel}.
+
+En 1996 el laboratorio ya había obtenido autorización para publicar el código, antes de que se extendiera la expresión \emph{código abierto}. Sus diseñadores entendían que nadie confiaría en una red cuyo código no pudiera examinarse.
+
+El nombre procede de la estructura de los datos: un mensaje envuelto en capas de cifrado que los nodos van retirando una a una, como quien pela una cebolla.
+
+% ---------------------------------------------------------------------------
+\section{Tres generaciones}\label{sec:nascita-generazioni}
+
+Syverson distingue tres generaciones de los diseños desarrollados en el NRL~\cite{syverson2011peel}.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig03-generaciones}
+\caption{Las tres generaciones del encaminamiento cebolla. El cambio decisivo de Tor no fue el número de saltos, sino la manera de construir los circuitos: en lugar de preparar toda la cebolla en el cliente, se extiende el circuito un salto cada vez y se realiza un intercambio de claves independiente con cada nodo.}
+\label{fig:generazioni}
+\end{figure}
+
+\paragraph{Primera generación.} Utilizaba circuitos de longitud fija de cinco nodos, concebidos en parte para conectar las redes protegidas de dos organizaciones. Con tres saltos, un nodo intermedio hostil podría ver inmediatamente ambas redes. Con cuatro, un atacante que comprometiera el nodo adyacente a uno de los extremos sabría qué otro nodo atacar para reconstruir todo el circuito. Con cinco, ninguno de esos atajos era posible sin comprometer antes otro nodo. El cliente estaba integrado en el propio nodo. La red era estática y contaba con veinte o cien nodos operados por organizaciones estables, con configuraciones y claves distribuidas manualmente. Cada aplicación necesitaba su propio proxy, ya fuera para navegar, iniciar sesiones remotas o enviar correo electrónico, porque SOCKS todavía no estaba extendido. Un circuito se construía como una única cebolla cifrada con las claves públicas de todos los nodos.
+
+\paragraph{Segunda generación.} Se separó el cliente del nodo, la longitud del circuito pasó a ser variable y se introdujeron mecanismos de mezcla y de tráfico de relleno entre circuitos, que terminaron abandonándose. También se proyectó distribuir información sobre la red, aunque esa función nunca llegó a implementarse por completo.
+
+\paragraph{Tercera generación: Tor.} El cambio más importante fue la construcción de circuitos \textbf{salto a salto}, mediante un intercambio Diffie--Hellman con cada nodo (\cref{sec:circ-telescopio}), una idea tomada del proyecto Cebolla. Así se obtiene secreto hacia adelante y se puede verificar cada salto durante la extensión del circuito. Tor también incorporó servidores de directorio, compatibilidad con SOCKS, servicios ocultos con puntos de encuentro y, sobre todo, un diseño concebido para desplegarse y funcionar gracias a voluntarios de todo el mundo.
+
+\begin{storia}[El nombre]
+El título del artículo de 2004, \titolo{Tor: The Second-Generation Onion Router}, dio lugar a dos malentendidos que Syverson reconocería posteriormente~\cite{syverson2011peel}. Tor pertenece a la \emph{tercera} generación, no a la segunda, y la letra \enquote{r} de Tor no significa \emph{router}. Cuando Roger Dingledine empezó a trabajar en el proyecto del NRL, existían diversos sistemas de encaminamiento cebolla. Si alguien le preguntaba \enquote{¿cuál de ellos?}, respondía \enquote{\emph{the onion routing}}, es decir, el sistema original. Rachel Greenstadt observó que sus iniciales formaban un acrónimo adecuado. Dingledine señaló que también permitían una interpretación recursiva como \emph{Tor's onion routing} y decidió que el nombre debía escribirse \enquote{Tor}, no \enquote{TOR}: una palabra corriente que, además, en alemán significa \emph{puerta}, como la de una ciudad. En el resto del libro utilizamos \emph{Tor} para la red y el proyecto, y \emph{tor} en minúsculas para el programa.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{La red Tor}\label{sec:nascita-rete}
+
+Roger Dingledine se incorporó al proyecto del NRL a comienzos de la década de 2000 y Nick Mathewson lo hizo poco después. La red Tor comenzó a funcionar en \textbf{octubre de 2002}, con el código publicado desde el principio bajo una licencia de software libre. A finales de 2003 tenía aproximadamente una docena de nodos operados por voluntarios, casi todos en Estados Unidos y uno en Alemania~\cite{torhistory}. En agosto de 2004, Dingledine, Mathewson y Syverson presentaron el proyecto en el USENIX Security Symposium~\cite{dingledine2004tor}.
+
+Los principales hitos posteriores fueron los siguientes~\cite{torhistory}:
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+Año & Acontecimiento \\
+\midrule
+2002 & Comienza a funcionar la red Tor, con código fuente disponible libremente \\
+2004 & La Electronic Frontier Foundation empieza a financiar el trabajo de Dingledine y Mathewson \\
+2006 & Se funda The Tor Project, Inc., organización estadounidense sin ánimo de lucro (501(c)(3)) \\
+2007 & Comienza el desarrollo de puentes resistentes a la censura (\cref{cap:16-censura}) \\
+2008 & Comienza el desarrollo de Tor Browser (\cref{cap:23-browser}) \\
+2010--2011 & Tor se convierte en una herramienta importante durante las revueltas de la Primavera Árabe \\
+2013 & Revelaciones de Edward Snowden sobre la vigilancia masiva, en las que Tor desempeña un papel central \\
+2017 & Servicios onion v3 (\cref{cap:14-onion-services}) \\
+2021 & Se deshabilitan los servicios onion v2 \\
+2022--2023 & Control de congestión (\cref{sec:cc}) y prueba de trabajo para servicios onion (\cref{cap:15-dos}) \\
+2024 & WebTunnel; migración de la distribución de puentes a rdsys \\
+2025--2026 & CGO en tor (\cref{sec:cgo}); Arti como cliente y para servicios onion (\cref{cap:30-arti}) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ---------------------------------------------------------------------------
+\section{Una organización y una comunidad}\label{sec:nascita-comunita}
+
+The Tor Project, Inc.\ desarrolla el software, mantiene las especificaciones, opera autoridades de directorio junto con operadores independientes, mide la red y presta apoyo a la comunidad. Pero no es propietaria de la red: miles de voluntarios ---particulares, universidades y asociaciones--- administran repetidores en decenas de países. Esta decisión de diseño se apoya en la experiencia de Freedom (\cref{sec:radici-bassa}): ninguna entidad individual debería poder controlar la red ni verse obligada a comprometer a sus usuarios.
+
+La financiación de la organización ha sido un tema recurrente del debate público. A lo largo de los años ha recibido fondos de organismos gubernamentales, especialmente estadounidenses, fundaciones privadas y donantes individuales. La organización publica sus estados financieros anualmente. La pregunta \enquote{¿puede confiarse en un programa financiado parcialmente por un gobierno?} es ante todo técnica, no política: el código y las especificaciones son públicos y verificables, las decisiones de diseño se debaten abiertamente en las propuestas (\cref{cap:31-futuro}) y la seguridad del sistema no depende de confiar en el Tor Project. Depende, más bien, de distribuir la red entre numerosos operadores independientes (\cref{cap:04-modello-minaccia}).
+
+\begin{approfondimento}[Las revelaciones de 2013]
+Entre los documentos divulgados por Snowden en 2013 figuraban presentaciones internas de la NSA sobre Tor. Reconocían lo difícil que resultaba desanonimizar sistemáticamente a sus usuarios y describían ataques dirigidos contra personas concretas que explotaban vulnerabilidades del navegador, más que defectos de la red. Esto respalda indirectamente un principio al que volveremos con frecuencia: las debilidades más peligrosas suelen encontrarse no en el propio protocolo, sino en los sistemas que lo rodean (\cref{cap:28-opsec}).
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item El encaminamiento cebolla nació en 1995 en el Naval Research Laboratory (Goldschlag, Reed y Syverson) para separar la identificación del encaminamiento.
+  \item La primera generación utilizaba circuitos fijos de cinco nodos y una red estática. Tor, perteneciente a la tercera generación, construye circuitos salto a salto y añade secreto hacia adelante, directorios y puntos de encuentro.
+  \item El nombre \enquote{Tor} procede de \emph{the onion routing}; solo la primera letra se escribe en mayúscula.
+  \item La red funciona desde 2002; The Tor Project, Inc.\ existe desde 2006; los repetidores están operados por voluntarios independientes.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:03-cinque}
+¿Por qué la primera generación utilizaba circuitos de cinco nodos? Reconstruye el argumento sobre los recorridos de tres y cuatro saltos expuesto en este capítulo y explica por qué Tor utiliza solo tres.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:03-cipolla}
+Compara la construcción de un circuito como una única cebolla (primera generación) con la construcción telescópica de Tor, tanto en términos de secreto hacia adelante como de capacidad para identificar de inmediato un nodo que no responde.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:03-fiducia}
+Redacta un argumento breve, de aproximadamente una página, que responda a la pregunta \enquote{¿podemos confiar en Tor teniendo en cuenta quién lo ha financiado?}. Distingue lo que puede verificarse técnicamente de lo que exige confianza.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item P.~Syverson, \titolo{A Peel of Onion}~\cite{syverson2011peel}.
+  \item D.~Goldschlag, M.~Reed, P.~Syverson, \titolo{Hiding Routing Information}~\cite{goldschlag1996hiding}.
+  \item Página de historia del Tor Project~\cite{torhistory}.
+\end{itemize}

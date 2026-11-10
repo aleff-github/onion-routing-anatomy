@@ -1,0 +1,189 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Gestire un relay o un bridge}\label{cap:22-relay}
+\aggiornatoal{23 settembre 2026}{tor 0.4.9.13 (manuale); rete di laboratorio}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item scegliere tra relay intermedio, exit e bridge in base alle tue risorse e ai rischi che puoi sostenere;
+  \item scrivere la configurazione essenziale di ciascuno, con limiti di banda e chiavi custodite offline;
+  \item leggere e scrivere una politica di uscita, e verificarne l'effetto nella rete di laboratorio (Laboratorio~14);
+  \item dichiarare correttamente una famiglia di relay.
+\end{itemize}
+\end{obiettivi}
+
+La rete Tor esiste perché migliaia di persone e organizzazioni mettono a disposizione banda e computer. Nei capitoli precedenti abbiamo guardato i relay dal punto di vista del client; qui passiamo dall'altra parte. Non è un manuale di amministrazione, che il Tor Project mantiene aggiornato nella propria guida per gli operatori, ma una spiegazione di che cosa significano le scelte principali alla luce del protocollo.
+
+% ---------------------------------------------------------------------------
+\section{Che tipo di nodo}\label{sec:relay-tipi}
+
+\begin{description}
+  \item[Relay intermedio] (\emph{middle}, e col tempo eventualmente guard): inoltra celle tra altri relay tramite connessioni Internet, ma non apre connessioni verso i siti di destinazione dei client. È il ruolo meno impegnativo: il suo indirizzo compare nel consenso, ma nessun sito vede traffico provenire da esso.
+  \item[Exit] apre, per conto dei client, le connessioni verso le destinazioni. È il ruolo più prezioso per la rete, perché gli exit sono pochi rispetto alla domanda (\cref{sec:percorso-pesi}), ed è quello più esposto: per chi riceve un abuso, l'autore apparente è l'indirizzo dell'exit.
+  \item[Bridge] è un relay non elencato nel consenso, usato come primo salto da chi non può raggiungere la rete pubblica (\cref{sec:cens-bridge}). Con un pluggable transport come obfs4 o WebTunnel, anche un collegamento domestico modesto è utile.
+\end{description}
+
+\begin{attenzione}[Prima di cominciare]
+Gestire un exit ha conseguenze legali e pratiche (segnalazioni di abuso, richieste delle autorità) che discutiamo nel \cref{cap:25-legale}. Conviene iniziare da un relay intermedio o da un bridge, informare il fornitore di connettività, e non usare mai per un relay la stessa connessione da cui si usa Tor come client per attività sensibili.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{La configurazione essenziale}\label{sec:relay-config}
+
+Un relay intermedio richiede poche righe di \file{torrc}:
+\begin{lstlisting}[numbers=none]
+Nickname        MioRelay
+ContactInfo     operatore@example.org
+ORPort          443
+ExitRelay       0
+SocksPort       0
+RelayBandwidthRate  4 MBytes
+RelayBandwidthBurst 8 MBytes
+\end{lstlisting}
+\opt{ContactInfo} serve a essere contattati se il relay ha problemi; il manuale ricorda che i descrittori sono archiviati e pubblicati, quindi l'indirizzo sarà pubblico per sempre. \opt{ExitRelay 0} rende esplicito ciò che nelle versioni recenti è già il comportamento predefinito: con il valore \texttt{auto}, tor fa da exit solo se l'operatore ha scritto una politica di uscita. \opt{RelayBandwidthRate} e \opt{RelayBandwidthBurst} limitano la banda media e di picco; \opt{AccountingMax} fissa invece un tetto al traffico di un periodo (per esempio un mese), raggiunto il quale il relay smette di accettare nuovo traffico fino al periodo successivo.
+
+\textbf{Nota operativa.} Con il valore automatico di \texttt{ExitRelay}, anche \texttt{ReducedExitPolicy} o \texttt{IPv6Exit} possono abilitare il ruolo di uscita: non conta soltanto una riga \texttt{ExitPolicy}. La direttiva esplicita \texttt{ExitRelay 0} dell'esempio impedisce invece qualunque uscita. Verifica sempre il risultato prima di pubblicare un relay reale.
+
+\subsection{La vita di un relay nuovo}
+
+Un relay appena avviato pubblica il proprio descrittore alle autorità, che lo inseriscono nel consenso e iniziano a misurarlo (\cref{sec:dir-voto}). Nei primi giorni riceve pochissimo traffico: i client scelgono i relay in proporzione ai pesi di banda, e finché le misure non sono stabili il peso resta basso. I flag arrivano col tempo (\cref{sec:dir-flag}): \texttt{Stable} richiede che il relay resti acceso a lungo senza interruzioni, e \texttt{Guard} richiede anche un'anzianità minima e un'alta disponibilità. Diventato guard, il relay vedrà prima calare il traffico, perché i client che già hanno i propri guard non lo scelgono come intermedio con la stessa frequenza, e poi crescere lentamente, man mano che nuovi client lo adottano (\cref{sec:guard}). I due casi che fanno perdere terreno non sono equivalenti: chi riavvia spesso il relay, senza cambiarne l'identità, conserva le misure di banda ma perde la disponibilità continua richiesta per i flag \texttt{Stable} e \texttt{Guard}, e deve riconquistarli; chi ne cambia le \emph{chiavi d'identità} crea invece un relay del tutto nuovo per le autorità, che riparte da zero anche nelle misure di banda.
+
+\subsection{Le chiavi}
+
+L'identità di un relay è la sua chiave ed25519 principale (\cref{sec:canale-chiavi}). Per default tor la tiene sul disco del server; con \opt{OfflineMasterKey 1} la chiave principale resta su un altro computer, e sul server vanno solo chiavi di firma temporanee, certificate con \cmd{tor --keygen}. Se il server viene compromesso, l'attaccante ottiene chiavi che scadono, non l'identità del relay. È un accorgimento che richiede disciplina: bisogna rinnovare le chiavi temporanee prima che scadano, altrimenti il relay smette di funzionare.
+
+% ---------------------------------------------------------------------------
+\section{La politica di uscita}\label{sec:relay-exitpolicy}
+
+La politica di uscita è una lista di regole \texttt{accept} e \texttt{reject}, ciascuna su un indirizzo (o una rete) e una porta (o un intervallo). Tor le esamina \textbf{nell'ordine} e applica la prima che corrisponde alla destinazione. Le regole scritte dall'operatore precedono quelle predefinite, che il manuale elenca: vengono rifiutate le porte della posta (25), di NNTP (119), di NetBIOS e SMB (135--139, 445), di alcuni programmi di condivisione file, e poi tutto il resto è accettato. Indipendentemente da questo, tor rifiuta per default le destinazioni private (\texttt{127.0.0.0/8}, \texttt{10.0.0.0/8}, \texttt{192.168.0.0/16} e simili) e il proprio indirizzo pubblico, per non diventare un accesso alla rete interna dell'operatore (opzione \opt{ExitPolicyRejectPrivate}, che la rete di laboratorio disattiva per poter usare \texttt{127.0.0.1}).
+
+\textbf{Ordine delle protezioni.} Quando \texttt{ExitPolicyRejectPrivate} è attivo (valore predefinito), i rifiuti verso reti private e indirizzi locali vengono anteposti alle regole definite dall'operatore, non semplicemente aggiunti in fondo. La rete Chutney dell'esperimento disabilita esplicitamente questo controllo: non replicare questa impostazione su un exit pubblico.
+
+Un exit che accetta solo il web si scrive così:
+\begin{lstlisting}[numbers=none]
+ExitRelay  1
+ExitPolicy accept *:80
+ExitPolicy accept *:443
+ExitPolicy reject *:*
+\end{lstlisting}
+Il Tor Project suggerisce, come compromesso diffuso, la \opt{ReducedExitPolicy}, che accetta un elenco di porte di servizi comuni ed esclude quelle che generano più segnalazioni.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig22-policy}
+\caption{Esempio del laboratorio Chutney: \opt{ExitPolicyRejectPrivate 0} è impostata soltanto per consentire indirizzi privati nella rete di prova; normalmente Tor antepone il loro rifiuto alle regole dell'operatore. La richiesta \texttt{BEGIN} verso \texttt{127.0.0.1:8080} corrisponde a \texttt{reject} e produce \texttt{END EXITPOLICY}; la porta 8081 supera tale regola e viene accettata. \texttt{accept} consente il tentativo TCP, non garantisce \texttt{CONNECTED} senza un server in ascolto. Invertire le regole renderebbe inefficace il rifiuto.}
+\label{fig:policy}
+\end{figure}
+
+\paragraph{Che cosa arriva ai client.} Il descrittore del relay contiene la politica completa; il consenso e i microdescrittori ne portano un riassunto, solo per porte (\texttt{p accept 80,443}), da cui il client decide se un exit può servire una richiesta (\cref{sec:percorso-vincoli}). Il riassunto non contiene indirizzi: se l'exit rifiuta una destinazione per indirizzo, il client lo scopre solo provando, come mostra il laboratorio.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: una politica di uscita alla prova}\label{sec:lab-relay}
+
+\begin{laboratorio}[14]{Una regola di uscita e le sue conseguenze}
+\textbf{Obiettivo.} Aggiungere una regola a un exit della rete di laboratorio e osservare, con \file{labs/it/codice/torlab}, la risposta a destinazioni accettate e rifiutate.\\
+\textbf{Prerequisiti.} Laboratori~3 e~4; la rete di laboratorio avviata.\\
+\textbf{Tempo stimato.} 1 ora.
+\end{laboratorio}
+
+\paragraph{Passo 1: la regola.} Nel \file{torrc} di \texttt{test006e} aggiungiamo, prima delle regole esistenti che accettano la rete \texttt{127.0.0.0/8}, una riga che rifiuta una sola porta:
+\begin{lstlisting}[numbers=none]
+ExitPolicy reject 127.0.0.1:8080
+ExitPolicy accept 127.0.0.0/8:*
+\end{lstlisting}
+Il listato mostra l'ordine delle due regole interessate: quando modifichi il \file{torrc} già esistente, aggiungi soltanto la nuova riga \texttt{reject} prima della prima \texttt{ExitPolicy}, senza duplicare la regola \texttt{accept}. L'ordine conta: messa dopo la regola \texttt{accept}, la nostra riga non avrebbe alcun effetto, perché la prima regola che corrisponde vince. È esattamente l'errore registrato nel precedente esperimento di riferimento. Dopo aver riavviato il relay, avviamo due piccoli server HTTP sulle porte 8080 e 8081 del container.
+
+\paragraph{Passo 2: tre richieste.} Con \texttt{costruisci} e il modulo \file{stream.py} apriamo un circuito che termina su \texttt{006e} e inviamo tre \texttt{BEGIN}, verso le porte 8080, 8081 e 9999 (su quest'ultima non ascolta nessuno). Le risposte, in una nostra sessione (codici, indirizzo e TTL possono variare secondo la versione e l'ambiente):
+\begin{lstlisting}[numbers=none]
+127.0.0.1:8080 -> END  motivo=EXITPOLICY indirizzo=127.0.0.1 TTL=1800
+127.0.0.1:8081 -> CONNECTED
+127.0.0.1:9999 -> END  motivo=MISC
+\end{lstlisting}
+
+\paragraph{Passo 3: leggere le risposte.} Il rifiuto per politica è comunicato con il motivo \texttt{EXITPOLICY}, e la cella \texttt{END} porta con sé l'indirizzo risolto e un TTL: così il client può ricordare che quell'exit non serve quella destinazione e sceglierne un altro, senza aspettare un nuovo descrittore. La porta senza server, invece, produce un generico \texttt{MISC}, e non il \texttt{CONNECTREFUSED} che la specifica elenca per le connessioni rifiutate \spec{tor-spec}{Closing streams}.
+
+\begin{approfondimento}[Perché \texttt{MISC} e non \texttt{CONNECTREFUSED}]
+Il motivo si trova nei log dell'exit, al livello \texttt{info}, e vale la pena seguirlo perché mostra come si indaga una differenza tra specifica e implementazione:
+\begin{lstlisting}[numbers=none]
+[info] connection_handle_write_impl(): in-progress connect failed.
+       Removing. (Connection refused)
+[info] errno_to_stream_end_reason(): Didn't recognize errno 115 (Operation
+       now in progress); telling the client that we are ending a stream
+       for 'misc' reason.
+\end{lstlisting}
+L'exit \emph{sa} che la connessione è stata rifiutata, ma sceglie il motivo a partire da un altro valore. La connessione verso la destinazione non è bloccante: \texttt{connect()} ritorna subito con \texttt{EINPROGRESS} (errno 115) e l'esito arriva più tardi, come evento di scrittura. A quel punto \file{connection.c} legge l'errore vero con \texttt{getsockopt(SO\_ERROR)}, lo registra nel log (\enquote{Connection refused}) e chiama \file{connection\_edge\_end\_errno()}. Questa funzione, però, ricalcola il motivo con \texttt{errno\_to\_stream\_end\_reason(tor\_socket\_errno(\ldots))}: su Unix \texttt{tor\_socket\_errno} è definito come la macro \texttt{(errno)} (\file{src/lib/net/socket.h}), cioè la variabile globale, che conserva ancora \texttt{EINPROGRESS}. Il valore 115 non compare nell'elenco di \file{src/core/or/reasons.c}, e il ramo predefinito restituisce \texttt{MISC}. L'informazione giusta esiste, ma non è quella che viene usata. Nello stesso blocco di codice le due diramazioni non concordano: quella per le connessioni tra relay passa il valore letto, quella per gli stream lo ignora. Secondo il resoconto e la patch già presenti in \file{docs/it/segnalazioni/}, passando il valore corretto anche lì, nella precedente prova privata su tor 0.4.9.13 la terza richiesta ha prodotto \texttt{CONNECTREFUSED}. È un difetto minore, senza conseguenze per l'anonimato: il client sa comunque che lo stream è fallito, ma perde un'informazione su cui agirebbe, perché \texttt{CONNECTREFUSED} gli direbbe che l'exit ha raggiunto la destinazione e che riprovare altrove è inutile. Analisi e patch sono in \file{docs/it/segnalazioni/}, pronte per il Tor Project. È anche un buon esempio di perché conviene verificare sul vivo ciò che si legge nelle specifiche.
+\end{approfondimento}
+
+Lo script \file{labs/it/laboratorio/politica\_uscita.py}, eseguibile dall'host Linux dalla radice della repository con \file{PYTHONPATH=labs/it/codice python3 labs/it/laboratorio/politica\_uscita.py}, esegue i tre tentativi e tenta di ripristinare il \file{torrc} originale di \texttt{006e} tramite un blocco \texttt{finally}. Usalo soltanto nella rete Chutney dedicata: modifica temporaneamente la configurazione dell'exit e apre server HTTP locali. Fa parte di \texttt{make verifica-lab}; il target \texttt{make verifica} della cartella del laboratorio, invece, controlla soltanto la rete Chutney. Un dettaglio necessario: il circuito ha tre salti, perché un exit rifiuta di far uscire il traffico da un circuito di un solo salto e risponderebbe \texttt{END} con motivo \texttt{TORPROTOCOL} (\cref{sec:dos-limiti}).
+
+% ---------------------------------------------------------------------------
+\section{Le famiglie}\label{sec:relay-famiglie}
+
+Chi gestisce più relay deve dichiararli come \textbf{famiglia}: il client non usa mai due relay della stessa famiglia nello stesso circuito (\cref{sec:percorso-vincoli}), perché chi li controlla entrambi potrebbe correlare il traffico. Il meccanismo storico è \opt{MyFamily}: ogni relay elenca le impronte di tutti gli altri, e la famiglia vale solo se le dichiarazioni sono reciproche. Con dieci relay sono dieci elenchi da tenere allineati, e ogni aggiunta richiede di modificarli tutti.
+
+Il meccanismo introdotto con tor 0.4.9 usa invece una \textbf{chiave di famiglia}: l'operatore la genera una volta con \cmd{tor --keygen-family MyFamilyKey}, copia il file risultante \texttt{MyFamilyKey.secret\_family\_key} nella directory delle chiavi (\texttt{KeyDirectory}) di ogni relay, mantenendo il suffisso \texttt{.secret\_family\_key}, e inserisce in ciascun \file{torrc} la riga \texttt{FamilyId} generata dallo strumento. Proteggi e conserva questa chiave segreta: se viene compromessa, va ruotata sull'intera famiglia. Ogni relay firma con quella chiave un certificato che lo lega alla famiglia, e chi verifica non ha più bisogno di confrontare elenchi. Nella fase di transizione alcune versioni hanno supportato entrambi i meccanismi. Per nuove installazioni occorre seguire la guida aggiornata del Tor Project: FamilyId e la chiave condivisa sono il metodo corrente, mentre MyFamily è stato rimosso nelle versioni più recenti. Il meccanismo precedente resta descritto qui per interpretare le configurazioni storiche.
+
+\begin{approfondimento}[Perché dichiararsi conviene]
+Nessuno obbliga un operatore a dichiarare la famiglia, e un avversario non lo farebbe. Ma le autorità e i volontari che sorvegliano la rete cercano relay con caratteristiche comuni (stessa rete, stessa versione, avvio simultaneo, stesso contatto): una famiglia non dichiarata viene notata e può portare all'esclusione dei relay dal consenso. Dichiararla è parte del patto di fiducia su cui si regge la rete.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\textbf{I bridge non appartengono agli elenchi pubblici \texttt{MyFamily}:} associarli ai relay pubblici potrebbe comprometterne la riservatezza. La guida di Tor raccomanda di non usare questa opzione sui bridge. Inoltre \texttt{tor --keygen-family MyFamilyKey} può sovrascrivere file esistenti con quel nome: usa un nome nuovo e custodisci il file segreto con permessi stretti.
+
+\section{Un bridge}\label{sec:relay-bridge}
+
+Un bridge obfs4 si configura come nel Laboratorio~10 (\cref{sec:lab-censura}):
+\begin{lstlisting}[numbers=none]
+BridgeRelay 1
+ORPort 9001
+ServerTransportPlugin obfs4 exec /usr/bin/obfs4proxy
+ServerTransportListenAddr obfs4 0.0.0.0:443
+ExtORPort auto
+BridgeDistribution any
+\end{lstlisting}
+\opt{BridgeDistribution} indica al servizio di distribuzione (oggi rdsys) come vorremmo che il bridge fosse dato ai client: \texttt{any} lascia decidere al servizio, \texttt{none} lo esclude del tutto, utile per un bridge privato da dare a mano a persone di fiducia; i canali disponibili (sito web, posta, Telegram e altri) sono elencati nella pagina informativa dei bridge. Un bridge non compare nel consenso, ma il suo descrittore va comunque all'autorità dei bridge, che ne verifica la raggiungibilità.
+
+Conviene che la porta del transport sia diversa dall'ORPort e, se possibile, una porta comune come 443: è quella che i client usano e che un censore vede (\cref{sec:cens-strategie}).
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item Un relay intermedio è il modo meno impegnativo per contribuire; un exit è il più utile e il più esposto; un bridge aiuta chi è censurato.
+  \item Poche opzioni bastano: identità, contatto, porte, limiti di banda; la chiave principale può restare offline.
+  \item La politica di uscita è una lista ordinata in cui vince la prima regola che corrisponde; le destinazioni private sono rifiutate per default.
+  \item Un rifiuto per politica arriva al client come \texttt{END} con motivo \texttt{EXITPOLICY}, indirizzo e TTL.
+  \item Più relay dello stesso operatore vanno dichiarati come famiglia, con \opt{MyFamily} o con la nuova chiave di famiglia.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:22-ordine}
+Data la politica \texttt{accept *:80}, \texttt{reject 192.0.2.0/24:*}, \texttt{reject *:*}, un client può uscire verso \texttt{192.0.2.7:80}? Riscrivi la politica perché non possa.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:22-riassunto}
+Perché il riassunto per porte nel consenso non basta a sapere se un exit accetterà una connessione? Che cosa fa il client quando riceve \texttt{END} con motivo \texttt{EXITPOLICY}?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:22-famiglia}
+Un operatore gestisce cinque relay con \opt{MyFamily} e ne aggiunge un sesto, ma aggiorna la configurazione solo sul nuovo. Che cosa vedono i client? E con la chiave di famiglia?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:22-refused}
+Verifica la spiegazione dell'approfondimento: attiva sull'exit i log di livello \texttt{info} e ripeti le tre richieste. Che cosa cambierebbe se \file{connection\_edge\_end\_errno()} ricevesse l'errore letto con \texttt{getsockopt}? Quali altri motivi di chiusura sarebbero riportati correttamente?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:22-accounting}
+Un relay ha \texttt{AccountingMax 1 TBytes} su base mensile e una banda di 10\,MB/s. Dopo quanti giorni, a pieno regime, esaurisce il tetto? Quali effetti ha sulla rete un relay che resta spento per metà del mese, rispetto a uno che funziona tutto il mese con banda dimezzata?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item La guida per gli operatori di relay del Tor Project, \url{https://community.torproject.org/relay/}.
+  \item \begin{sloppypar}Il manuale di tor, alle voci \opt{ExitPolicy}, \opt{ReducedExitPolicy},
+        \opt{FamilyId}, \opt{OfflineMasterKey} e \opt{BridgeDistribution}.\end{sloppypar}
+  \item La specifica dei motivi di chiusura degli stream, \spec{tor-spec}{Closing streams}.
+\end{itemize}

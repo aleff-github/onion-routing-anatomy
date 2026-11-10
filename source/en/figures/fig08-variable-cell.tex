@@ -1,0 +1,15 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% English EPUB alternative description.
+\altfig{Variable-length Tor cell after negotiation of link protocol v4 or later: CircID is 4 bytes at offset 0; Command is 1 byte at offset 4; Length is a 2-byte unsigned big-endian integer at offset 5; Body has exactly Length bytes starting at offset 7. Total size is 7 + Length bytes, where Length ranges from 0 to 65535; there is no extra body padding. The pre-negotiation VERSIONS cell is exceptional and always uses the v0 header with a 2-byte CircID. Drawn widths are not to scale.}
+% Variable-length cell on negotiated link v4+ (field widths not to scale); VERSIONS uses v0 framing.
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\small,inner sep=2pt}]
+  \node[campo,fill=torviola!15,minimum width=2.6cm] (c) {CircID (4)};
+  \node[campo,fill=torviola!35,minimum width=1.6cm,right=0pt of c] (k) {Cmd (1)};
+  \node[campo,fill=torviola!55,text=white,minimum width=2cm,right=0pt of k] (l) {Length (2)};
+  \node[campo,fill=torverde!15,minimum width=5cm,right=0pt of l] (b) {Body};
+  \foreach \n/\o in {c/0,k/4,l/5,b/7} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (b.north east) {$7+\mathit{Length}$};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]b.south west) -- ([yshift=-2pt]b.south east)
+    node[midway,below=6pt,font=\sffamily\small] {\textit{Length} bytes};
+\end{tikzpicture}

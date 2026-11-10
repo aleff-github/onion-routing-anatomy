@@ -1,0 +1,15 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Formato di una cella Tor a lunghezza fissa sul protocollo di collegamento v4 o superiore: CircID di 4 byte all'offset 0, Command di 1 byte all'offset 4 e Body di 509 byte dall'offset 5; la fine esclusiva è l'offset 514. Il disegno separa schematicamente dati e riempimento a zeri nel corpo; gli spazi inutilizzati di molti comandi a lunghezza fissa vanno riempiti con byte zero. Le celle RELAY e RELAY\_EARLY sono un'eccezione importante: a livello di canale il loro corpo cifrato occupa sempre tutti i 509 byte. Le larghezze grafiche non sono in scala.}
+% Cella a lunghezza fissa, link protocol >= 4 (larghezze non in scala)
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\small,inner sep=2pt}]
+  \node[campo,fill=torviola!15,minimum width=2.6cm] (c) {CircID (4)};
+  \node[campo,fill=torviola!35,minimum width=1.6cm,right=0pt of c] (k) {Cmd (1)};
+  \node[campo,fill=torverde!15,minimum width=5.2cm,right=0pt of k] (b) {Body: dati};
+  \node[campo,fill=torgrigio!10,minimum width=2.2cm,right=0pt of b] (p) {zeri};
+  \foreach \n/\o in {c/0,k/4,b/5} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (p.north east) {514};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]b.south west) -- ([yshift=-2pt]p.south east)
+    node[midway,below=6pt,font=\sffamily\small] {\texttt{CELL\_BODY\_LEN} = 509 byte};
+\end{tikzpicture}

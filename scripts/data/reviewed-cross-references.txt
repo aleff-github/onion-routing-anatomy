@@ -1,0 +1,23 @@
+# Rimandi letti una per una e accettati: promesse in prosa senza puntatore, e
+# rimandi con etichetta il cui contesto non ha parole in comune col bersaglio.
+# La chiave è l'impronta della frase: se la frase cambia, il controllo la ripropone.
+# Rigenerare con: python3 scripts/check_cross_references.py --aggiorna
+1e4cb691f7d8  PROMESSA 05-crittografia.tex:14: Non è un corso di crittografia: presenta, con il minimo indispensabile di teoria, gli strumenti che incontreremo nei capitoli della Parte~II, e rimand
+ac803d1aa3f6  PROMESSA 05-crittografia.tex:30: \caption{I cinque compiti della crittografia in Tor, le primitive che li svolgono e i capitoli in cui le incontreremo all'opera.} \label{fig:compiti} 
+92157c972f4a  PROMESSA 06-architettura.tex:14: Questo capitolo è una mappa: ogni elemento verrà ripreso e approfondito più avanti, e i rimandi indicano dove. % -------------------------------------
+811a890c06d2  PROMESSA 08-celle.tex:16: Nel capitolo precedente abbiamo visto come due nodi Tor aprono un \emph{canale}: una connessione TLS su cui si accordano sulla versione del protocollo
+92b402bd94de  PROMESSA 09-circuiti.tex:98: Ogni handshake che vedremo è un compromesso diverso tra queste esigenze. % ---------------------------------------------------------------------------
+beb15d0ac4cd  PROMESSA 11-stream.tex:16: Vedremo poi un problema che ogni rete deve risolvere, e che in Tor ha una forma particolare: evitare che chi invia dati più velocemente di quanto la r
+898599e75b0e  PROMESSA 11-stream.tex:186: I 68 \texttt{SENDME} sono esattamente $\lfloor (2 + 2120) / 31 \rfloor$: un conteggio per circuito, come abbiamo imparato.
+5899ce981acd  PROMESSA 11-stream.tex:51: Il client \emph{può} ignorare l'indirizzo, e se lo memorizza non deve riusarlo su altri circuiti: un exit disonesto potrebbe mentire, o restituire un 
+721060a23aa6  PROMESSA 12-directory.tex:58: È un formato semplice da leggere per le persone e da analizzare per i programmi, come vedremo nel laboratorio. \begin{description} \item[Descrittore d
+97f489e2a504  PROMESSA 13-percorso.tex:65: Come vedremo nel laboratorio, il risultato è che nel 60\,\% dei circuiti il middle è a sua volta un relay con il flag \texttt{Guard}. Le formule con c
+850c486630fd  PROMESSA 14-onion-services.tex:16: Fin qui abbiamo usato Tor per nascondere \emph{chi} si collega a un server.
+0f0e4eb6aa56  PROMESSA 15-dos.tex:49: È l'unico punto della rete in cui questo è possibile, perché più avanti nel circuito l'origine del traffico è, per costruzione, sconosciuta.
+71cb38688edb  PROMESSA 16-censura.tex:15: Tutto ciò che abbiamo visto finora presuppone che il client possa raggiungere la rete.
+ecd590f0802e  PROMESSA 19-rete-privata.tex:25: In una rete privata possiamo invece decidere quanti nodi ci sono, leggere i log con il massimo livello di dettaglio, fermare e riavviare tutto in poch
+e767090b0f0b  PROMESSA 20-traffico.tex:14: Nei capitoli precedenti abbiamo visto il protocollo \enquote{dall'interno}, scrivendo il codice che lo parla.
+f8b6b1c86274  PROMESSA 26-attacchi.tex:14: Questo capitolo segue gli attacchi dal punto di vista di chi difende: che cosa richiedono, che cosa ottengono, e quale parte del protocollo che abbiam
+5c44c30f6d39  PROMESSA 30-arti.tex:133: Il circuito attraversa i relay in C della rete privata: un client in Rust e relay in C parlano lo stesso protocollo, byte per byte, che abbiamo studia
+8f8de6a9e75c  PROMESSA 31-futuro.tex:14: Il protocollo che abbiamo studiato nel 2026 è diverso da quello del 2016 (niente ntor-v3, niente controllo della congestione, niente CGO), e sarà dive
+26f03d1609fa  PROMESSA D-soluzioni.tex:382: Solo il primo relay vede l'indirizzo IP reale del client: più avanti, l'\enquote{indirizzo} del canale è quello del relay precedente.

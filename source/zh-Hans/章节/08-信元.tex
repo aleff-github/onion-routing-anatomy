@@ -1,0 +1,572 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{信元（Cell）}\label{cap:08-celle}
+\aggiornatoal{2026 年 9 月 23 日}{torspec 提交 \texttt{8e1f245}；tor 0.4.9.13；Arti 2.6.0；链路协议 3--5}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 逐字节描述定长 cell 和变长 cell 的格式；
+  \item 解释 Tor 为什么采用固定大小的传输单元，这一设计能够保护什么、又不能保护什么；
+  \item 理解 CircID，以及每条通道上选择 CircID 的规则；
+  \item 识别所有信元命令和主要 RELAY 命令；
+  \item 读取 RELAY 消息头部，并解释 \texttt{Recognized} 与 \texttt{Digest} 的用途；
+  \item 编写 Python cell 编码器/解码器（实验~2）。
+\end{itemize}
+\end{obiettivi}
+
+上一章介绍了两个 Tor 节点如何打开一条\emph{通道}：它本质上是一条 TLS 连接，双方在其中协商协议版本并验证身份。本章继续回答一个更底层的问题：\emph{这条通道内部究竟传输什么？}答案很简单：\textbf{cell}。从电路建立到下载网页，Tor 承载的一切最终都会被划分为 cell。理解 cell，就相当于掌握了书写整个 Tor 协议的“字母表”。
+
+% ---------------------------------------------------------------------------
+\section{为什么使用信元？}\label{sec:celle-perche}
+
+低延迟匿名系统无法隐藏两个节点\emph{正在通信}这一事实，但可以尽量隐藏它们\emph{交换了什么}，以及中间节点能从通信形态中学到多少信息。假如每个节点都原样转发收到的数据，并保留各不相同的数据包长度，那么观察者可能只需在后续链路上寻找同样长度的消息，就能一路追踪一条 1,337 字节的消息。
+
+因此，最初的洋葱路由设计以及后来的 Tor~\cite{dingledine2004tor} 都采用了\textbf{固定大小}的传输单元：cell。所有 cell 大小相同时：
+\begin{itemize}
+  \item 单个消息的长度不会直接暴露其内容，也不会简单成为某个流的标识；
+  \item 中继可以更简单、高效地管理队列和缓冲区；
+  \item 头部可以保持很小，中继只需读取极少字节就能决定如何处理 cell。
+\end{itemize}
+
+\begin{attenzione}[信元\emph{不能}隐藏什么]
+Cell 统一的是单个传输单元的\emph{大小}，并不会统一 cell 的\emph{数量}或\emph{时间模式}。同时观察电路两端的对手，仍然可能通过流量大小和时序进行关联。这是 Tor 的根本限制，将在 \cref{cap:26-attacchi} 中讨论。通道级和电路级 padding 只能提供部分缓解，分别见 \cref{cap:07-canali,cap:26-attacchi} 以及第五部分。
+\end{attenzione}
+
+\begin{storia}[512 字节]
+2004 年介绍 Tor 的论文描述的是 512 字节信元：2 字节 circuit identifier、1 字节 command 和 509 字节数据~\cite{dingledine2004tor}。其中 509 字节 body 一直保留至今。不过从 link protocol~4 开始，circuit identifier 扩展为 4 字节，因此完整 cell 大小增加到 514 字节。
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{从 TLS 字节流到信元}\label{sec:celle-tls}
+
+TLS 握手完成以后，双方会在一条连续字节流中按顺序交换 cell~\spec{tor-spec}{Cells (messages on channels)}。TLS record 的边界和 cell 边界彼此独立：一个 cell 可以被拆到多个 TLS record 中，一个 TLS record 也可以同时包含多个 cell，甚至若干 cell 的片段。规范同时要求，\enquote{TLS record 的分段方式不得泄露 cell 类型或内容的信息}（本书译文）。
+
+这对实现者有一个非常现实的影响：不能假设 socket 每次读取正好返回\enquote{一个完整 cell}。接收方必须把不断到达的字节积累在缓冲区中，只有当完整 cell 全部到齐后才取出它，并把多出来的字节留给下一次解析。实验~2 的解码器正是采用这种方式。
+
+% ---------------------------------------------------------------------------
+\section{信元格式}\label{sec:celle-formato}
+
+Cell 有两种格式：\textbf{定长}和\textbf{变长}。两者都从相同的两个字段开始：\texttt{CircID} 与 \texttt{Command}。
+
+\subsection{常量}
+
+规范定义了以下长度~\spec{tor-spec}{Message lengths}，其中 $v$ 表示在当前通道上协商出的 link protocol 版本：
+
+\begin{center}
+\begin{tabular}{lcl}
+\toprule
+名称 & 字节 & 含义 \\
+\midrule
+\file{CELL\_BODY\_LEN} & 509 & 定长 cell body \\
+\file{CIRCID\_LEN}$(v)$，$v<4$ & 2 & CircID 长度 \\
+\file{CIRCID\_LEN}$(v)$，$v\ge4$ & 4 & \\
+\file{CELL\_LEN}$(v)$，$v<4$ & 512 & 定长 cell 总长度 \\
+\file{CELL\_LEN}$(v)$，$v\ge4$ & 514 & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent 对任意 $v$ 都有
+$\file{CELL\_LEN}(v) = 1 + \file{CIRCID\_LEN}(v) + \file{CELL\_BODY\_LEN}$。
+
+\begin{approfondimento}[一个旧名称]
+旧代码和旧文档把 \file{CELL\_BODY\_LEN} 称为 \file{PAYLOAD\_LEN}。两个名字表示同一个值：509。
+\end{approfondimento}
+
+\subsection{定长信元}
+
+\Cref{fig:cella-fissa} 展示当前 link protocol（$v\ge4$）中的定长 cell。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图08-定长信元}
+\caption{定长 cell（link protocol $\ge 4$）：4 字节 CircID、1 字节 command 和 509 字节 body，总计 514 字节。如果有效内容少于 509 字节，body 的剩余部分用零填充。图中的数字表示从 cell 开头算起的字节偏移。}
+\label{fig:cella-fissa}
+\end{figure}
+
+如果要传输的信息少于 509 字节，发送方\textbf{必须}把 body 剩余字节填零，接收方则\textbf{必须}忽略这些填充~\spec{tor-spec}{Padding fixed-length cell bodies}。
+
+\subsection{变长信元}
+
+有些 cell，特别是通道握手中使用的 cell，可能需要超过 509 字节——例如携带证书——也可能只需要很少几个字节。变长格式通过增加一个 2 字节\emph{大端序}整数 \texttt{Length} 来处理这类情况，并且不进行固定长度填充（\cref{fig:cella-variabile}）。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图08-变长信元}
+\caption{变长 cell（link protocol $\ge 4$）：CircID 和 command 之后增加一个 2 字节大端序 Length 字段，表示随后 body 的实际字节数。因此 body 长度可以在 0 到 \num{65535} 字节之间。}
+\label{fig:cella-variabile}
+\end{figure}
+
+\subsection{如何区分两种格式}
+
+接收方必须在完整 cell 到齐\emph{之前}就知道总共还需要读取多少字节。判断规则完全由 command 决定~\spec{tor-spec}{Cells (messages on channels)}：
+\begin{itemize}
+  \item command 7（\cella{VERSIONS}）表示变长 cell；
+  \item 除它之外，小于 128 的 command 都表示定长 cell；
+  \item 大于等于 128 的 command 都表示变长 cell。
+\end{itemize}
+
+换句话说，command 字节的最高位基本上承担“格式标志”的作用，唯一的历史例外就是 \cella{VERSIONS}。
+
+\begin{storia}[VERSIONS 为什么是例外]
+link protocol~1 中所有 cell 都是定长。link protocol~2 引入版本协商，值为 7 的 \cella{VERSIONS} 被加在原有 command 0--6 之后，因此成为唯一一个低编号的变长 cell。link protocol~3 随后把 $\ge 128$ 的范围保留给变长 command。版本 1 和 2 如今已经过时，实现不应再支持它们。
+\end{storia}
+
+\subsection{VERSIONS 的特殊情况}
+
+这里存在一个“先有鸡还是先有蛋”的问题：CircID 长度取决于协商出的版本，而版本本身又要通过 \cella{VERSIONS} 协商。解决办法是：\textbf{始终}把 \cella{VERSIONS} 当成 $v=0$ 来编码，也就是使用 2 字节 CircID。它的 body 是一串 2 字节大端序整数，每个整数表示一个支持版本。因此，支持版本 3、4、5 的客户端发送：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+字节 & 字段 & 含义 \\
+\midrule
+\texttt{00 00} & CircID & 0，2 字节 CircID \\
+\texttt{07} & Command & \cella{VERSIONS} \\
+\texttt{00 06} & Length & 6 字节 body \\
+\texttt{00 03 00 04 00 05} & Body & 版本 3、4、5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+双方选择两个 \cella{VERSIONS} 中\textbf{共同支持的最高版本}。如果不存在共同版本，或者 body 长度为奇数，就必须关闭连接~\spec{tor-spec}{Negotiating versions with VERSIONS cells}。
+
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+版本 & 说明 \\
+\midrule
+1 & （已过时）最初基于证书的握手 \\
+2 & （已过时）TLS renegotiation 握手；引入变长 cell \\
+3 & （已过时）现代形式的\enquote{协议内部}握手（\cref{cap:07-canali}） \\
+4 & 4 字节 CircID \\
+5 & 支持链路 padding 及其协商 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+当前实现中，tor 提供版本 3、4、5（\file{src/core/or/connection\_or.c} 中的 \file{or\_protocol\_versions} 数组），Arti 只提供版本 4、5。因此两个最新实现之间总会协商到版本~5。
+
+% ---------------------------------------------------------------------------
+\section{CircID}\label{sec:circid}
+
+\texttt{CircID} 字段标识 cell 属于哪条电路。对于不属于任何电路的 cell，例如 \cella{VERSIONS}、\cella{NETINFO} 和 \cella{PADDING}，它的值为 0。
+
+最关键的一点是：\textbf{CircID 只在单条通道内部有效}。一条三跳电路会穿过三条通道（客户端--守卫、守卫--中间中继、中间中继--出口），并且在每条通道上使用\emph{不同}的 CircID。每个中继维护一张转发表，把进入方向的 \texttt{(channel, CircID)} 对映射到出去方向的 \texttt{(channel, CircID)} 对，如 \cref{fig:circid-locale} 所示。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图08-circid}
+\caption{同一条电路在每条通道上拥有不同的 CircID。守卫和中间中继通过转发表转换标识符，因此一条链路上的观察者不能仅通过比较 CircID 在另一条链路上找到同一电路。图中数值仅为示例，但符合后文介绍的最高位规则：通道~2 上的最高位为零，表示中间中继打开了该连接，而守卫在复用它。}
+\label{fig:circid-locale}
+\end{figure}
+
+这样设计有两个好处：不同节点无须彼此协调标识符分配；CircID 也不会变成一个能够把同一条电路不同链路段连接起来的全局标签。
+
+\subsection{谁选择 CircID？}
+
+CircID 由发送电路创建 cell（\cella{CREATE2}，见 \cref{cap:09-circuiti}）的一方选择。因为通道两侧都可能创建电路，所以必须避免双方同时选到同一个值。具体规则取决于 link protocol 版本~\spec{tor-spec}{Choosing circuit IDs in create cells}：
+\begin{itemize}
+  \item \textbf{link protocol $\ge 4$}：主动\emph{打开}连接的一方使用最高位（MSB）为 1 的 CircID；另一方使用 MSB 为 0 的 CircID；
+  \item \textbf{link protocol $\le 3$}：旧版本通过比较两端中继的身份公钥来划分标识符空间；公钥数值较小的一方使用 MSB 为 0 的一半空间。
+\end{itemize}
+
+值 0 被保留，除此之外没有特别保留值。现有实现会从自己可用的空间中\textbf{随机}选择 CircID，规范也建议新实现这样做，以免不同实现因可预测分配方式而被识别。tor 连续尝试 64 次仍找不到未使用值时，就放弃在该通道上创建新电路。
+
+\begin{approfondimento}[为什么扩展到 4 字节？]
+CircID 只有 2 字节时，每一方只能使用一半空间，因此每条通道最多只能承载略多于 \num{32000} 条电路，而且随机选择会在空间真正耗尽之前就频繁碰撞。\proposta{214}（2012）直截了当地概括问题：\enquote{中继正在耗尽 circuit ID}（本书译文）。该提案引入使用 4 字节 CircID 的 link protocol~4，并在 tor 0.2.4.11-alpha 中实现。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{信元命令}\label{sec:comandi}
+
+\texttt{Command} 字节决定 body 应如何解释。下面两张表列出规范定义的全部值~\spec{tor-spec}{Interpreting the fields: Command}。C 列中，\enquote{是}表示 command 要求 CircID 非零，\enquote{否}表示要求 CircID 为零。P 列表示首次支持该 command 的 link protocol 版本；空白表示至少自版本~3 起就存在。
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{rlccl}
+\toprule
+值 & Command & C & P & 用途 \\
+\midrule
+0 & \cella{PADDING} & 否 & & 链路 padding \\
+1 & \cella{CREATE} & 是 & & 创建电路（TAP，已弃用） \\
+2 & \cella{CREATED} & 是 & & CREATE 的响应（已弃用） \\
+3 & \cella{RELAY} & 是 & & 端到端数据 \\
+4 & \cella{DESTROY} & 是 & & 销毁电路 \\
+5 & \cella{CREATE\_FAST} & 是 & & 不使用公钥密码学创建电路 \\
+6 & \cella{CREATED\_FAST} & 是 & & CREATE\_FAST 的响应 \\
+8 & \cella{NETINFO} & 否 & & 时间和地址 \\
+9 & \cella{RELAY\_EARLY} & 是 & & 与 RELAY 类似，但数量受限 \\
+10 & \cella{CREATE2} & 是 & & 创建电路（可扩展握手） \\
+11 & \cella{CREATED2} & 是 & & CREATE2 的响应 \\
+12 & \cella{PADDING\_NEGOTIATE} & 是 & 5 & padding 协商 \\
+\bottomrule
+\end{tabular}
+\caption{定长信元的命令。}
+\label{tab:comandi-fissi}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{rlcl}
+\toprule
+值 & Command & C & 用途 \\
+\midrule
+7 & \cella{VERSIONS} & 否 & link protocol 协商 \\
+128 & \cella{VPADDING} & 否 & 变长 padding \\
+129 & \cella{CERTS} & 否 & 证书 \\
+130 & \cella{AUTH\_CHALLENGE} & 否 & 身份认证 challenge \\
+131 & \cella{AUTHENTICATE} & 否 & initiator 身份认证 \\
+132 & \cella{AUTHORIZE} & 否 & 保留 \\
+\bottomrule
+\end{tabular}
+\caption{变长信元的命令。}
+\label{tab:comandi-variabili}
+\end{table}
+
+\paragraph{未知命令。} 除上述值之外，其他值都不被允许。接收方遇到未知 command 时，\emph{可以}静默丢弃 cell，也\emph{可以}关闭通道。之所以允许如此严格，是因为每个新 command 都会和新的 link protocol 版本一起引入：正确实现不会发送对方没有声明支持的 command。在 link protocol 尚未版本化的年代则不同，当时未知 command 往往会被忽略，因为它可能只是来自更新版本的 Tor。
+
+这些 command 可以按用途分组：
+\begin{description}
+  \item[通道管理] \cella{VERSIONS}、\cella{CERTS}、\cella{AUTH\_CHALLENGE}、\cella{AUTHENTICATE}、\cella{NETINFO}：即 \cref{cap:07-canali} 中的握手。
+  \item[填充] \cella{PADDING}、\cella{VPADDING}、\cella{PADDING\_NEGOTIATE}：用于增加虚假流量，降低链路流量分析能力。
+  \item[电路生命周期] \cella{CREATE2}/\cella{CREATED2}（以及历史变体）、\cella{DESTROY}：建立与销毁电路（\cref{cap:09-circuiti}）。
+  \item[传输] \cella{RELAY} 和 \cella{RELAY\_EARLY}：承载所有在电路\emph{内部}传输的内容。
+\end{description}
+
+\subsection{DESTROY}
+
+\cella{DESTROY} 的 body 只有一个字节，用来说明关闭电路的\emph{原因}~\spec{tor-spec}{Tearing down circuits}。节点收到 \cella{DESTROY} 后会释放该电路资源；如果自己不是电路端点，还会向下一节点继续发送 \cella{DESTROY}。
+
+\begin{center}\small
+\begin{tabular}{rl@{\qquad}rl}
+\toprule
+0 & NONE & 7 & OR\_IDENTITY \\
+1 & PROTOCOL & 8 & CHANNEL\_CLOSED \\
+2 & INTERNAL & 9 & FINISHED \\
+3 & REQUESTED & 10 & TIMEOUT \\
+4 & HIBERNATING & 11 & DESTROYED \\
+5 & RESOURCELIMIT & 12 & NOSUCHSERVICE \\
+6 & CONNECTFAILED & & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{attenzione}[原因码也可能成为侧信道]
+规范建议\textbf{始终}发送原因 NONE，并且不要原样传播收到的 reason code。假如中继把原始原因在两个方向继续转发，那么同一条电路上两个串通的中继就可能把这个字节当成信号，用来确认彼此是否位于同一条电路。这说明哪怕只有一个字节，也可能成为\emph{侧信道}。
+\end{attenzione}
+
+\subsection{RELAY\_EARLY}
+
+\cella{RELAY\_EARLY} 的格式与 \cella{RELAY} 完全相同，但目的在于\textbf{限制电路长度}~\spec{tor-spec}{Handling RELAY\_EARLY cells}。规则如下：
+\begin{itemize}
+  \item 客户端必须只在 \cella{RELAY\_EARLY} 中发送用于扩展电路的消息（\texttt{EXTEND2}）；从 0.2.3.11-alpha 起，中继会拒绝通过普通 RELAY 收到的扩展请求；
+  \item 如果一个中继在同一条电路上收到超过 8 个前向 \cella{RELAY\_EARLY}，应关闭该电路；如果收到哪怕一个朝客户端方向的\emph{反向} RELAY\_EARLY，则必须立即关闭；
+  \item 为了不直接泄露电路长度，客户端还应把大约前 8 个“不以第一跳为目的地”的 cell 也封装成 \cella{RELAY\_EARLY}。
+\end{itemize}
+
+如果没有这一限制，攻击者可以构建极长电路，让流量反复穿过相同中继，从而放大自己的流量并造成拥塞。这就是 Evans、Dingledine 和 Grothoff 描述的长路径拥塞攻击~\cite{evans2009congestion}。
+
+\begin{storia}[一个意外的信号]
+禁止反向 \cella{RELAY\_EARLY} 的规则来自 2014 年的一起事件：一些中继曾向客户端方向发送 RELAY\_EARLY，把它作为隐蔽信道，对洋葱服务用户的电路做标记。\cref{cap:27-casi-rete} 将详细分析该事件。
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{RELAY 信元内部}\label{sec:relay}
+
+\cella{RELAY} 与 \cella{RELAY\_EARLY} 承载的是\textbf{relay message}：客户端和电路节点之间交换的命令，从扩展电路一直到 TCP stream 中的应用数据。它们的 509 字节 body 会针对每一跳进行分层加密，这就是 \cref{cap:10-cifratura-relay} 中真正的“洋葱”。从通道视角看，一个 RELAY cell 的 body 因而像完全被随机数据填满一样，看不到普通定长 cell 的零填充。
+
+去除所有相关加密层以后，明文 body 采用 \cref{fig:relay} 所示的传统格式~\spec{tor-spec}{Relay cells}。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图08-relay信元}
+\caption{传统 RELAY 信元的\emph{解密后}主体：11 字节头部、最多 498 字节数据，以及如有剩余空间则填充至 509 字节。规范建议先填充至多四个零字节，再使用随机字节；不足四字节时全部填零，数据恰有 498 字节时无须填充。}
+\label{fig:relay}
+\end{figure}
+
+\begin{description}
+  \item[RELAY 命令（1 字节）] relay message 的类型（\cref{tab:comandi-relay}）。
+  \item[Recognized（2 字节）] 明文消息中应为零。中继可以借此快速判断 cell 是否以自己为目标：去掉自己的加密层后，如果该字段非零，那么 cell 肯定仍处于其他层的加密状态，应继续转发。
+  \item[StreamID（2 字节）] 该消息所属的 stream，由客户端选择；如果消息针对整条电路而不是某个 stream，则为零。
+  \item[Digest（4 字节）] 与该跳之间已经交换的全部消息的\emph{运行摘要}前 4 字节（普通电路使用 SHA-1，洋葱服务电路使用 SHA3-256）。它确认 cell 确实以当前中继为目的地，并且没有被修改。
+  \item[Length（2 字节）] Data 中实际有效字节数。
+  \item[Data] 消息内容。
+  \item[填充] 剩余部分，使整个 body 达到 509 字节。
+\end{description}
+
+11 字节 header 意味着每个 cell 最多可以承载 $509 - 11 = 498$ 字节实际数据。
+
+\subsection{Recognized 与 Digest：两级过滤}
+
+为什么需要两个字段？如果中继对经过自己的每个 cell 都计算 digest，成本会更高。Recognized 是一个廉价过滤器：一个仍然有后续加密层的 cell 在当前层解密后，这两个字节近似伪随机，恰好等于零的概率只有 $2^{-16}$。只有 Recognized 为零时，中继才计算 digest；digest 也匹配，才认为 cell 被当前中继\enquote{识别（recognized）}并进行处理，否则继续转发。具体计算方法及其安全弱点将在 \cref{cap:10-cifratura-relay} 说明。
+
+\subsection{RELAY 消息填充}
+
+relay message 的 padding 与定长 cell 的零填充不同。规范建议先放 4 个零字节，后续使用\textbf{随机字节}~\spec{tor-spec}{Relay cells}。随机 padding 可以让 cell 内容不可预测，这对 \proposta{289} 引入的经过认证的 SENDME 很重要：SENDME 通过包含所接收 cell 的 digest，证明数据确实被接收（\cref{cap:11-stream}）。接收方绝不能依赖 padding 的具体内容。
+
+\subsection{RELAY 命令}
+
+\Cref{tab:comandi-relay} 列出定义的 relay command。Dir. 列表示方向：F（\emph{forward}，只能从客户端向电路内部）、B（\emph{backward}，只能朝客户端）、F/B（两个方向均可）。C 表示\emph{控制消息}，这类消息的 StreamID 必须为零。
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}rll>{\raggedright\arraybackslash}X@{}}
+\toprule
+值 & Command & Dir. & 用途 \\
+\midrule
+\multicolumn{4}{l}{\emph{核心协议}} \\
+1 & BEGIN & F & 打开 stream \\
+2 & DATA & F/B & stream 数据 \\
+3 & END & F/B & 关闭 stream \\
+4 & CONNECTED & B & stream 成功打开 \\
+5 & SENDME & F/B, C? & 接收确认（流量控制） \\
+6--7 & EXTEND/EXTENDED & F/B, C & 使用 TAP 扩展（已过时） \\
+8--9 & TRUNCATE/TRUNCATED & F/B, C & 截断电路（未使用） \\
+10 & DROP & F/B, C & 端到端 padding \\
+11--12 & RESOLVE/RESOLVED & F/B & 远程 DNS 解析 \\
+13 & BEGIN\_DIR & F & 到目录缓存的 stream \\
+14--15 & EXTEND2/EXTENDED2 & F/B, C & 扩展电路 \\
+16--18 & \emph{保留} & & UDP over Tor（\proposta{339}） \\
+\multicolumn{4}{l}{\emph{Conflux}} \\
+19--22 & CONFLUX\_\ldots & F/B, C & LINK、LINKED、LINKED\_ACK、SWITCH：多电路协同（\proposta{329}） \\
+\multicolumn{4}{l}{\emph{洋葱服务}} \\
+32 & ESTABLISH\_INTRO & F, C & 建立引介点 \\
+33 & ESTABLISH\_RENDEZVOUS & F, C & 建立汇合点 \\
+34--35 & INTRODUCE1/INTRODUCE2 & F/B, C & 引介请求 \\
+36--37 & RENDEZVOUS1/RENDEZVOUS2 & F/B, C & 加入汇合 \\
+38--40 & \ldots\_ESTABLISHED, INTRODUCE\_ACK & B, C & 确认 \\
+\multicolumn{4}{l}{\emph{电路 padding 与流量控制}} \\
+41--42 & PADDING\_NEGOTIATE/\ldots D & F/B, C & 电路 padding \\
+43--44 & XOFF/XON & F/B & stream 流量控制（\proposta{324}） \\
+\bottomrule
+\end{tabularx}
+\caption{RELAY 命令。SENDME 只有在针对整条电路而不是单个 stream 时才是控制消息（\cref{cap:11-stream}）。}
+\label{tab:comandi-relay}
+\end{table}
+
+如果 cell 已被 recognized，但其中的 relay command 未知，就必须丢弃该 cell；不过，它的内容仍会计入 digest 和流量控制窗口。
+
+% ---------------------------------------------------------------------------
+\section{走向新格式：提案 340 与 CGO}\label{sec:nuovo-formato}
+
+传统格式存在两个已知限制。第一是效率：大消息至少占用一个完整 cell，而多个很小的消息又不能共享同一 cell。第二是安全性：4 字节 digest 加上未认证的 AES-CTR 加密，为\emph{tagging} 攻击留下空间，这将在 \cref{cap:10-cifratura-relay} 中分析。
+
+\proposta{340}（\emph{Packed and fragmented relay messages}）把\emph{cell}和\emph{message}两个概念分离：一条消息可以被分片到多个 cell 中，也可以把多条消息打包进同一个 cell。\proposta{359}（\emph{Counter Galois Onion, Updated}）引入新的 relay 加密方案 CGO，并采用 Proposal 340 的 cell 格式。CGO 解密后的 cell 结构如下：
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+字段 & 字节 \\
+\midrule
+authentication tag & 16 \\
+body & $509 - 16 = 493$ \\
+\midrule
+\quad \emph{body 内部：}command & 1 \\
+\quad length & 2 \\
+\quad StreamID（仅部分 command） & 2 \\
+\quad data & \emph{length} \\
+\quad padding（4 个零，之后随机） & 剩余部分 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+只有确实需要 StreamID 的 command 才带该字段：BEGIN、DATA、END、CONNECTED、RESOLVE、RESOLVED、BEGIN\_DIR、XON、XOFF。Recognized 和 Digest 都消失，改由 authentication tag 取代。只有客户端和中继都支持 CGO（子协议 \texttt{Relay=6}），并在电路建立过程中协商成功时，客户端才会对该中继使用 CGO。
+
+\begin{approfondimento}[每个 CGO cell 能装多少数据？]
+由格式可知，一条 DATA 消息可用的数据空间为 $493 - 1 - 2 - 2 = 488$ 字节，比传统格式少 10 字节。这正是 16 字节 authentication tag 带来的代价。
+\end{approfondimento}
+
+CGO 已经不再只是纸面提案：tor 从 0.4.9 系列开始支持它（首次加入 0.4.9.3-alpha，2025 年 9 月）。Arti 中该支持始终启用，\texttt{counter-galois-onion} build option 仅为兼容性保留。规范仓库仍把两个 proposal 标为 \enquote{Open}；proposal 的状态反映标准化流程，并不总与代码实现状态同步。
+
+% ---------------------------------------------------------------------------
+\section{一次会话的完整结构}\label{sec:sessione}
+
+现在可以把前面的组件组合起来，逐个 cell 跟踪客户端如何向守卫建立一条三跳电路并下载网页。\cref{fig:sessione} 汇总了整个序列，后续章节会逐步展开每一个步骤。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图08-会话}
+\caption{客户端与守卫在 TLS 通道上交换的 cell 序列，用于建立三跳电路并打开 stream。守卫只能看到自己所在通道上的 cell；面向中间中继和出口的 RELAY 明文内容使用守卫并不掌握的密钥加密，因此守卫无法读取。}
+\label{fig:sessione}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{通道握手}：\cella{VERSIONS}，随后守卫发送 \cella{CERTS}、\cella{AUTH\_CHALLENGE} 和 \cella{NETINFO}；客户端回复 \cella{NETINFO}。这些 cell 的 CircID 始终为 0。
+  \item \textbf{第一跳}：客户端用新的 CircID 发送 \cella{CREATE2}（因为客户端打开了连接，所以 MSB 为 1）；守卫回复 \cella{CREATED2}。
+  \item \textbf{第二跳和第三跳}：两条包含 \texttt{EXTEND2} 的 \cella{RELAY\_EARLY}；守卫以及之后的中间中继把扩展请求转换为发往下一节点的 \cella{CREATE2}。响应以包含 \texttt{EXTENDED2} 的 \cella{RELAY} 返回。
+  \item \textbf{Stream}：向出口发送带 \texttt{BEGIN} 的 relay message，出口回复 \texttt{CONNECTED}；之后双向交换 \texttt{DATA}，并穿插 \texttt{SENDME}。
+  \item \textbf{关闭}：用 \texttt{END} 关闭 stream；当整条电路生命周期结束时发送 \cella{DESTROY}。
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section{实验：信元编码器}\label{sec:lab-celle}
+
+\begin{laboratorio}[2]{编码和解码信元}
+\textbf{目标。} 编写 \file{labs/zh-Hans/代码/torlab/cells.py} 模块；后续所有实验都会使用它。\\
+\textbf{前置条件。} Python~3.10 或更新版本，\cmd{pytest}。本实验不需要网络，只处理人工构造的字节序列。\\
+\textbf{预计时间。} 1--2 小时。
+\end{laboratorio}
+
+\paragraph{步骤 1：常量与命令。} 把规范表格转换成 Python 枚举，让每个数值只在一个地方定义：
+
+\begin{lstlisting}[language=Python]
+CELL_BODY_LEN = 509
+RELAY_HEADER_LEN = 11
+RELAY_DATA_MAX = CELL_BODY_LEN - RELAY_HEADER_LEN   # 498
+
+class CellCommand(IntEnum):
+    PADDING = 0
+    CREATE = 1
+    # ... 表 8.1 和 8.2 中的所有值
+    AUTHORIZE = 132
+
+def circid_len(version):
+    return 2 if version < 4 else 4
+
+def is_variable_length(command):
+    return command == CellCommand.VERSIONS or command >= 128
+\end{lstlisting}
+
+\paragraph{步骤 2：编码。} 下面的函数接收 CircID、command、body 和 link protocol 版本，生成要发送的字节。注意 \cella{VERSIONS} 的特殊规则和零填充：
+
+\begin{lstlisting}[language=Python]
+def encode(cell, version):
+    if cell.command == CellCommand.VERSIONS:
+        version = 0                  # CircID 始终为 2 字节
+    n = circid_len(version)
+    header = cell.circ_id.to_bytes(n, "big") + bytes([cell.command])
+    if is_variable_length(cell.command):
+        return (header + struct.pack(">H", len(cell.body))
+                + cell.body)
+    return header + cell.body.ljust(CELL_BODY_LEN, b"\x00")
+\end{lstlisting}
+
+\paragraph{步骤 3：解码字节流。} TLS socket 送来的字节可能被任意分片，因此完整 cell 尚未到齐时，解码器返回 \texttt{None}；否则返回解析后的 cell 和尚未消费的剩余字节：
+
+\begin{lstlisting}[language=Python]
+def decode(buffer, version):
+    n = circid_len(version)
+    if len(buffer) < n + 1:
+        return None
+    circ_id = int.from_bytes(buffer[:n], "big")
+    command = buffer[n]
+    if is_variable_length(command):
+        if len(buffer) < n + 3:
+            return None
+        (length,) = struct.unpack(">H", buffer[n+1:n+3])
+        start, end = n + 3, n + 3 + length
+    else:
+        start, end = n + 1, n + 1 + CELL_BODY_LEN
+    if len(buffer) < end:
+        return None
+    return Cell(circ_id, command, buffer[start:end]), buffer[end:]
+\end{lstlisting}
+
+\paragraph{步骤 4：VERSIONS 与版本协商。}
+
+\begin{lstlisting}[language=Python]
+def negotiate_version(ours, received_body):
+    if len(received_body) % 2:
+        raise CellError("VERSIONS 的字节数为奇数")
+    theirs = {v for (v,) in struct.iter_unpack(">H", received_body)}
+    common = set(ours) & theirs
+    if not common:
+        raise CellError("没有共同支持的 link protocol 版本")
+    return max(common)
+\end{lstlisting}
+
+中文版实验环境中的教学诊断信息同样使用简体中文；协议常量、函数名和数据格式保持不变。
+
+\paragraph{步骤 5：RELAY 消息。} 最后构造 11 字节 header。\texttt{struct} 使用的 \texttt{">BHH4sH"} 格式与 \cref{fig:relay} 中的字段完全对应：
+
+\begin{lstlisting}[language=Python]
+def encode_relay(msg, random_bytes=os.urandom):
+    header = struct.pack(">BHH4sH", msg.command, msg.recognized,
+                               msg.stream_id, msg.digest, len(msg.data))
+    space = CELL_BODY_LEN - RELAY_HEADER_LEN - len(msg.data)
+    padding = b"\x00" * min(4, space) + random_bytes(max(0, space - 4))
+    return header + msg.data + padding
+\end{lstlisting}
+
+\texttt{random\_bytes} 参数允许测试把真正的随机字节替换成可预测值，从而得到可重复结果。
+
+\paragraph{验证。} 仓库在 \file{labs/zh-Hans/代码/torlab/test/test\_cells.py} 中包含测试。从仓库根目录运行，并让 \file{labs/zh-Hans/代码} 位于 \texttt{PYTHONPATH}：
+
+\begin{lstlisting}[language=bash,numbers=none]
+$ PYTHONPATH=labs/zh-Hans/代码 python3 -m pytest -q labs/zh-Hans/代码/torlab/test/test_cells.py
+........                                                  [100%]
+8 passed
+\end{lstlisting}
+
+（如果不指定文件，\cmd{pytest} 会运行仓库中已经包含的所有实验测试。）例如，其中一个测试会逐字节检查“支持版本 3、4、5 的 \cella{VERSIONS}”是否与 \cref{sec:celle-formato} 中的示例完全一致：
+\texttt{0000 07 0006 0003 0004 0005}。
+
+\paragraph{扩展。} 在实验~1（\cref{cap:07-canali}）中，本模块将用于和私有网络上的真实中继通信。实验~4 将在此基础上加入 digest 计算和分层加密。
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item Cell 是 Tor 在通道上的基本传输单元。从 link protocol~4 起，定长 cell 为 514 字节（CircID 4 + command 1 + body 509）；更早版本为 512 字节。
+  \item 变长 cell 增加 2 字节 Length 字段。\cella{VERSIONS}（7）以及所有 command $\ge 128$ 都采用变长格式。
+  \item \cella{VERSIONS} 始终使用 2 字节 CircID；双方选择共同支持的最高版本。
+  \item CircID 只在当前通道中有效。打开连接的一方随机选择 MSB 为 1 的值。
+  \item \cella{DESTROY} 应始终使用 reason NONE，避免创建侧信道；\cella{RELAY\_EARLY} 用来限制电路长度。
+  \item 传统 RELAY 明文 body 有 11 字节 header（command、Recognized、StreamID、Digest、Length），最多承载 498 字节数据；padding 为 4 个零字节加随机字节。
+  \item 提案 340 和 359（CGO）引入带 16 字节 authentication tag 和可选 StreamID 的新格式。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:08-lunghezze}
+在协商 link protocol~3 的通道上，一条 \cella{CREATE2} 占多少字节？版本~5 呢？body 为 \texttt{00 04 00 05} 的 \cella{VERSIONS} 总共占多少字节？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:08-formato}
+对命令值 0、7、9、12、129、200，逐一说明对应 cell 是定长还是变长。哪个值不被协议允许？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:08-circid}
+客户端使用 link protocol~5 打开一条到守卫的通道。以下哪些 CircID 可用于新电路：\texttt{0x00000000}、\texttt{0x12345678}、\texttt{0x92345678}？为什么？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:08-hex}
+手工解码在 link protocol~4 通道上收到的下列字节序列。给出每个 cell 的 CircID、command 和 body 长度：\\
+\texttt{00 00 00 00 81 00 03 aa bb cc 80 00 00 07 04 00 \ldots}\\
+（第二个 cell 的 body 尚未完整显示。）
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:08-relay}
+一条 stream 5 上的 relay DATA 消息包含 300 字节 data。在计算 digest 之前，写出其明文 body 前 11 个字节的十六进制值。之后还有多少 padding 字节？其中多少字节保证为零？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:08-recognized}
+一个中间中继处理 \num{1000000} 个实际上并不以它为目标的 cell。平均有多少个会需要进一步计算 digest？为什么只看 Recognized 不足以判断 cell 是否真正以该中继为目的地？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:08-destroy}
+描述一个具体场景：同一条电路上的两个串通中继如何利用 \cella{DESTROY} 的 reason code 判断彼此位于同一电路？为什么统一使用 NONE 能阻止这种做法？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:08-efficienza}
+客户端下载一个 \SI{1}{\mebi\byte} 文件（\num{1048576} 字节）。传统格式需要多少 DATA cell？CGO 需要多少？在两种情况下，cell header 带来的额外开销分别占有效数据的百分之多少（link protocol~4，不计 TLS）？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:08-lab-fuzz}
+为实验~2 增加一个\emph{基于属性的测试（property-based test）}，例如使用 Hypothesis 库：随机生成定长和变长 cell，编码后连接起来，再把结果随机切成不同长度的片段。验证解码器最终恢复出的 cell 与原始输入完全一致。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:08-arti}
+在 Arti 源代码的 \texttt{tor-cell} crate 中找到编码和解码 channel cell 的函数。比较它们处理\enquote{不完整 cell}的方式，与实验~2 的 \texttt{decode} 函数有何异同。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification} 中的 \enquote{Cells}、\enquote{Relay cells} 和 \enquote{Negotiating channels}~\cite{torspec}：本章的一手规范来源。
+  \item R.~Dingledine, N.~Mathewson, P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}，第 4 节：最初的 cell 格式及设计动机。
+  \item N.~Evans, R.~Dingledine, C.~Grothoff, \titolo{A Practical Congestion Attack on Tor Using Long Paths}~\cite{evans2009congestion}：促成 \cella{RELAY\_EARLY} 的攻击。
+  \item torspec 中的提案 340 与 359：新一代 cell 格式。
+\end{itemize}

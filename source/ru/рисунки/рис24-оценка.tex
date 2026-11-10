@@ -1,0 +1,18 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Альтернативное описание EPUB.
+\altfig{Косвенная дневная оценка Tor Metrics с отдельными рядами для прямых клиентов реле и клиентов мостов. Реле каталогов и мосты подсчитывают успешные запросы документов каталога примерно за 24 часа. В extra-info поле dirreq-v3-reqs числа по странам округляются вверх до кратных 8. CollecTor архивирует эти дескрипторы. Tor Metrics вычитает 4 из допустимых округлённых значений, оценивает число наблюдаемых запросов r(R) и долю покрытия frac, затем вычисляет floor(r(R)/(frac умножить на 10)). Число 10 — предположение о среднем числе запросов на одного клиента в день. Дни с frac ниже 10 процентов или выше 110 процентов исключаются. Итог означает среднее число одновременно подключённых клиентов, а не отдельных людей.}
+% Косвенная оценка среднего числа клиентов по агрегированным запросам
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.5cm,
+  box/.style={draw,rounded corners=2pt,align=center,minimum height=0.9cm,text width=2.3cm}]
+  \node[box,fill=torviola!10] (r) {реле и мосты\\считают запросы\\каталога};
+  \node[box,right=of r] (x) {extra-info\\\texttt{dirreq-v3-reqs}};
+  \node[box,right=of x] (c) {CollecTor\\архивирует};
+  \node[box,right=of c,fill=torverde!15] (m) {Tor Metrics:\\$\lfloor r(R)/(\mathit{frac}\cdot10)\rfloor$};
+  \draw[->] (r) -- (x); \draw[->] (x) -- (c); \draw[->] (c) -- (m);
+  \node[below=2pt of r,font=\sffamily\tiny,text=torgrigio,align=center] {период около\\24 часов};
+  \node[below=2pt of x,font=\sffamily\tiny,text=torgrigio,align=center] {по странам, кратно\\8 (затем $-4$)};
+  \node[below=2pt of c,font=\sffamily\tiny,text=torgrigio,align=center] {$\mathit{frac}$: оценка\\покрытия};
+  \node[below=2pt of m,font=\sffamily\tiny,text=torgrigio,align=center] {среднее число клиентов\\не число людей};
+  \node[below=0.95cm of c,font=\sffamily\tiny,text=avviso,align=center] {день пропускают при $\mathit{frac}<10\%$ или $\mathit{frac}>110\%$};
+\end{tikzpicture}

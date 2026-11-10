@@ -1,0 +1,14 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
+-- Copyright (C) 2026 Alessandro Greco
+-- Build file for tex4ebook/make4ht: runs biber for the biblatex bibliography.
+Make:add("biber", "biber ${input}")
+Make:htlatex {}
+Make:biber {}
+Make:htlatex {}
+Make:htlatex {}
+Make:htlatex {}
+
+-- Alternative text of the display formulas: ../shared/epub/epub-filters.lua.
+local filters = dofile("../shared/epub/epub-filters.lua")
+Make:match("html$", filters.display_math_alt("en"))
+Make:match("opf$", filters.without_build_date)

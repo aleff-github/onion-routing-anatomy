@@ -1,0 +1,67 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{A Guide to the torspec Specifications}\label[appendice]{cap:C-specifiche}
+\aggiornatoal{23 September 2026}{torspec commit \texttt{8e1f245}}
+
+The Tor Project's specifications are the primary source for almost every chapter in this book. They are comprehensive but were not written as a textbook. Originally maintained as separate text files over more than twenty years, they were brought together on one website only comparatively recently. Their own conventions acknowledge that consistency remains a work in progress. This appendix provides a map for readers who want to study the specifications after reading the book.
+
+% ---------------------------------------------------------------------------
+\section{Where to Find Them}\label{sec:C-dove}
+
+The specifications are published at \url{https://spec.torproject.org/} and maintained alongside proposals in the Tor Project's \texttt{torspec} GitLab repository. There, the specifications are Markdown files under \file{spec/}: individual files for smaller subjects and directories for more extensive documents. The \file{permalinks.md} file lists stable document addresses, such as \url{https://spec.torproject.org/tor-spec}; use these when citing the specifications. Throughout the book we cite documents as \spec{document}{section}, preserving the section titles as they appear on the site, and proposals as \enquote{Proposal~NNN}.
+
+% ---------------------------------------------------------------------------
+\section{Conventions}\label{sec:C-convenzioni}
+
+The introductory conventions document establishes rules that apply to the specifications unless otherwise noted:
+\begin{itemize}
+  \item \texttt{MUST}, \texttt{SHOULD}, \texttt{MAY}, and their negative forms have their RFC~2119 meanings: respectively a requirement, strong recommendation, or permitted option.
+  \item Lengths are measured in eight-bit bytes, and binary prefixes such as \enquote{kibibyte} denote multiples of 1024.
+  \item Multibyte integers use big-endian, or \enquote{network}, byte order: decimal 4660 in two bytes becomes \texttt{12 34}.
+\end{itemize}
+Two important exceptions appeared earlier in the book: Curve25519 and Ed25519 keys and points are little-endian (\cref{cap:B-crittografia}), while some directory formats use readable text with base64-encoded binary data.
+
+% ---------------------------------------------------------------------------
+\section{Document Map}\label{sec:C-mappa}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}Xl@{}}
+\toprule
+Document & Contents & Chapters \\
+\midrule
+\texttt{tor-spec} & Main protocol: channels, cells, circuits, handshakes, relay encryption, streams, flow control and congestion control & \ref{cap:07-canali}--\ref{cap:11-stream} \\
+\texttt{cert-spec} & Tor's Ed25519 certificates & \ref{cap:07-canali} \\
+\texttt{dir-spec} & Authorities, votes, consensus, descriptors, microdescriptors and extra-info documents & \ref{cap:12-directory}, \ref{cap:24-metrics} \\
+\texttt{path-spec} & Path selection and constraints & \ref{cap:13-percorso} \\
+\texttt{guard-spec} & The guard algorithm & \ref{cap:13-percorso} \\
+\texttt{vanguards-spec} & Full and lightweight vanguards & \ref{cap:13-percorso} \\
+\texttt{rend-spec} & Onion services v3: keys, descriptors, introduction and rendezvous & \ref{cap:14-onion-services}, \ref{cap:21-onion-pratica} \\
+\texttt{hspow-spec} & Proof of work for onion services & \ref{cap:15-dos} \\
+\texttt{dos-spec} & Defenses against denial of service & \ref{cap:15-dos} \\
+\texttt{pt-spec} & The interface between tor and pluggable transports & \ref{cap:16-censura} \\
+\texttt{padding-spec} & Channel and circuit padding & \ref{cap:07-canali}, \ref{cap:26-attacchi} \\
+\texttt{control-spec} & The ControlPort protocol & \ref{cap:18-stem} \\
+\texttt{socks-extensions} & Tor-specific SOCKS extensions & \ref{cap:11-stream}, \ref{cap:28-opsec} \\
+\texttt{param-spec} & Consensus network parameters and their defaults & \ref{cap:11-stream}, \ref{cap:15-dos} \\
+\texttt{address-spec} & Special names, such as \texttt{.onion} addresses & \ref{cap:14-onion-services} \\
+\texttt{srv-spec} & The authorities' shared random value & \ref{cap:14-onion-services} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ---------------------------------------------------------------------------
+\section{How to Read a Section}\label{sec:C-lettura}
+
+A few suggestions drawn from writing the book:
+\begin{enumerate}
+  \item \textbf{Start with the format.} Binary-message sections give field names and sizes in tables. Reconstruct the format on paper, as we did in the book's format diagrams, before reading the rules.
+  \item \textbf{Distinguish current from obsolete material.} Many documents preserve historical features such as TAP, link-protocol versions 1--3 and onion services v2. Obsolete material is often grouped in sections or files such as \file{obsolete-channels.md} or \file{historical/}, but not always. When uncertain, inspect the code to see whether a branch still exists.
+  \item \textbf{Compare with the implementations.} Specifications express intent; the tor and Arti codebases reveal actual behavior. Several discrepancies proved informative during the book's research: channel padding absent from single-hop circuits (\cref{cap:07-canali}), and the closure reason observed at an exit (\cref{sec:lab-relay}).
+  \item \textbf{Check proposal status.} A proposal may be implemented before it is integrated into a specification, or still be under discussion without being implemented (\cref{sec:fut-processo}).
+  \item \textbf{Verify experimentally.} A private network like the book's laboratory allows readers to test whether a field behaves as documented. This method underlies all the laboratories.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section{Arti and the Specifications}\label{sec:C-arti}
+
+Arti's code frequently refers to the specifications in comments and documentation and identifies ambiguous requirements or differences from tor. Its supported-subprotocol table (\cref{sec:arti-supporto}) indicates which features both implementations support and therefore which parts of the specifications describe the \enquote{living} protocol.

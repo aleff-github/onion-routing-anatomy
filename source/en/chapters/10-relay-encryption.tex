@@ -1,0 +1,283 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{The Onion: Relay-Cell Encryption and CGO}\label{cap:10-cifratura-relay}
+\aggiornatoal{23 September 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; proposal 359}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item describe how a client wraps a message in one layer of encryption for each hop and how the relays remove those layers;
+  \item explain the roles of Recognized and the running digest, and why both are needed;
+  \item identify weaknesses of the traditional scheme: malleability and \emph{tagging} attacks;
+  \item describe the basic operation of Counter Galois Onion (CGO), the scheme replacing it;
+  \item extend a real circuit to three hops using your code (Laboratory~4).
+\end{itemize}
+\end{obiettivi}
+
+In \cref{cap:09-circuiti}, the client agreed on four keys with each relay in the circuit: Kf and Kb for encryption, and Df and Db for integrity checking. In this chapter, we put them to work. This is the mechanism that gives onion routing its name: a message is wrapped in as many layers as there are relays, and each relay removes one layer, like peeling an onion.
+
+% ---------------------------------------------------------------------------
+\section{The Traditional Scheme}\label{sec:tor1}
+
+The scheme used since Tor's beginnings, called \emph{tor1} in the more recent code, combines two tools for each hop and each direction:
+\begin{itemize}
+  \item a stream cipher, \textbf{AES-128 in counter mode} (CTR), using key Kf or Kb;
+  \item a \textbf{running SHA-1 digest}, initialized using Df or Db.
+\end{itemize}
+Both maintain \emph{state} for the lifetime of the circuit. The AES-CTR counter does not restart at zero for each cell: the first cell uses the first 509 bytes of the keystream, the second uses the next 509, and so on. Likewise, the digest is not calculated from a single cell, but from \emph{all} cells exchanged with that hop so far. Consequently, the client and relay must process cells in exactly the same order: a lost or duplicate cell would desynchronize both states. TLS, which guarantees ordering and integrity for the channel, makes this possible.
+
+\subsection{Forward: From the Client into the Circuit}
+
+To send a message to hop $d$ of a circuit, the client~\spec{tor-spec}{Routing relay cells}:
+\begin{enumerate}
+  \item prepares the plaintext relay-message body (\cref{sec:relay}), with Recognized and Digest set to zero;
+  \item updates hop $d$'s forward digest using that body, and writes the first four bytes of the result into the Digest field;
+  \item encrypts the body using hop $d$'s Kf, then hop $d-1$'s Kf, and so on back to hop 1: the outermost layer belongs to the first relay.
+\end{enumerate}
+Every relay receiving the cell decrypts it using its own Kf, removing one layer, and checks whether the cell is intended for it. If not, it forwards the cell to the next hop, which removes another layer. \Cref{fig:cipolla} shows the layers.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig10-onion}
+\caption{Traditional tor1 RELAY-cell encryption: the client applies Kf$_3$, Kf$_2$, Kf$_1$ and each relay removes its layer. The exit recognizes the relay message with Recognized = 0 and a matching running digest; application data may still be protected by HTTPS. The inner boxes schematically depict still-encrypted data.}
+\label{fig:cipolla}
+\end{figure}
+
+\subsection{Backward: From the Circuit to the Client}
+
+In the opposite direction, the roles are reversed. A relay originating a message signs it with its own backward digest and encrypts it using Kb. Each subsequent relay toward the client \emph{adds} another layer using its own Kb. The client, which knows all the keys, removes the layers one at a time, starting at the first hop, and after each layer checks whether that hop originated the cell.
+
+\subsection{The Circuit as a \enquote{Leaky Pipe}}
+
+The client can send a message to \emph{any} hop in the circuit, not just the last one, simply by stopping the encryption at that hop. This is how an \texttt{EXTEND2} message for the third hop is delivered to the second relay. The specification calls this the \emph{leaky pipe topology}: the circuit is a pipe from which messages can leave partway along it. Tor's original paper~\cite{dingledine2004tor} also proposes using this property defensively: sending some streams out through an intermediate relay would make it harder for an exit observer to determine which circuit they belong to. In practice, however, tor sends streams out only through the final hop.
+
+% ---------------------------------------------------------------------------
+\section{Recognizing a Cell}\label{sec:riconoscere}
+
+How does a relay know, after removing its own layer, whether the cell is meant for it? It cannot simply \enquote{check whether the contents make sense}: to a program, both a still-encrypted cell and a plaintext cell are sequences of bytes. The traditional scheme uses two checks in sequence~\spec{tor-spec}{Relay cells}:
+
+\begin{enumerate}
+  \item \textbf{Recognized}: these two bytes must be zero. If the cell is still encrypted, those bytes are pseudorandom and equal zero only once in \num{65536}. This check is almost free and immediately filters out the vast majority of cells in transit.
+  \item \textbf{Digest}: if Recognized is zero, the relay calculates the running digest \emph{as though} the cell belonged to it, with the Digest field zeroed, and compares the first four bytes against the field's contents. If they match, the cell has been recognized: the relay updates its digest state and processes the cell.
+\end{enumerate}
+
+An easily missed detail: if Recognized is zero while the digest differs, this is a false positive, and the digest state \textbf{must not} be updated. In Laboratory~4, we achieve this by working on a copy of the state (\texttt{self.digest.copy()}) and keeping it only on success.
+
+The digest covers the entire body, including padding bytes, which are therefore random (\cref{sec:relay}). For onion-service circuits, in which the client and service share the keys of a \enquote{virtual hop} (\cref{cap:14-onion-services}), SHA3-256 is used instead of SHA-1.
+
+What happens if no one recognizes the cell? If the final relay receives a forward cell it does not recognize, an error has occurred: it destroys the circuit using \cella{DESTROY}. If none of the hops recognizes an incoming cell, the client does the same.
+
+% ---------------------------------------------------------------------------
+\section{Weaknesses of tor1}\label{sec:tor1-debolezze}
+
+\subsection{Malleability}
+
+Counter mode has an inconvenient property: the ciphertext is simply $C = P \oplus S$, where $S$ is the keystream. Changing one bit of $C$ changes that same bit of $P$, without requiring the key. If an adversary knows, or can guess, part of the plaintext, they can replace it with chosen text: they need only XOR the ciphertext with the difference between the two texts. Laboratory~4 includes a test that does exactly this, changing \enquote{pay 10 euros} to \enquote{pay 99 euros}.
+
+In tor1, integrity is checked only \emph{at the destination}: the intended relay checks the digest, but intermediate relays do not. An altered cell can therefore travel undisturbed to its destination, where the digest finally fails to match.
+
+\subsection{The Tagging Attack}
+
+Together, these properties permit a specific attack called \emph{tagging}. Imagine an adversary controlling both the guard and the exit of a circuit:
+\begin{enumerate}
+  \item The guard changes some bits in a cell in transit according to a recognizable pattern (the \enquote{mark}, or \emph{tag}).
+  \item The cell passes through the middle, which cannot detect the change.
+  \item Before checking the digest, the exit checks whether the mark is present in the cell. If it is, the exit knows that this circuit passes through its cooperating guard and can therefore associate the traffic destination with the client's address, which the guard knows.
+\end{enumerate}
+If the exit is not cooperating, the digest fails, the circuit is destroyed, and the client builds another one. The adversary can try again, and each failed attempt reveals something. The mark can also be applied in the reverse direction, from the exit toward the client.
+
+\begin{approfondimento}[How Much Does Tagging Matter?]
+An adversary controlling both guard and exit can already correlate traffic timing and volumes without any mark (\cref{cap:26-attacchi}). For this reason, Tor's designers long considered tagging a genuine but lower-priority problem~\cite{dingledine2004tor}. Tagging, however, is more reliable than statistical correlation and works even with very little traffic. Proposals aimed at solving it appeared over more than a decade: proposals 202, 261 (based on the AEZ cipher), 295, and 308, followed by 359, which introduced CGO.
+\end{approfondimento}
+
+\subsection{Other Limitations}
+
+The digest is only four bytes long, and its underlying algorithm, SHA-1, is no longer considered secure for new applications. Moreover, the scheme does not offer forward secrecy \emph{within} a circuit: someone who obtains a hop's keys while the circuit is active could also decrypt every earlier cell they recorded, because the keystream is determined entirely by the initial key.
+
+% ---------------------------------------------------------------------------
+\section{Counter Galois Onion}\label{sec:cgo}
+
+\textbf{CGO} (\emph{Counter Galois Onion}) is a relay-cell encryption scheme designed by Degabriele, Melloni, Münch, and Stam and adopted in \proposta{359}. We give a functional overview here; the complete cryptographic construction is described in the proposal and the authors' papers.
+
+\subsection{Properties}
+
+According to the proposal, CGO offers three improvements:
+\begin{itemize}
+  \item It is \textbf{non-malleable}: modifying a cell in any way makes that cell, and every subsequent cell in the circuit, undecipherable. A mark can neither be read nor removed: it can only destroy the circuit.
+  \item It provides \textbf{cell-level forward secrecy}: after processing a cell, a party no longer holds the material needed to decrypt it again.
+  \item Authentication is 128 bits strong, rather than relying on the traditional scheme's much shorter check.
+\end{itemize}
+Since CGO no longer uses SHA-1, it should also be faster overall.
+
+\subsection{How It Works, at a High Level}
+
+The basic ingredients are AES-128 and POLYVAL, a universal hash function from the same family used in AES-GCM-SIV mode. With these, the proposal constructs a \emph{wide-block}, \emph{tweakable} cipher: it operates on all 509 bytes of the cell as though they were one block, so changing even a single bit anywhere unpredictably changes the entire result. The decrypted cell consists of a \emph{tag} (16 bytes) and a body (493 bytes), as we saw in \cref{sec:nuovo-formato}.
+
+For each hop and each direction, the client and relay share:
+\begin{itemize}
+  \item a 64-byte key $K$ and a 16-byte value $N$, derived from the circuit handshake;
+  \item the \emph{tag} $T'$ of the last processed cell, initially zero.
+\end{itemize}
+Three ideas make the scheme resistant to tagging:
+\begin{description}
+  \item[Tag-based recognition] Once a relay has removed its layer, the cell belongs to it if the resulting tag matches $N$. This is a 16-byte check instead of the two Recognized bytes plus the four-byte digest.
+  \item[Chaining] The previous cell's tag enters the next cell's processing as a cipher parameter. An altered cell produces an incorrect tag, which in turn makes every following cell impossible to decrypt: the circuit can no longer operate.
+  \item[Key updates] Whenever a hop recognizes or originates a cell, it replaces $K$ and $N$ with new values derived from the preceding ones. The old values are erased, providing cell-level forward secrecy.
+\end{description}
+The cell's command byte (\cella{RELAY} or \cella{RELAY\_EARLY}) is included in the calculations as \emph{associated data}: a relay cannot turn one into the other without making the cell impossible to decrypt.
+
+\begin{attenzione}[Directions Are Not Interchangeable]
+The construction underlying CGO is non-malleable in one direction and malleable in the other. The proposal carefully chooses which direction to use in the client and which in relays, and explicitly warns implementers not to reverse them. This illustrates how a choice that appears to be an implementation detail can undermine the security of an entire cryptographic scheme.
+\end{attenzione}
+
+\subsection{CGO in Practice}
+
+\begin{itemize}
+  \item \textbf{Keys}: from the stream produced by the handshake, each direction receives a 64-byte $K$ and a 16-byte $N$, rather than Df, Db, Kf, and Kb.
+  \item \textbf{SENDME}: authenticated flow control from \proposta{289} used the running digest to prove receipt of data. CGO no longer has that digest, so a SENDME instead carries the tag of the last acknowledged cell (\cref{cap:11-stream}).
+  \item \textbf{Negotiation}: a client uses CGO with a relay only if the relay advertises subprotocol \texttt{Relay=6} and the client requests it in the ntor-v3 handshake (\cref{sec:ntor3}). In \cref{cap:09-circuiti}, we saw that the relay rejects the request unless it is accompanied by a congestion-control request.
+  \item \textbf{Deployment}: tor supports CGO beginning with the 0.4.9 series, and Arti has always enabled it. A circuit can contain hops using CGO alongside hops still using tor1: the choice is made independently for each hop.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: A Three-Hop Circuit}\label{sec:lab-cifratura}
+
+\begin{laboratorio}[4]{Layered Encryption and Circuit Extension}
+\textbf{Objective.} Write \file{labs/en/code/torlab/encryption.py}, implementing the client side of tor1, and use it to extend a real circuit all the way to an exit.\\
+\textbf{Prerequisites.} Laboratories~1--3; the running laboratory network.\\
+\textbf{Estimated time.} 3 hours.
+\end{laboratorio}
+
+\paragraph{Step 1: One Direction of One Hop.} At the heart of the laboratory is a small class combining an AES-CTR cipher and the SHA-1 digest for one direction:
+\begin{lstlisting}[language=Python]
+class Direction:
+    @classmethod
+    def new(cls, key, digest_seed):
+        d = hashlib.sha1(); d.update(digest_seed)
+        return cls(_aes_ctr(key), d)
+
+    def apply(self, data):             # encrypt or decrypt: CTR uses the same operation
+        return self.cipher.update(data)
+
+    def sign(self, body):                 # write the Digest field
+        self.digest.update(_without_digest(body))
+        return body[:5] + self.digest.digest()[:4] + body[9:]
+
+    def recognizes(self, body):
+        if body[1:3] != b"\x00\x00":
+            return False
+        trial = self.digest.copy()
+        trial.update(_without_digest(body))
+        if trial.digest()[:4] != body[5:9]:
+            return False                 # false positive: state unchanged
+        self.digest = trial
+        return True
+\end{lstlisting}
+The cipher object from \texttt{cryptography} preserves the counter across calls: that is exactly the behavior required here.
+
+\paragraph{Step 2: The Client.} With one \texttt{Direction} object per direction and per hop, encryption and decryption each become a loop:
+\begin{lstlisting}[language=Python]
+def encrypt(self, msg, destination):
+    body = self.hops[destination].forward.sign(encode_relay(msg))
+    for i in range(destination, -1, -1):
+        body = self.hops[i].forward.apply(body)
+    return body
+
+def decrypt(self, body):
+    for i, hop in enumerate(self.hops):
+        body = hop.backward.apply(body)
+        if hop.backward.recognizes(body):
+            return i, decode_relay(body)
+    raise CellError("cell not recognized")
+\end{lstlisting}
+
+\paragraph{Step 3: In-Memory Tests and Their Limitations.} The \file{labs/en/code/torlab/test/test\_encryption.py} file builds a simulated circuit of three relays. It verifies that each hop recognizes only its own cells, that intermediate relays see only pseudorandom bytes, and that a modification is detected at the destination; it also demonstrates the malleability of AES-CTR. However, these tests have an important limitation: the simulated client and relays use \emph{the same code}. If, for example, we used the wrong order to update the digest, both sides would make the same mistake and the tests would still pass. The definitive test is to communicate with an independent implementation.
+
+\paragraph{Step 4: Extend a Real Circuit.} We establish the first hop using ntor-v3 to \texttt{test003r}, as in Laboratory~3, then extend to \texttt{test004r} and exit \texttt{test006e}. The \file{labs/en/code/torlab/laboratory.py} module reads the relays' identities and ntor keys from the laboratory network's files:
+\begin{lstlisting}[language=Python]
+for r, est in ((middle, []), (exit_, [(1, b"")])):
+    st, hd = ntor3_client_start(r.id_ed, r.ntor, encode_extensions(est))
+    body = extend2_body("127.0.0.1", r.port, r.id_rsa, r.id_ed,
+                          HTYPE_NTOR_V3, hd)
+    msg = RelayMessage(RelayCommand.EXTEND2, 0, body)
+    c.send(Cell(CIRC, CellCommand.RELAY_EARLY, circ.crypto.encrypt(msg)))
+    i, response = circ.crypto.decrypt(c.receive().body)
+    sm, k = ntor3_client_finish(st, hdata_created2(response.data))
+    circ.hops.append(Hop.from_keys(CircuitKeys.from_stream(k)))
+\end{lstlisting}
+The \texttt{EXTEND2} message has StreamID zero (it is a control message) and travels in a \cella{RELAY\_EARLY} cell. We also request congestion control for the exit, just as tor does. The run produces:
+\begin{lstlisting}[numbers=none]
+hop 1: 003r
+  <- CircID=0x80000100 RELAY body=509 bytes
+  from hop 1 EXTENDED2 67 bytes
+hop 2: 004r  relay extensions: []
+  <- CircID=0x80000100 RELAY body=509 bytes
+  from hop 2 EXTENDED2 70 bytes
+hop 3: 006e  relay extensions: [(2, b'\x1f')]
+\end{lstlisting}
+The circuit now has three hops. Every \enquote{from hop} line proves that our code encrypted correctly for the intended relay and that the relay encrypted correctly for us. A single incorrect key, digest byte, or layer order would have caused the relay to destroy the circuit. The \texttt{EXTENDED2} lengths agree with \cref{sec:ntor3}: two bytes for HLEN, 32 for $Y$, 32 for $\mathit{AUTH}$, and the $SM$ message, which is one byte (no extensions) for the middle and four bytes (one single-byte extension) for the exit.
+
+\paragraph{Step 5: Padding at Last.} We continue listening on the channel after extending the circuit:
+\begin{lstlisting}[numbers=none]
+  4.1 s  <- CircID=0x00000000 PADDING body=509 bytes
+  7.1 s  <- CircID=0x00000000 PADDING body=509 bytes
+ 12.8 s  <- CircID=0x00000000 PADDING body=509 bytes
+ 21.5 s  <- CircID=0x00000000 PADDING body=509 bytes
+ 28.3 s  <- CircID=0x00000000 PADDING body=509 bytes
+\end{lstlisting}
+This is what we predicted in chapters \ref{cap:07-canali} and~\ref{cap:09-circuiti}: now that a multi-hop circuit passes through the channel, the guard considers it \enquote{in use} and sends \cella{PADDING} cells at random intervals whenever the channel is idle. The intervals observed, between three and 8.7 seconds, fall within the specification's 1.5--9.5-second padding window.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item In tor1, each hop has an AES-128-CTR stream and a running SHA-1 digest for each direction, both maintaining state for the lifetime of the circuit.
+  \item In the forward direction, the client applies layers from the last hop to the first and each relay removes one. In the backward direction, each relay adds a layer and the client removes them all.
+  \item The client can address any hop (\emph{leaky pipe}).
+  \item A cell is recognized when Recognized is zero and the running digest matches; a Recognized false positive must not change the digest state.
+  \item AES-CTR is malleable and integrity is checked only at the destination: this enables tagging.
+  \item CGO makes cells non-malleable, chains their tags, updates keys after every message, and authenticates with 128 bits; it is negotiated separately with each hop using ntor-v3.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:10-ordine}
+A client with a three-hop circuit wants to send a message to the second hop. Which keys does it use to encrypt, and in what order? What does the third hop see?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:10-contatore}
+After the client has sent 1,000 cells along the circuit, where is the first hop in its AES-CTR keystream? Why must the same key not be reused for a second circuit?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-falso}
+Explain what would happen if a relay updated its running digest even when Recognized was zero but the digest did not match. After how many cells, on average, would the problem occur?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-tag}
+A cooperating guard wants to mark a forward cell so that a cooperating exit can recognize it. Which cell bytes would be suitable to modify, given the structure of a plaintext \texttt{DATA} message? What would an honest exit see?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-cgo-tag}
+Repeat the preceding exercise's scenario using CGO. What does the cooperating exit see? What happens to subsequent cells in the circuit?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-padding}
+In Laboratory Step 5, calculate the intervals between the observed \cella{PADDING} cells. According to the specification, the delay is drawn from the distribution of the maximum of two uniform random variables. What is the expected delay over the interval from 1.5 to 9.5 seconds? Is it consistent with the observations?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:10-drop}
+Extend the laboratory by sending a \texttt{DROP} message (relay command 10, long-range padding) to the second hop. Does the relay reply? How can you verify that it recognized the message and did not destroy the circuit?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:10-alterazione}
+In the laboratory, deliberately flip one bit of an encrypted \cella{RELAY\_EARLY} cell containing \texttt{EXTEND2}. Which relay notices, and how does it react? Predict the result, then verify it.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification}, the \enquote{Relay cells} and \enquote{Routing relay cells} chapters~\cite{torspec}.
+  \item Proposal 359, \titolo{Counter Galois Onion, Updated}, with references to the papers by Degabriele, Melloni, Münch, and Stam.
+  \item Proposals 202, 261, 295, and 308: the long history of approaches to preventing tagging.
+  \item R.~Dingledine, N.~Mathewson, P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}, Section 4 (circuits, leaky pipes, and integrity checks).
+\end{itemize}

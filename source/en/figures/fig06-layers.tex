@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% English EPUB alternative description.
+\altfig{Simplified diagram of six levels, top to bottom: HTTP application over streams; stream commands BEGIN, DATA, END, SENDME (Ch. 11); layered-encrypted RELAY messages (Ch. 10); circuit control with CREATE2 and DESTROY as cell commands, but EXTEND2 as a RELAY message (Ch. 9); 514-byte fixed-length cells on link protocol v4 or later, alongside variable-length cells (Ch. 8); and TLS over TCP with CERTS and NETINFO (Ch. 7). These are functional layers, not a strict taxonomy of cell types.}
+% Tor's protocol layers.
+\begin{tikzpicture}[font=\sffamily\small,
+  liv/.style={draw,rounded corners=2pt,minimum width=7cm,minimum height=0.8cm,align=center},
+  rifcap/.style={font=\sffamily\scriptsize,text=torgrigio,anchor=west}]
+  \node[liv,fill=torverde!20] (a) at (0,4) {Application (HTTP, \ldots) over streams};
+  \node[liv,fill=torverde!10] (s) at (0,3) {Stream: BEGIN, DATA, END, SENDME};
+  \node[liv,fill=torviola!20] (r) at (0,2) {Layered-encrypted relay messages};
+  \node[liv,fill=torviola!10] (c) at (0,1) {Circuits: CREATE2, EXTEND2, DESTROY};
+  \node[liv,fill=torgrigio!15] (l) at (0,0) {Fixed cells: 514 bytes (v4+)};
+  \node[liv,fill=torgrigio!5] (t) at (0,-1) {Channel: TLS over TCP, CERTS, NETINFO};
+  \node[rifcap] at (3.7,3) {Chapter 11};
+  \node[rifcap] at (3.7,2) {Chapter 10};
+  \node[rifcap] at (3.7,1) {Chapter 9};
+  \node[rifcap] at (3.7,0) {Chapter 8};
+  \node[rifcap] at (3.7,-1) {Chapter 7};
+\end{tikzpicture}

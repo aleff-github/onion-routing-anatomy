@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 无障碍替代文本。
+\altfig{可插拔传输架构简图：tor 通过客户端 PT 提供的本地 SOCKS 代理转发连接，PT 转换流量。网桥上的服务端 PT 逆向转换后，通过 ORPort 或在配置时通过 Extended ORPort 将连接交给 tor。图中未画出 Snowflake 的志愿者中继代理。审查者在所监测链路上看到转换后的流量，但仍可能识别它。例如：obfs4 看起来像随机字节，Snowflake 使用 WebRTC，WebTunnel 看起来像 HTTPS。}
+% 可插拔传输架构（pt-spec）
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  proc/.style={draw,rounded corners=2pt,align=center,minimum height=0.8cm,minimum width=1.7cm},
+  mac/.style={draw=torgrigio,dashed,rounded corners=4pt,inner sep=6pt}]
+  \node[proc,fill=torviola!12] (tc) at (0,0) {tor\\（客户端）};
+  \node[proc,fill=torverde!15] (pc) at (2.6,0) {客户端 PT};
+  \node[proc,fill=torverde!15] (ps) at (8.2,0) {服务器 PT};
+  \node[proc,fill=torviola!12] (tb) at (10.8,0) {tor\\（网桥）};
+  \node[mac,fit=(tc)(pc),label={[font=\sffamily\scriptsize]above:用户电脑}] {};
+  \node[mac,fit=(ps)(tb),label={[font=\sffamily\scriptsize]above:网桥}] {};
+  \draw[->] (tc) -- node[above,font=\sffamily\tiny] {SOCKS} (pc);
+  \draw[->] (ps) -- node[above,align=center,font=\sffamily\tiny] {ORPort /\\Extended ORPort} (tb);
+  \draw[->,thick,decorate,decoration={snake,amplitude=1.2pt,segment length=6pt}] (pc) -- node[above] {转换后的流量} (ps);
+  \node[server,minimum width=1.4cm,fill=avviso!10,draw=avviso] (cen) at (5.4,-1.5) {审查者};
+  \draw[dotted,avviso] (cen) -- (5.4,-0.15);
+  \node[text=torgrigio,align=center] at (5.4,-2.3) {随机字节流（obfs4）、\\WebRTC（Snowflake）、HTTPS（WebTunnel）};
+  \node[text=torgrigio,font=\sffamily\tiny,align=center,text width=10.5cm] at (5.4,-3.05) {示意图：未画出 Snowflake 的志愿者中继代理};
+\end{tikzpicture}

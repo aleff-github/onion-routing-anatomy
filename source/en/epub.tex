@@ -1,0 +1,51 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% English edition: EPUB entry point.
+\documentclass[11pt]{book}
+\input{preamble}
+\input{macros}
+\input{rights}
+\AtBeginDocument{\renewcommand{\guillemotleft}{«}\renewcommand{\guillemotright}{»}}
+\makeatletter
+\@ifundefined{Configure}{}{\renewcommand{\altfig}[1]{\Configure{Picture-alt}{#1}}}
+\makeatother
+
+% EPUB only (tex4ht). Identifier fixed across builds, cover declared in the OPF, figures
+% and long strings kept within narrow screens, rights and accessibility metadata limited
+% to what the book really offers (the build passes daisy-). \mathit becomes \textit:
+% tex4ht turns the italic correction of math italics into a space ("KEY _SEED").
+\makeatletter
+\@ifundefined{Configure}{}{\AtBeginDocument{%
+  \renewcommand{\mathit}[1]{\textit{#1}}%
+  \Configure{UniqueIdentifier}{urn:uuid:66d8f82b-16a3-4c33-b477-cd6e40ab19b5}%
+  \Configure{CoverMimeType}{image/jpeg}%
+  \CoverMetadata{epub-cover.jpg}%
+  \Css{img{max-width:100\%;height:auto;}}%
+  \Css{p,li,dd,td,pre,code{overflow-wrap:anywhere;}}%
+  \Configure{OpfMetadata}{\HCode{<dc:publisher>Alessandro Greco</dc:publisher>}}%
+  \Configure{OpfMetadata}{\HCode{<dc:rights>Copyright 2026 Alessandro Greco. GNU General Public License v3.0 or later (GPL-3.0-or-later). Sources: https://github.com/aleff-github/onion-routing-anatomy</dc:rights>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessMode">textual</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessMode">visual</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">alternativeText</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">tableOfContents</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">readingOrder</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityHazard">none</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilitySummary">Text structured in chapters with a navigable table of contents; figures and formulas are SVG images with alternative text. No WCAG conformance check has been carried out.</meta>}}%
+}}
+\makeatother
+
+\title{Anatomy of Tor: The Anonymity Protocol, Byte by Byte}
+\author{Alessandro Greco}
+\date{}
+\begin{document}
+\frontmatter
+\maketitle
+\Colophon
+\tableofcontents
+\include{chapters/00-preface}
+
+\mainmatter
+\input{structure}
+\backmatter
+\printbibliography[heading=bibintoc,title={Bibliography}]
+\end{document}

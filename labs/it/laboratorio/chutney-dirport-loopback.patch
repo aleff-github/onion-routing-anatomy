@@ -1,0 +1,20 @@
+Chutney 6cc1588 scrive «DirPort <porta>» senza indirizzo: tor ascolta su 0.0.0.0 e, con
+docker --network host, il servizio directory della rete di prova è raggiungibile da tutte
+le interfacce dell'host. Con questa riga il DirPort usa lo stesso indirizzo dell'OrPort
+(127.0.0.1). Una correzione solo di configurazione non è possibile: Chutney scarta le righe
+aggiuntive che non iniziano con un'opzione di tor (quindi «/DirPort»), e DirListenAddress è
+obsoleta in tor 0.4.9. Applicata da Dockerfile con git apply dopo il controllo del commit.
+
+diff --git a/lib/chutney/tor/torrc.py b/lib/chutney/tor/torrc.py
+index cdd7782..6e1e738 100644
+--- a/lib/chutney/tor/torrc.py
++++ b/lib/chutney/tor/torrc.py
+@@ -173,7 +173,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
+         res += f" {addr_and_port_str(auth.ipv4, auth.dirport)} {auth.fingerprint}\n"
+     if n._config.relay:
+         res += textwrap.dedent(f"""
+-            DirPort {n.dirport.unwrap_or(0)}
++            DirPort {addr_and_port_str(ip, n.dirport.unwrap()) if n.dirport.is_some() else 0}
+             ExitRelay {int(n._config.exit)}
+             """)
+         if n._config.exit:

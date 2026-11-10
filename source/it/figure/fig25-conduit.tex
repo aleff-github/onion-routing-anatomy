@@ -1,0 +1,19 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Il confronto con l'art. 4 DSA non equivale a una qualifica giuridica automatica. Il client richiede il flusso con RELAY\_BEGIN e indica la destinazione; l'exit apre il TCP, applica la policy e trasmette i byte applicativi estratti da RELAY\_DATA, non le celle originali.}
+% Le tre condizioni del semplice trasporto e il comportamento di un exit
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.35cm,
+  cond/.style={draw,rounded corners=2pt,text width=4.2cm,align=left,minimum height=0.8cm},
+  tor/.style={draw=torviola,fill=torviola!8,rounded corners=2pt,text width=5.4cm,align=left,minimum height=0.8cm}]
+  \node[cond] (a) {a) non dà origine alla trasmissione};
+  \node[cond,below=of a] (b) {b) non seleziona il destinatario};
+  \node[cond,below=of b] (c) {c) non seleziona né modifica le informazioni};
+  \node[tor,right=1.2cm of a] (ta) {il client invia \texttt{RELAY\_BEGIN}; l'exit apre TCP};
+  \node[tor,right=1.2cm of b] (tb) {destinazione del client; policy può rifiutare};
+  \node[tor,right=1.2cm of c] (tc) {byte da \texttt{RELAY\_DATA} al flusso TCP};
+  \foreach \x in {a,b,c} \draw[<->,torgrigio] (\x) -- (t\x);
+  \node[above=4pt of a,font=\sffamily\small] {Regolamento (UE) 2022/2065, art.~4};
+  \node[above=4pt of ta,font=\sffamily\small] {un exit Tor};
+  \node[font=\sffamily\tiny,text=torgrigio,align=center,below=0.5cm of c,xshift=3.3cm] {Esenzione: valutazione caso per caso};
+\end{tikzpicture}

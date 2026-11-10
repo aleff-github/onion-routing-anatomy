@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Controlli rapidi sui README. Non crea tag, release o Pages.
+name: QA README e navigazione
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "README.it.md"
+      - "scripts/generate_readme_it.py"
+      - "scripts/check_markdown_links.py"
+      - "scripts/check_public_copy.py"
+      - "book/README.md"
+      - "labs/README.md"
+      - "CHANGELOG.md"
+      - "AI_DISCLOSURE.md"
+      - "docs/translation-review.md"
+      - "docs/translations/**"
+      - "website/i18n/**"
+      - "assets/anteprime/**"
+      - "scripts/render_readme_previews.py"
+      - ".github/workflows/readme-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  documentazione:
+    name: README bilingue e link locali
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Allineamento fra README principale e italiano
+        run: python3 scripts/generate_readme_it.py --check
+      - name: Collegamenti e ancore Markdown
+        run: python3 scripts/check_markdown_links.py
+      - name: Testi rivolti ai lettori senza messaggi interni
+        run: python3 scripts/check_public_copy.py
+      - name: Provenienza, pagine e checksum delle anteprime
+        run: python3 scripts/render_readme_previews.py --check

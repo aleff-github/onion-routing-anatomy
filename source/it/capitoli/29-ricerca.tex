@@ -1,0 +1,138 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{La ricerca accademica su Tor}\label{cap:29-ricerca}
+\aggiornatoal{23 settembre 2026}{articoli citati nel capitolo; portale di ricerca del Tor Project; consenso del 23 settembre 2026}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item orientarti tra i luoghi in cui si pubblica la ricerca su Tor e le risorse che il Tor Project mette a disposizione;
+  \item misurare l'anonimato con strumenti quantitativi, dall'entropia al tempo alla prima compromissione;
+  \item scegliere il metodo sperimentale adatto a una domanda: analisi, simulazione, emulazione, misura;
+  \item simulare per mesi il comportamento di migliaia di client sul consenso reale (Laboratorio~19).
+\end{itemize}
+\end{obiettivi}
+
+Tor è, fin dall'inizio, un progetto nato dalla ricerca: l'onion routing viene da un laboratorio scientifico (\cref{cap:03-nascita-tor}), il progetto di Tor è stato presentato a una conferenza accademica~\cite{dingledine2004tor}, e molte delle scelte che abbiamo studiato, dai guard al controllo della congestione, sono risposte ad articoli scientifici. Questo capitolo guarda la ricerca dal punto di vista di chi vuole farla: dove si pubblica, come si misura l'anonimato, con quali strumenti si sperimenta e con quali regole.
+
+% ---------------------------------------------------------------------------
+\section{Dove si fa ricerca su Tor}\label{sec:ric-dove}
+
+La ricerca sulle reti di anonimato si pubblica soprattutto in due tipi di sedi:
+\begin{description}
+  \item[Il Privacy Enhancing Technologies Symposium (PETS)] con la sua rivista \emph{Proceedings on Privacy Enhancing Technologies} (PoPETs): la sede specializzata della comunità: il lavoro sulla misura dell'anonimato che vedremo tra poco fu presentato nel 2002 al predecessore workshop PET, prima dell'attuale rivista PoPETs~\cite{diaz2002measuring}.
+  \item[Le grandi conferenze di sicurezza] USENIX Security, ACM CCS, IEEE Symposium on Security and Privacy, NDSS: vi sono apparsi quasi tutti gli articoli del \cref{cap:26-attacchi}.
+\end{description}
+La \emph{Anonymity Bibliography} di Free Haven raccoglie da oltre vent'anni gli articoli del settore, ed è il punto di partenza di ogni ricerca bibliografica.
+
+Il Tor Project, dal canto suo, mantiene un portale per i ricercatori con dati, strumenti, rapporti tecnici, idee di ricerca e il Research Safety Board. Il portale insiste su un punto che ogni ricercatore dovrebbe prendere sul serio: il protocollo e la rete cambiano continuamente, e misurare qualcosa senza capire che cosa succede dietro le quinte porta a conclusioni sbagliate. Per questo chiede ai ricercatori di contattare il progetto il prima possibile, per sapere quali altri esperimenti sono in corso e quali cambiamenti sono previsti.
+
+% ---------------------------------------------------------------------------
+\section{Misurare l'anonimato}\label{sec:ric-metriche}
+
+Nel \cref{cap:01-anonimato} abbiamo definito l'anonimato come l'essere indistinguibili in un insieme. Ma non tutti i membri dell'insieme sono uguali agli occhi di un avversario: dopo un'osservazione, alcuni possono essere molto più probabili di altri. La dimensione dell'insieme non basta.
+
+\paragraph{Il grado di anonimato.} Nel 2002 Díaz e coautori proposero di misurare l'anonimato con l'entropia della distribuzione di probabilità che l'avversario assegna ai possibili mittenti~\cite{diaz2002measuring}. Se $p_i$ è la probabilità che l'avversario attribuisce all'utente $i$ di essere il mittente, l'entropia è
+\[ H(X) = -\sum_{i=1}^{N} p_i \log_2 p_i, \]
+e il suo massimo, $H_M = \log_2 N$, si ha quando tutti gli $N$ utenti sono ugualmente probabili. Il \textbf{grado di anonimato} è il rapporto
+\[ d = \frac{H(X)}{H_M}, \qquad 0 \le d \le 1: \]
+per $N\ge 2$, vale 1 se la distribuzione a posteriori è uniforme (non necessariamente se l'avversario non ha imparato nulla) e 0 quando un solo mittente ha probabilità 1. Per $N=1$ il rapporto è indefinito, perché $H_M=0$.
+
+Un modo intuitivo di leggere l'entropia è $2^{H(X)}$: il numero di utenti ugualmente probabili che darebbe la stessa incertezza. Un insieme di 1000 utenti in cui l'avversario ha ristretto i sospetti a due, con probabilità 0,5 ciascuno, vale quanto un insieme di due: $H = 1$ bit.
+
+\paragraph{Il limite delle misure istantanee.} L'entropia descrive una singola osservazione. Ma, come abbiamo visto nella \cref{sec:att-correlazione}, per Tor il rischio si accumula nel tempo: ogni circuito è una nuova occasione per l'avversario. Johnson e coautori hanno quindi proposto misure \emph{nel tempo}, come la probabilità di essere deanonimizzati almeno una volta entro un certo periodo, o il tempo mediano alla prima compromissione, calcolate simulando il comportamento degli utenti su dati reali della rete~\cite{johnson2013users}. È ciò che faremo nel laboratorio.
+
+% ---------------------------------------------------------------------------
+\section{Quattro metodi}\label{sec:ric-metodi}
+
+\begin{description}
+  \item[Analisi] Un modello matematico, come quello del grado di anonimato o quello della \cref{sec:att-sybil} per gli attacchi Sybil. È rapida e generale, ma dipende dalle ipotesi, e il sistema reale ne viola sempre qualcuna.
+  \item[Simulazione del comportamento] Si riproduce in modo semplificato una parte del sistema, per esempio la scelta dei percorsi, con dati reali. È il metodo di TorPS, il simulatore di percorsi di Johnson e coautori~\cite{johnson2013users}, e del nostro Laboratorio~19: veloce, ma cieco a tutto ciò che il modello non include.
+  \item[Emulazione e simulazione della rete] Si eseguono i programmi veri: in una rete privata, come quella di Chutney usata in tutto il libro, o in un simulatore a eventi discreti come Shadow~\cite{jansen2012shadow}, che permette di far girare migliaia di relay e client su una sola macchina, con un tempo virtuale (\cref{sec:rp-shadow}). È il metodo tipico per le prestazioni, perché permette di provare una modifica del protocollo su una rete realistica prima di distribuirla.
+  \item[Misura della rete reale] Solo così si sa che cosa succede davvero, ma è anche il metodo più rischioso per gli utenti, e va progettato con cura (\cref{sec:ric-sicurezza}).
+\end{description}
+Una buona ricerca combina spesso più metodi: un'analisi che suggerisce un'ipotesi, una simulazione che la verifica su larga scala, una misura sulla rete reale che ne controlla il realismo.
+
+\begin{approfondimento}[Misurare senza vedere]
+PrivCount, di Jansen e Johnson, mostra come conciliare misura e privacy~\cite{jansen2016privcount}. I relay che partecipano contano gli eventi di interesse, ma ogni contatore è mascherato con valori casuali condivisi con altri partecipanti e con del rumore aggiunto secondo i principi della \emph{privacy differenziale}; solo la somma finale, a fine periodo, è visibile, e anche quella con un rumore che impedisce di dedurre il comportamento di un singolo utente. Con questo sistema gli autori stimarono, su una media di intervalli di dieci minuti misurati nel 2016, circa 710\,000 indirizzi IP distinti di client che si collegavano alla rete, dei quali circa 550\,000 classificati come attivi; non si tratta né di un conteggio esatto di persone né di connessioni simultanee in un singolo istante. Il traffico associato alle porte web costituiva il 91\% dei byte di dati rilevati dagli exit partecipanti. Queste stime descrivono lo studio del 2016, non la rete attuale. È la stessa filosofia degli arrotondamenti delle statistiche dei relay (\cref{sec:metrics-utenti}), portata alle sue conseguenze.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: tempo alla prima compromissione}\label{sec:lab-ricerca}
+
+\begin{laboratorio}[19]{Mesi di circuiti in una simulazione}
+\textbf{Obiettivo.} Stimare, sul consenso reale, quanti client un avversario con una data quota di banda riesce a deanonimizzare nel tempo, con e senza guard persistenti.\\
+\textbf{Prerequisiti.} Laboratori~7 e~15; nessuna rete necessaria.\\
+\textbf{Tempo stimato.} 1--2 ore.
+\end{laboratorio}
+
+Il modulo \file{labs/it/codice/torlab/simulazione.py} riusa i pesi del Laboratorio~7. L'avversario aggiunge alla rete un guard e un exit che valgono ciascuno una quota $q$ della banda pesata della propria posizione. Simuliamo 2000 client per 180 giorni. Ogni giorno ogni client costruisce 20 circuiti. Il modello sostituisce un guard persistente secondo una cadenza approssimata per un guard \emph{confermato}:  nel guard-spec e nel codice (\file{entrynodes.c}) un guard confermato è rimosso dal campione \texttt{GUARD\_CONFIRMED\_MIN\_LIFETIME} (60 giorni) dopo la conferma, con \texttt{CONFIRMED\_ON\_DATE} retrodatato fino a \texttt{GUARD\_LIFETIME}/10 (12 giorni), per una cadenza simulata tra 48 e 60 giorni dall'inizializzazione. Il valore \texttt{GUARD\_LIFETIME} (120 giorni) governa invece la scadenza dei guard non confermati nel campione. Nella rete reale, campione e lista dei guard confermati, raggiungibilità e sostituzioni rendono la rotazione più complessa: l'esempio non riproduce l'intero algoritmo. Una versione preliminare che applicava 120 giorni anche ai guard confermati sottostimava il rischio in questo modello. Per confronto, simuliamo anche client che scelgono un guard nuovo per ogni circuito. Un client è compromesso il primo giorno in cui un suo circuito ha guard ed exit dell'avversario.
+
+Il modello è volutamente semplice: ignora il relay intermedio, le famiglie, le reti /16, i guard di riserva e i fallimenti. Per restare veloce, non estrae i relay con \texttt{random.choices}, che ricalcolerebbe ogni volta i pesi di migliaia di relay, ma con una ricerca binaria sui pesi cumulati: milioni di estrazioni sono possibili senza ricalcolare ogni volta l'intera distribuzione; il tempo effettivo dipende dalla macchina.
+
+Il consenso pubblico non è incluso nel repository: si scarica una volta sola con \texttt{make -C labs/it data}, che lo salva in \file{labs/it/dati/collector/} controllandone l'intestazione, non le firme. La simulazione è deterministica: a parità di modello, consenso, quota e seme, il risultato è sempre questo.
+\begin{lstlisting}[language=bash,numbers=none]
+$ PYTHONPATH=labs/it/codice python3 -m torlab.simulazione labs/it/dati/collector/consensus-microdesc-2026-09-23-15 0.05
+avversario: 5% della banda di guard e 5% della banda di exit; 2000 client, ...
+guard persistente    1g: 2.7%  7g: 4.5%  30g:  4.5%  90g:  9.3%  180g:  18.2%  mediana: None
+guard per circuito   1g: 5.3%  7g: 29.2% 30g: 77.1%  90g: 99.1%  180g: 100.0%  mediana: 14
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig29-compromissione}
+\caption{Laboratorio~19, simulazione semplificata: 2\,000 client, 20 circuiti al giorno per 180 giorni, sulla fotografia del consenso del 23 settembre 2026; avversario con il 5\% della banda pesata dei guard e il 5\% degli exit. Il grafico mostra la quota cumulativa di client che, nel modello, hanno usato almeno un circuito con entrambi gli estremi ostili. Le rotazioni dei guard persistenti avvengono in tempi diversi per ogni client (intervalli simulati di 48--60 giorni), non in tre giorni comuni a tutti. I dati illustrano il modello, non compromissioni osservate nella rete pubblica.}
+\label{fig:compromissione}
+\end{figure}
+
+La \cref{fig:compromissione} mostra le due curve. Senza guard persistenti, metà dei client è compromessa in due settimane e quasi tutti in tre mesi: ogni circuito è una nuova estrazione, e le occasioni si sommano. Con i guard, invece, il destino di un client si decide quasi tutto al momento della scelta del guard. Circa il 4,5\% dei client, quelli che scelgono il guard ostile, viene compromesso presto; gli altri non possono essere compromessi attraverso questa specifica condizione del modello finché il guard non ruota, e durante le rotazioni individuali distribuite nel tempo (ogni 48--60 giorni circa per client, secondo il modello) nuove estrazioni aggiungono altri client, portando la frazione al 18\% a sei mesi. Con una quota dell'1\% si scende a circa il 4\% a sei mesi, contro il 32\% senza guard.
+
+L'esempio illustra, su una singola istantanea storica della rete, il ruolo dei guard persistenti: nel modello non riducono necessariamente il rischio marginale per circuito, ma modificano la distribuzione dell'esposizione fra i client. Per quelli con un guard onesto il rischio di questa specifica compromissione è nullo finché quel guard viene mantenuto; per chi ne sceglie uno ostile è elevato. È anche il motivo per cui la durata dei guard è un compromesso: una rotazione più lenta allunga la protezione di chi ha un guard onesto, ma prolunga l'esposizione di chi lo ha ostile. E un avversario paziente, che resti nella rete per mesi, vede arrivare nuovi client a ogni rotazione.
+
+% ---------------------------------------------------------------------------
+\section{Fare ricerca in modo sicuro}\label{sec:ric-sicurezza}
+
+Il \cref{cap:25-legale} ha presentato le linee guida del Tor Research Safety Board~\cite{trsb}; qui aggiungiamo il punto di vista di chi progetta un esperimento. Una domanda utile da porsi, prima ancora di scegliere il metodo, è: \emph{la mia domanda richiede davvero la rete reale?} Molte domande sulle prestazioni o sugli attacchi trovano risposta in Shadow o in una rete privata, con il vantaggio di poter ripetere l'esperimento e di controllare ogni variabile. Quando la rete reale serve, i principi sono quelli già visti: agire solo sul proprio traffico, raccogliere il minimo, aggregare prima di pubblicare, confrontarsi con il Board e con il Tor Project prima di iniziare.
+
+La storia recente offre esempi in entrambe le direzioni. Il \cref{cap:27-casi-rete} ha raccontato un esperimento, o un attacco, condotto sugli utenti reali con un segnale leggibile dai relay riceventi; un osservatore esterno avrebbe dovuto prima decifrare le connessioni TLS fra i nodi. PrivCount mostra invece che si può misurare la rete in profondità senza esporre nessuno. La differenza non sta negli strumenti, ma nel progetto dell'esperimento.
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item La ricerca su Tor si pubblica a PETS e nelle grandi conferenze di sicurezza; il Tor Project offre dati, strumenti e un Research Safety Board.
+  \item L'entropia misura l'anonimato di una singola osservazione; il grado di anonimato la normalizza tra 0 e 1. Nel tempo servono misure come la probabilità di compromissione entro un periodo.
+  \item Analisi, simulazione del comportamento, emulazione o simulazione della rete e misura reale rispondono a domande diverse, con rischi diversi.
+  \item Sul consenso reale, i guard persistenti riducono drasticamente la frazione di client compromessi nel tempo, concentrando il rischio su pochi.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:29-entropia}
+Un avversario osserva un sistema con quattro utenti e assegna probabilità $1/2$, $1/4$, $1/8$, $1/8$. Calcola l'entropia, il grado di anonimato e il numero equivalente di utenti ugualmente probabili.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:29-metodo}
+Per ciascuna domanda, scegli il metodo più adatto e giustifica la scelta: (a) quanto aumenta la latenza se i circuiti diventano di quattro salti? (b) quanti utenti usano Tor da un certo paese? (c) un nuovo algoritmo di scelta dei guard riduce il tempo alla prima compromissione?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:29-durata}
+Chiama \texttt{simula} del Laboratorio~19 con \texttt{vita\_guard} pari a 30 e a 180 giorni (invece dei 60 predefiniti), e confronta la frazione di client compromessi a 180 giorni. Come si spiega il risultato?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:29-asimmetria}
+Ripeti il Laboratorio~19 con un avversario che ha il 10\% della banda di exit e nessun guard, e con uno che ha il 10\% della banda di guard e nessun exit. Che cosa ottiene ciascuno, e perché?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:29-torps}
+Estendi il simulatore con tre elementi che il modello ignora: i circuiti che un client riusa per dieci minuti invece di costruirne di nuovi, il vincolo sulle reti /16 tra guard ed exit, e un avversario che controlla l'intero sistema autonomo di una grande rete. Quali cambiano di più il risultato?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item C.~Díaz, S.~Seys, J.~Claessens, B.~Preneel, \titolo{Towards Measuring Anonymity}~\cite{diaz2002measuring}.
+  \item R.~Jansen, A.~Johnson, \titolo{Safely Measuring Tor}~\cite{jansen2016privcount}.
+  \item Il portale di ricerca del Tor Project, \url{https://research.torproject.org/}.
+  \item La \emph{Anonymity Bibliography}, \url{https://www.freehaven.net/anonbib/}.
+\end{itemize}

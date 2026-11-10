@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Schema semplificato in sei livelli, dall'alto: applicazione HTTP su stream; comandi di stream BEGIN, DATA, END, SENDME (capitolo 11); messaggi RELAY con cifratura a strati (capitolo 10); gestione del circuito con CREATE2 e DESTROY come comandi di cella ed EXTEND2 come messaggio RELAY (capitolo 9); celle a lunghezza fissa di 514 byte nei link v4 o successivi, accanto a celle di lunghezza variabile (capitolo 8); canale TLS su TCP con CERTS e NETINFO (capitolo 7). Gli strati indicano funzioni, non una classificazione rigorosa di tipi di cella.}
+% Pila dei livelli del protocollo
+\begin{tikzpicture}[font=\sffamily\small,
+  liv/.style={draw,rounded corners=2pt,minimum width=7cm,minimum height=0.8cm,align=center},
+  rifcap/.style={font=\sffamily\scriptsize,text=torgrigio,anchor=west}]
+  \node[liv,fill=torverde!20] (a) at (0,4) {Applicazione (HTTP, \ldots) su stream};
+  \node[liv,fill=torverde!10] (s) at (0,3) {Stream: BEGIN, DATA, END, SENDME};
+  \node[liv,fill=torviola!20] (r) at (0,2) {Messaggi relay cifrati a strati};
+  \node[liv,fill=torviola!10] (c) at (0,1) {Circuiti: CREATE2, EXTEND2, DESTROY};
+  \node[liv,fill=torgrigio!15] (l) at (0,0) {Celle fisse: 514 byte (v4+)};
+  \node[liv,fill=torgrigio!5] (t) at (0,-1) {Canale: TLS su TCP, CERTS, NETINFO};
+  \node[rifcap] at (3.7,3) {capitolo 11};
+  \node[rifcap] at (3.7,2) {capitolo 10};
+  \node[rifcap] at (3.7,1) {capitolo 9};
+  \node[rifcap] at (3.7,0) {capitolo 8};
+  \node[rifcap] at (3.7,-1) {capitolo 7};
+\end{tikzpicture}

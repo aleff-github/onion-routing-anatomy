@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Onion service rendezvous: the service builds a multi-hop circuit to an introduction point and sends ESTABLISH\_INTRO (1), then uploads a descriptor to HSDir (2). The client fetches it, builds a separate circuit to a rendezvous point and sends ESTABLISH\_RENDEZVOUS with a cookie (3); using a distinct circuit to the introduction point, it sends INTRODUCE1 (4), relayed as INTRODUCE2 over the service's existing introduction circuit. The service reaches the rendezvous point with RENDEZVOUS1 (5), where both circuits are joined and RENDEZVOUS2 is relayed to the client (6). All paths are logical multi-hop paths: there is no direct client–service connection. The introduction point cannot read the encrypted introduction content.}
+% Rendezvous protocol
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  circ/.style={-{Stealth[length=2.5mm]},thick,decorate,decoration={snake,amplitude=.5mm,segment length=4mm,post length=3mm}},
+  msg/.style={font=\ttfamily\scriptsize,fill=white,inner sep=1.5pt,align=center}]
+  \node[client] (c) at (0,0) {Client};
+  \node[client,fill=torverde!15,draw=torverde!60!black] (s) at (11,0) {Onion service};
+  \node[relay,fill=torgrigio!10,draw=torgrigio,font=\sffamily\scriptsize] (h) at (1.2,3.8) {HSDir};
+  \node[relay,fill=torviola!15,draw=torviola,align=center,font=\sffamily\scriptsize] (ip) at (8.2,3.6) {introduction\\point};
+  \node[relay,fill=torverde!25,align=center,font=\sffamily\scriptsize] (rp) at (5.5,-3) {rendezvous\\point};
+  % Service
+  \draw[circ,torverde!60!black] (s) -- node[msg,pos=0.35,right=12pt]{(1) ESTABLISH\_INTRO} (ip);
+  \draw[circ,torverde!60!black] (s.north) to[out=80,in=20,looseness=1.1] node[msg,pos=0.45,above=2pt]{(2) publishes descriptor} (h.north east);
+  % Client
+  \draw[circ,torviola] (c) -- node[msg,pos=0.5,left=4pt]{downloads\\descriptor} (h);
+  \draw[circ,torviola] (c) -- node[msg,pos=0.45,left=6pt]{(3) ESTABLISH\_RENDEZVOUS\\(cookie)} (rp);
+  \draw[circ,torviola] (c.north east) to[out=15,in=210] node[msg,pos=0.5,below=3pt]{(4) INTRODUCE1} (ip.south west);
+  \draw[->,thick,torviola,dashed] (ip.south east) to[out=-30,in=100] node[msg,pos=0.45,left=3pt]{INTRODUCE2} (s.north);
+  \draw[circ,torverde!60!black] (s) -- node[msg,pos=0.45,right=6pt]{(5) RENDEZVOUS1\\(cookie)} (rp);
+  \node[font=\sffamily\scriptsize,align=center,below=3pt of rp] {(6) joins both circuits\\and sends RENDEZVOUS2 to client};
+\end{tikzpicture}

@@ -1,0 +1,26 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Схема ролей сети Tor. Вверху клиент достигает сайта через сторожевой, промежуточный и выходной ретрансляторы. Три значка условно представляют девять органов каталога, которые голосуют за сетевой консенсус и подписывают его. Для обхода цензуры мост может служить первым узлом. Внизу клиент и онион-сервис каждый строят свою цепь к узлу встречи без выходного ретранслятора; пунктирные линии не показывают промежуточные узлы.}
+% Роли в сети Tor.
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  aut/.style={relay,fill=torviola!15,draw=torviola,font=\sffamily\scriptsize},
+  ex/.style={relay,fill=torverde!30}]
+  \node[client] (c) at (0,0) {Клиент};
+  \node[relay] (g) at (2.8,0) {сторожевой};
+  \node[relay] (m) at (5.3,0) {средний};
+  \node[ex] (e) at (7.8,0) {выходной};
+  \node[server] (s) at (10.6,0) {Сайт};
+  \draw[cellaf] (c) -- (g); \draw[cellaf] (g) -- (m); \draw[cellaf] (m) -- (e); \draw[->,thick,torgrigio] (e) -- (s);
+  \foreach \x/\n in {3.8/1,5.3/2,6.8/3} \node[aut] (a\n) at (\x,2.4) {авт.};
+  \node[font=\sffamily\scriptsize,above=1pt of a2] {органы каталога (9): подписанный консенсус};
+  \draw[dotted,thick,torviola] (a2) -- node[font=\sffamily\scriptsize,right]{консенсус} (m);
+  \node[relay,fill=torgrigio!10,draw=torgrigio,font=\sffamily\scriptsize] (b) at (1.4,-2.2) {мост};
+  \node[font=\sffamily\scriptsize,align=center] at (1.4,-3.1) {первый узел вместо\\сторожевого при цензуре};
+  \draw[dashed,torgrigio,->] (c) -- (b);
+  \node[client,fill=torverde!15,draw=torverde!60!black] (o) at (8.8,-2.3) {Онион-сервис};
+  \node[relay,fill=torverde!25,font=\sffamily\scriptsize,align=center] (rp) at (5.3,-2.3) {узел\\встречи};
+  \draw[dashed,torverde!60!black,->] (o) -- node[font=\sffamily\scriptsize,below]{цепь} (rp);
+  \draw[dashed,torverde!60!black,->] (c) to[bend right=18] node[font=\sffamily\scriptsize,above,pos=.68]{цепь клиента} (rp);
+  \node[font=\sffamily\scriptsize,align=center] at (5.3,-3.35) {клиент и сервис встречаются\\без выхода через ретранслятор};
+\end{tikzpicture}

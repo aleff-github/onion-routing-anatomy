@@ -1,0 +1,7 @@
+# Librerie necessarie sull'host per eseguire torlab e la verifica dei laboratori.
+# Python 3.11 o successivo.
+cryptography>=42
+pytest>=8
+
+# stem NON serve sull'host: gli script che lo usano (isolamento.py, correlazione.py,
+# fuga_dns.py) girano dentro il container del laboratorio, che lo include già.

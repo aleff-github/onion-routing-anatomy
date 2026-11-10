@@ -1,0 +1,161 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Tor 所需的核心密码学}\label{cap:05-crittografia}
+\aggiornatoal{2026 年 9 月 23 日}{tor 0.4.9.13；torspec 提交 \texttt{8e1f245}}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 识别 Tor 使用的主要密码学原语，并说明各自承担什么任务；
+  \item 区分加密、完整性保护、密钥派生、密钥交换和数字签名；
+  \item 理解为什么 Tor 同时使用 SHA-1、SHA-2、SHA-3 和 Blake2b 等不同哈希家族，以及它们之间有何差别；
+  \item 更有把握地阅读后续章节中的密码学公式。
+\end{itemize}
+\end{obiettivi}
+
+本章是一套工具箱，而不是一门完整的密码学课程。我们只引入理解第二部分所需的必要理论，并在每一种原语出现时指出它会在哪些协议位置被使用。希望进一步深入的读者可以阅读附录~B。所有示例都可以用 Python 的标准库 \texttt{hashlib} 和 \texttt{cryptography} 库来复现，这也正是实验中使用的工具。
+
+% ---------------------------------------------------------------------------
+\section{五项任务}\label{sec:cripto-compiti}
+
+在 Tor 这样的协议中，密码学承担五类不同任务：
+\begin{description}
+  \item[机密性] 除预期接收者之外，任何人都不应读取数据：使用\emph{密码算法（cipher）}。
+  \item[完整性] 任何人都不应在不被发现的情况下修改数据：使用\emph{哈希函数}和\emph{消息认证码}（MAC）。
+  \item[密钥协商] 两个事先没有共享秘密的参与者，必须在公开通信的条件下建立共同秘密：使用 Diffie--Hellman \emph{密钥交换}。
+  \item[身份认证] 一方必须证明自己确实掌握与某个身份对应的秘密：使用\emph{数字签名}。
+  \item[密钥派生] 从一个共享秘密中生成多把彼此独立的密钥：使用\emph{密钥派生函数}（KDF）。
+\end{description}
+\begin{figure}[htbp]
+\centering
+\input{图/图05-密码学任务}
+\caption{Tor 中的五类密码学任务、承担这些任务的原语，以及本书中会看到它们的章节。}
+\label{fig:compiti}
+\end{figure}
+
+一个可靠的设计原则是：不要让同一把密钥跨任务或跨上下文复用。Tor 对这一原则的遵守也随着协议演进而越来越严格。
+
+% ---------------------------------------------------------------------------
+\section{加密算法}\label{sec:cripto-cifrari}
+
+\subsection{计数器模式下的 AES}
+
+Tor 几乎所有加密都建立在 \textbf{AES} 上。AES 是标准分组密码，分组长度为 16 字节，可使用 128 位或 256 位密钥。分组密码本身一次只能处理一个分组。为了加密任意长度的数据流，Tor 使用\textbf{计数器模式}（CTR）：AES 对一个计数器进行加密，每处理一个分组就把计数器加一；产生的\emph{密钥流}再通过 XOR 与数据结合：
+\[
+C = P \oplus \operatorname{Trunc}_{|P|}\bigl(\mathrm{AES}_K(\mathit{IV}) \,\|\, \mathrm{AES}_K(\mathit{IV}+1) \,\|\, \cdots\bigr)
+\]
+解密执行的是同一运算。计数器模式有两个必须始终牢记的性质：
+\begin{itemize}
+  \item 同一“密钥--计数器”组合\textbf{绝不能重复使用}：如果两条消息用相同密钥流加密，攻击者就能得到两份明文的 XOR；
+  \item 计数器模式具有\textbf{可塑性}：即使不知道密钥，攻击者修改密文中的某一位，也会让明文中的对应位发生可预测变化。
+\end{itemize}
+传统方案中的 relay cell 使用 AES-128-CTR 加密（\cref{sec:tor1}）；它的可塑性也是某些标记攻击得以实现的原因。AES-256-CTR 用于加密 ntor-v3 消息（\cref{sec:ntor3}）和洋葱服务描述符（\cref{sec:os-descrittore}）。AES-128 还是 CGO 的基础组成部分（\cref{sec:cgo}）。
+
+\subsection{TLS}
+
+两个节点之间的通道由 TLS 保护（\cref{cap:07-canali}）。TLS 会独立协商带认证的密码套件，例如 AES-GCM 或 ChaCha20-Poly1305。不过，Tor 并不依赖 TLS 来证明中继身份：中继会使用 Tor 自己的证书体系证明身份。
+
+% ---------------------------------------------------------------------------
+\section{哈希函数}\label{sec:cripto-hash}
+
+密码学哈希函数把任意长度输入映射为固定长度的指纹。它的设计目标包括：在计算上难以找到两个具有相同指纹的输入（\emph{抗碰撞性}），也难以为某个给定指纹反推出一个匹配输入。Tor 同时使用四个哈希家族，这很大程度上反映了它长期演进的历史：
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l c >{\raggedright\arraybackslash}X@{}}
+\toprule
+函数 & 输出 & 在哪里遇到 \\
+\midrule
+SHA-1 & 20 字节 & 中继旧式 RSA 指纹、relay cell 的运行摘要（tor1）、KDF-TOR；其抗碰撞性已被认为不足，但在不依赖该性质的旧协议位置仍继续存在 \\
+SHA-256 & 32 字节 & ntor 及其 KDF、Ed25519 与 TLS 证书、共识签名、微描述符指纹 \\
+SHA3-256、SHAKE-256 & 32 字节 / 可变 & ntor-v3、v3 洋葱服务（地址、盲化密钥、HSDir 环、描述符）、汇合电路摘要 \\
+Blake2b & 可变 & 洋葱服务工作量证明（\cref{cap:15-dos}） \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+SHA-3 并不是 SHA-2 的“改进版”，而是完全不同的结构（\emph{sponge，海绵结构}）。SHAKE-256 属于同一家族，是一种可扩展输出函数：需要多少字节就可以输出多少字节，因此很适合用作密钥派生。在 Tor 较新的协议中，每次使用 SHA-3 时都会在输入前加上一个域标签，例如 \file{"ntor3-curve25519-sha3\_256-1:kdf\_phase1"}。这样可以防止“为某一种目的计算的哈希”与“为另一种目的计算的哈希”意外落入同一语义空间。
+
+\begin{approfondimento}[运行哈希]
+很多库都允许应用程序逐步把数据加入哈希状态，并在任意时刻读取摘要，而不必从头重新计算。Tor 正是利用这一能力维护 relay cell 的\emph{运行摘要}（\cref{sec:riconoscere}）：它概括与某一跳已经交换过的全部 cell。在 Python 中，\texttt{hashlib.sha1()} 配合 \texttt{update}、\texttt{digest} 和 \texttt{copy} 方法即可实现同样的模式。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{MAC 与密钥派生}\label{sec:cripto-mac}
+
+\subsection{HMAC}
+
+MAC 是一种同时依赖密钥的“指纹”：只有知道密钥的人才能计算或验证。\textbf{HMAC} 使用哈希函数构造 MAC。Tor 在 ntor 握手（\cref{sec:ntor}）及其密钥派生函数中使用 HMAC-SHA256。在基于 SHA-3 的协议中，可以采用更直接的 MAC 构造：先编码密钥长度，再拼接密钥和消息后进行哈希。长度字段能够无歧义地标识密钥在哪里结束、消息从哪里开始~\spec{rend-spec}{Cryptographic building blocks}。在 ntor-v3 中，域标签本身也会带长度前缀（\cref{sec:ntor3}）。
+
+一个实践细节非常重要：比较 MAC 时必须始终采用\emph{常数时间}实现（Python 中使用 \file{hmac.compare\_digest}）；否则，比较耗时可能泄露已经匹配了多少个字节。
+
+\subsection{密钥派生函数}
+
+一个共享秘密往往需要派生出多把密钥：前向加密一把、反向加密一把，再加上两把完整性密钥（\cref{sec:circ-chiavi}）。KDF 会把秘密扩展成足够长的输出流，然后从中切分出各把独立密钥。Tor 使用三类构造：
+\begin{description}
+  \item[KDF-TOR] $\mathrm{SHA1}(K_0 \| 0) \,\|\, \mathrm{SHA1}(K_0 \| 1) \,\|\, \ldots$，一种历史遗留构造，\cella{CREATE\_FAST} 仍在使用；
+  \item[HKDF-SHA256] RFC~5869 定义的标准构造，由 ntor 使用；
+  \item[SHAKE-256] 在 ntor-v3 和洋葱服务中直接作为 KDF 使用。
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{密钥交换：X25519}\label{sec:cripto-dh}
+
+Diffie--Hellman 密钥交换允许两个参与者只交换公开值，就建立共同秘密。Tor 使用的椭圆曲线版本是 \textbf{X25519}，即在 \emph{Curve25519} 上进行密钥交换。每一方都有一个 32 字节私钥 $x$ 和对应公钥 $X = x \cdot G$，其中 $G$ 是曲线上的固定点，乘法表示“整数与点相乘”。给定 $x, X$ 和 $y, Y$ 两组密钥，双方都能计算出同一个值
+\[
+x \cdot Y = y \cdot X = xy \cdot G,
+\]
+而只知道 $X$ 与 $Y$ 的观察者无法推导出该值。密钥只有 32 字节，而且计算速度很快。正是这两个优势，使 Tor 放弃了 TAP 握手中使用的 1024 位模 Diffie--Hellman（\cref{sec:tap}）。
+
+如果一把密钥只用于一次交换，随后立即删除，就称为\textbf{临时密钥（ephemeral key）}。把临时密钥与长期密钥结合，正是 Tor 握手能够同时提供身份认证和\emph{前向保密}的基础（\cref{sec:circ-requisiti}）。
+
+% ---------------------------------------------------------------------------
+\section{签名：Ed25519 与 RSA}\label{sec:cripto-firme}
+
+数字签名使用私钥生成，并由对应公钥验证。Tor 主要使用 \textbf{Ed25519}：它是建立在与 Curve25519 等价曲线上的签名方案，公钥为 32 字节，签名为 64 字节。它用于中继身份、Tor 证书（\cref{sec:canale-certs}）和洋葱服务描述符。Ed25519 还有一个被 Tor 以较特殊方式利用的性质：把公钥 $A$ 乘以因子 $h$ 可以得到另一个有效公钥 $A' = h \cdot A$；知道原始私钥的人也能计算对应的新私钥。这构成洋葱服务盲化密钥的基础（\cref{sec:os-accecate}）。
+
+使用 1024 位密钥的 \textbf{RSA} 是 Tor 早期留下的历史遗产：它仍用于中继的旧式身份，以及目录权威给共识签名的密钥。权威密钥更长，而且两种密钥有不同要求：规范要求身份密钥（\file{KP\_auth\_id\_rsa}）至少为 \textbf{3072} 位，签名密钥（\file{KP\_auth\_sign\_rsa}）至少为 2048 位~\spec{dir-spec}{Directory authority operation and formats}。Tor 正在逐步淘汰 RSA。
+
+% ---------------------------------------------------------------------------
+\section{较新的密码学构造}\label{sec:cripto-recente}
+
+近年的协议演进中还会遇到两种更专门的构造：
+\begin{itemize}
+  \item \textbf{POLYVAL} 是一种通用哈希函数（也用于 AES-GCM-SIV），与 AES 一起构成新的 relay-cell 加密方案 CGO 的基础（\cref{sec:cgo}）；
+  \item \textbf{Elligator2} 可以把 Curve25519 上的点编码成看起来与随机字符串无法区分的数据；obfs4 用它来隐藏密钥交换公钥（\cref{sec:cens-strategie}）。
+\end{itemize}
+当量子计算机真正成为现实威胁时，X25519 最终需要由\emph{后量子}密码学替代。Tor 已在积极研究这一问题，详见 \cref{cap:31-futuro}。
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item 计数器模式下的 AES 用于加密数据；同一密钥流绝不能重复使用，而且 CTR 具有可塑性。
+  \item SHA-1、SHA-256、SHA3-256/SHAKE-256 和 Blake2b 在 Tor 中并存；选择哪一种，取决于协议设计年代以及具体用途。
+  \item HMAC 和 KDF（KDF-TOR、HKDF、SHAKE）分别用于认证和派生密钥；MAC 比较必须使用常数时间实现。
+  \item X25519 是所有现代 Tor 握手使用的密钥交换；Ed25519 用于身份、证书和描述符签名；RSA 正在逐步退出。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:05-xor}
+在 AES-CTR 中，攻击者已知某条消息的明文 $P_1$，并截获对应密文 $C_1$；同时还截获另一条错误地使用相同密钥流加密的密文 $C_2$。攻击者怎样恢复 $P_2$？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:05-shake}
+在 Python 中计算 \file{hashlib.shake\_256(b"Tor").hexdigest(16)} 和 \texttt{hexdigest(32)}。两个输出之间是什么关系？这对把 SHAKE 用作 KDF 意味着什么？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:05-dh}
+使用 \texttt{cryptography} 库生成两对 X25519 密钥，并验证双方得到完全相同的共享秘密。如果其中一方把 32 个零字节当成对方公钥，会发生什么？把结果与 ntor 对\enquote{无穷远点}的检查联系起来。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:05-etichette}
+为什么基于 SHA-3 的 Tor 协议会在每一种输入前加入域标签？如果同一个函数的两种不同用途没有被域分离，请描述一种可能的攻击。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item J.-P.~Aumasson, \titolo{Serious Cryptography}（No Starch Press）：本章各类密码学原语的现代实践入门。
+  \item D.~J.~Bernstein 等关于 Curve25519 与 Ed25519 的原始论文，以及 RFC~7748（X25519）和 RFC~8032（Ed25519）。
+  \item Tor 规范~\cite{torspec} 的 \enquote{Preliminaries} 一节，其中定义了密码算法与哈希的约定。
+\end{itemize}

@@ -1,0 +1,18 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 无障碍替代文本。
+\altfig{身份线索可能从四个层次暴露：网络（IP 地址与电路）、应用（DNS、插件和指纹）、内容（元数据、账户和文风）、行为（时间、习惯与联系人）。Tor 减少部分网络风险，专用系统和工具有助于降低其他层次的风险，用户选择同样重要。任何一层都无法单独保证匿名。}
+% 身份信息泄露层次与相应保护
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  liv/.style={draw,rounded corners=2pt,minimum width=5.2cm,minimum height=0.75cm,align=center},
+  chi/.style={align=left,text width=5cm}]
+  \node[liv,fill=torviola!15] (r) at (0,0) {网络：IP 地址与电路};
+  \node[liv,fill=torviola!9] (a) at (0,0.95) {应用：DNS、插件、指纹};
+  \node[liv,fill=torgrigio!10] (c) at (0,1.9) {内容：元数据、账户、语言风格};
+  \node[liv,fill=avviso!12] (b) at (0,2.85) {行为：时间安排、习惯、联系人};
+  \node[chi,right=0.4cm of r] {tor：网络层保护并非绝对};
+  \node[chi,right=0.4cm of a] {Tor Browser, Tails, Whonix (\cref{cap:23-browser})};
+  \node[chi,right=0.4cm of c] {专用工具；谨慎选择公开内容};
+  \node[chi,right=0.4cm of b] {选择、习惯及辅助工具};
+  \draw[->,thick,torgrigio] (-3.1,-0.3) -- node[left,rotate=90,anchor=south] {保护并非完全自动化} (-3.1,3.2);
+\end{tikzpicture}

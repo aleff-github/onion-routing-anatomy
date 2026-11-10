@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Tor directory flow: relays upload descriptors to known authorities, normally refreshing after about 18 hours or sooner following relevant changes; the single upload arrow is schematic. Three icons stand for the directory authorities, which exchange votes, compute a consensus from available votes, and exchange signatures. Divergent or missing votes can prevent matching results. Directory caches serve the microdescriptor consensus and individual microdescriptors. Clients require valid signatures from more than half of their trusted authorities and fetch missing microdescriptors by digest. Consensus publication is ordinarily hourly.}
+% Flow of directory documents
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  aut/.style={relay,fill=torviola!15,draw=torviola,minimum size=1cm,font=\sffamily\scriptsize},
+  doc/.style={font=\sffamily\scriptsize,fill=white,inner sep=1pt,align=center}]
+  \node[aut] (a1) at (0,2.2) {auth.~1};
+  \node[aut] (a2) at (1.8,3.2) {auth.~2};
+  \node[aut] (a3) at (3.6,2.2) {auth.~3};
+  \draw[<->,thick,torviola!70] (a1) -- (a2); \draw[<->,thick,torviola!70] (a2) -- (a3); \draw[<->,thick,torviola!70] (a1) -- (a3);
+  \node[doc,text=torviola] at (1.8,1.75) {votes and signatures};
+  \node[relay] (r) at (-3.2,2.2) {relay};
+  \draw[cellaf] (r) -- node[doc,above]{descriptor\\(usually 18 h)} (a1);
+  \node[relay,fill=torgrigio!10,draw=torgrigio] (c) at (1.8,-0.4) {\scriptsize cache};
+  \draw[risposta] (a1) -- node[doc,left=2pt]{consensus,\\microdescriptors} (c);
+  \draw[risposta] (a3) -- (c);
+  \node[client] (cl) at (6.2,-0.4) {Client};
+  \draw[risposta] (c) -- node[doc,above]{microdesc consensus\\(about hourly)} (cl);
+  \draw[risposta] (c) to[bend right=25] node[doc,below]{missing microdescriptors, by digest} (cl);
+  \node[font=\sffamily\scriptsize,text=torgrigio,align=center] at (6.2,2.6) {verification: valid signatures from\\more than half the authorities};
+  \draw[dotted,torgrigio] (6.2,2.2) -- (cl);
+\end{tikzpicture}

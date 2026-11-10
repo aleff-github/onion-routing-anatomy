@@ -1,0 +1,25 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Упрощённая схема установления современного канала Tor: инициатор устанавливает TLS, после чего сообщения зашифрованы, а обе стороны обмениваются VERSIONS. Отвечающая сторона последовательно отправляет CERTS, AUTH\_CHALLENGE и NETINFO. Если инициатор — публичный ретранслятор, он обязан аутентифицироваться: отправить CERTS и AUTHENTICATE (шаги в пунктирной рамке). Клиенты и мосты эти два сообщения не отправляют. Затем инициатор в любом случае завершает обмен сообщением NETINFO. Необязательные ячейки VPADDING на схеме опущены; направление стрелок обозначает отправителя.}
+% Установление канала.
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth]
+  \node[client] (i) at (0,0) {Инициатор};
+  \node[relay,minimum size=1.3cm] (r) at (7,0) {\scriptsize Ответная сторона};
+  \draw[torgrigio] (i.south) -- ++(0,-8.4);
+  \draw[torgrigio] (r.south) -- ++(0,-8.4);
+  \draw[<->,thick,torgrigio] (0,-1.1) -- node[above]{TLS-рукопожатие} node[below,font=\scriptsize]{начиная отсюда всё зашифровано} (7,-1.1);
+  \newcommand{\av}[2]{\draw[cellaf] (0,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (7,#1);}
+  \newcommand{\ind}[2]{\draw[risposta] (7,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (0,#1);}
+  \av{-2.3}{VERSIONS}
+  \ind{-3.0}{VERSIONS}
+  \ind{-3.7}{CERTS}
+  \ind{-4.4}{AUTH\_CHALLENGE}
+  \ind{-5.1}{NETINFO}
+  \draw[dashed,torgrigio,rounded corners] (-0.4,-5.55) rectangle (7.4,-7.05);
+  \node[font=\scriptsize,text=torgrigio,anchor=east,align=right] at (-0.5,-6.45) {только публичные\\ретрансляторы};
+  \av{-6.1}{CERTS}
+  \av{-6.8}{AUTHENTICATE}
+  \av{-7.8}{NETINFO}
+  \node[font=\scriptsize,text=torgrigio,anchor=west] at (7.5,-7.8) {канал открыт};
+\end{tikzpicture}

@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 可访问性替代文本。
+\altfig{Tor 目录文档的简化流程：中继向已知目录权威上传描述符，默认约 18 小时后重新生成；重要属性变化时可能更早更新。指向单个权威的箭头仅为示意。三个图标代表目录权威，权威交换投票、根据所获投票计算共识，并交换签名；投票不一致或缺失可能产生不同结果。目录缓存提供微描述符共识和单独的微描述符；客户端验证超过半数可信权威的有效签名，再根据摘要下载缺失的微描述符。共识通常每小时发布一次。}
+% 目录文档流
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  aut/.style={relay,fill=torviola!15,draw=torviola,minimum size=1cm,font=\sffamily\scriptsize},
+  doc/.style={font=\sffamily\scriptsize,fill=white,inner sep=1pt,align=center}]
+  \node[aut] (a1) at (0,2.2) {权威 1};
+  \node[aut] (a2) at (1.8,3.2) {权威 2};
+  \node[aut] (a3) at (3.6,2.2) {权威 3};
+  \draw[<->,thick,torviola!70] (a1) -- (a2); \draw[<->,thick,torviola!70] (a2) -- (a3); \draw[<->,thick,torviola!70] (a1) -- (a3);
+  \node[doc,text=torviola] at (1.8,1.75) {投票与签名};
+  \node[relay] (r) at (-3.2,2.2) {中继};
+  \draw[cellaf] (r) -- node[doc,above]{描述符\\（通常约 18 小时）} (a1);
+  \node[relay,fill=torgrigio!10,draw=torgrigio] (c) at (1.8,-0.4) {\scriptsize 缓存};
+  \draw[risposta] (a1) -- node[doc,left=2pt]{共识、\\微描述符} (c);
+  \draw[risposta] (a3) -- (c);
+  \node[client] (cl) at (6.2,-0.4) {客户端};
+  \draw[risposta] (c) -- node[doc,above]{微描述符共识\\（约每小时）} (cl);
+  \draw[risposta] (c) to[bend right=25] node[doc,below]{按摘要下载缺失微描述符} (cl);
+  \node[font=\sffamily\scriptsize,text=torgrigio,align=center] at (6.2,2.6) {验证：超过半数权威的\\有效签名};
+  \draw[dotted,torgrigio] (6.2,2.2) -- (cl);
+\end{tikzpicture}

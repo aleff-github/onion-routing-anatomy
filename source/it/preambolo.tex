@@ -1,0 +1,40 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Pacchetti e impostazioni generali
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setmainlanguage{italian}
+\setotherlanguage{english}
+\usepackage[babel]{csquotes}
+
+\setmainfont{TeX Gyre Pagella}
+\setsansfont{TeX Gyre Heros}[Scale=MatchLowercase]
+\setmonofont{DejaVu Sans Mono}[Scale=0.85]
+
+\usepackage[a4paper,inner=3cm,outer=2.5cm,top=2.5cm,bottom=3cm]{geometry}
+\usepackage{microtype}
+\setlength{\emergencystretch}{3em}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx,longtable,multirow}
+\usepackage{amsmath,amssymb}
+\usepackage[locale=IT]{siunitx}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes,calc,fit,backgrounds,decorations.pathreplacing,decorations.pathmorphing,matrix,chains}
+\usepackage{bytefield}
+\usepackage{listings}
+\usepackage[most]{tcolorbox}
+\usepackage[backend=biber,style=alphabetic,maxbibnames=99]{biblatex}
+\addbibresource{../shared/bibliography/tor.bib}
+% biblatex non ha un driver per @legislation (leggi, regolamenti): senza questa riga
+% usa il driver di riserva e avvisa a ogni compilazione. Lo diciamo noi, una volta.
+\DeclareBibliographyAlias{legislation}{misc}
+\usepackage{imakeidx}
+\makeindex[intoc,title={Indice analitico}]
+\usepackage[hidelinks]{hyperref}
+\usepackage[nameinlink,italian]{cleveref}
+% Le appendici usano il contatore "chapter" ma vanno chiamate "Appendice":
+% le loro etichette di capitolo usano il tipo cleveref "appendice" (vedi \label[appendice]{...}).
+\crefname{appendice}{appendice}{appendici}
+\Crefname{appendice}{Appendice}{Appendici}

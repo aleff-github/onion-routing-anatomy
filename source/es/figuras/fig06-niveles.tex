@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible para EPUB.
+\altfig{Esquema simplificado de seis niveles, de arriba abajo: aplicación HTTP sobre flujos; órdenes de flujo BEGIN, DATA, END, SENDME (cap. 11); mensajes RELAY cifrados por capas (cap. 10); control de circuitos mediante CREATE2 y DESTROY, que son órdenes de celda, y EXTEND2, que es un mensaje RELAY (cap. 9); celdas de longitud fija de 514 bytes en la versión v4 o posterior del protocolo de enlace, además de las celdas de longitud variable (cap. 8); canal TLS sobre TCP con CERTS y NETINFO (cap. 7). Las capas agrupan funciones, no son una clasificación estricta de tipos de celda.}
+% Capas del protocolo Tor.
+\begin{tikzpicture}[font=\sffamily\small,
+  liv/.style={draw,rounded corners=2pt,minimum width=7cm,minimum height=0.8cm,align=center},
+  rifcap/.style={font=\sffamily\scriptsize,text=torgrigio,anchor=west}]
+  \node[liv,fill=torverde!20] (a) at (0,4) {Aplicación (HTTP, \ldots) sobre flujos};
+  \node[liv,fill=torverde!10] (s) at (0,3) {Flujo: BEGIN, DATA, END, SENDME};
+  \node[liv,fill=torviola!20] (r) at (0,2) {Mensajes RELAY cifrados por capas};
+  \node[liv,fill=torviola!10] (c) at (0,1) {Circuitos: CREATE2, EXTEND2, DESTROY};
+  \node[liv,fill=torgrigio!15] (l) at (0,0) {Celdas fijas: 514 bytes (v4+)};
+  \node[liv,fill=torgrigio!5] (t) at (0,-1) {Canal: TLS sobre TCP, CERTS, NETINFO};
+  \node[rifcap] at (3.7,3) {Capítulo 11};
+  \node[rifcap] at (3.7,2) {Capítulo 10};
+  \node[rifcap] at (3.7,1) {Capítulo 9};
+  \node[rifcap] at (3.7,0) {Capítulo 8};
+  \node[rifcap] at (3.7,-1) {Capítulo 7};
+\end{tikzpicture}

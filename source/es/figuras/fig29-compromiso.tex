@@ -1,0 +1,17 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible (EPUB).
+\altfig{Dos curvas acumuladas del laboratorio 19, una simulación didáctica de 2000 clientes durante 180 días, con 20 circuitos diarios por cliente. El adversario controla el 5\% del ancho de banda ponderado de guardias y el 5\% del de salidas. En el modelo un cliente queda comprometido si al menos un circuito tiene ambos extremos adversarios: al día 180, 100\% con un guardia nuevo por circuito frente a 18,4\% con guardias persistentes. Las rotaciones no son simultáneas, sino individuales cada 48--60 días simulados. No se trata de observaciones de desanonimización real.}
+% Las rotaciones son individuales (intervalos simulados de 48--60 días), no globales.
+\begin{tikzpicture}[font=\sffamily\scriptsize,x=0.04cm,y=0.04cm]
+  \draw[->] (0,0) -- (190,0) node[below left] {días};
+  \draw[->] (0,0) -- (0,108) node[above] {\% comprometidos (modelo)};
+  \foreach \x in {0,30,60,90,120,150,180} \draw (\x,0) -- (\x,-2) node[below] {\x};
+  \foreach \y in {0,25,50,75,100} \draw (0,\y) -- (-2,\y) node[left] {\y};
+  \draw[thick,avviso] plot coordinates {(0,0.0) (5,21.1) (10,38.5) (15,51.1) (20,61.5) (25,69.7) (30,76.5) (35,81.7) (40,86.0) (45,89.2) (50,91.7) (55,93.3) (60,94.9) (65,96.2) (70,97.2) (75,97.9) (80,98.2) (85,98.7) (90,98.9) (95,99.1) (100,99.5) (110,99.7) (120,99.9) (165,100.0) (180,100.0)};
+  \draw[thick,torviola] plot coordinates {(0,0.0) (1,2.6) (3,4.3) (5,4.4) (48,4.4) (52,5.8) (56,7.1) (60,8.7) (64,9.4) (100,9.5) (108,10.8) (114,12.4) (120,13.2) (130,13.4) (160,14.4) (165,15.6) (170,17.0) (175,18.2) (180,18.4)};
+  \node[avviso,anchor=west] at (40,80) {guardia nuevo por circuito};
+  \node[torviola,anchor=west] at (66,26) {guardia persistente};
+% Las rotaciones son individuales (intervalos simulados de 48--60 días), no globales.
+  \node[torgrigio,anchor=west,align=left] at (66,43) {rotaciones de guardias\\no sincronizadas};
+\end{tikzpicture}

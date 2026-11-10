@@ -1,0 +1,113 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{从 NRL 洋葱路由到 Tor Project}\label{cap:03-nascita-tor}
+\aggiornatoal{2026 年 9 月 23 日}{Syverson，\emph{A Peel of Onion}（2011）；Tor Project 历史页面}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 追溯洋葱路由在 Naval Research Laboratory 的起源，并描述其三代设计；
+  \item 解释 Tor 与前两代方案相比有哪些关键差异；
+  \item 概述 Tor Project 从 2002 年至今的主要发展阶段；
+  \item 说明名称 \enquote{Tor} 的来源。
+\end{itemize}
+\end{obiettivi}
+
+% ---------------------------------------------------------------------------
+\section{在 Naval Research Laboratory}\label{sec:nascita-nrl}
+
+1995 年，美国 Naval Research Laboratory（NRL）的三位研究人员——David Goldschlag、Michael Reed 和 Paul Syverson——提出了一个问题：能否建立互联网连接，却不暴露通信双方是谁~\cite{torhistory}？他们追求的并不是“为了匿名而匿名”，而是我们已经看到的目标：\enquote{把身份识别与路由分离}（\cref{sec:anon-termini}）。他们的第一套设计于 1996 年 5 月在 \emph{Information Hiding Workshop} 上发表~\cite{goldschlag1996hiding}。同年结束前又出现了第二套设计，把负责构建电路的用户应用程序与负责承载电路的节点分离开来~\cite{syverson2011peel}。早在 1996 年，实验室就已经获得公开代码的许可——当时“开源软件”这一概念甚至尚未普及。设计者很清楚：如果代码无法接受检查，没有人会信任这样一张网络。
+
+“洋葱”这个名字来自数据结构本身：一条消息被多层加密包裹，每经过一个节点就去掉一层，就像一层层剥开洋葱。
+
+% ---------------------------------------------------------------------------
+\section{三代设计}\label{sec:nascita-generazioni}
+
+Syverson 把 NRL 的设计划分为三代~\cite{syverson2011peel}。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图03-三代洋葱路由}
+\caption{洋葱路由的三代设计。Tor 的决定性变化并不在跳数，而在电路的构建方式：客户端不再一次性准备完整的“洋葱”，而是逐跳扩展电路，并与每一个节点分别进行密钥交换。}
+\label{fig:generazioni}
+\end{figure}
+
+\paragraph{第一代。} 第一代采用固定的五节点电路，其中一个目标是连接两个组织各自受保护的网络。如果只有三跳，一个恶意中间节点会立即看到通信双方的网络。若为四跳，攻击者只要控制与某个端点相邻的节点，就能知道下一步应该攻击哪一个节点，从而重建整条电路。使用五个节点后，若不先额外攻陷另一个节点，就不存在这样的捷径。客户端与节点集成在一起。网络是静态的，由二十或一百个稳定组织运营的节点组成，配置和密钥依靠人工分发。由于当时 SOCKS 尚未普及，每一种应用都需要自己的代理——网页浏览、远程登录和电子邮件分别处理。一条电路会被客户端一次性构造成一个完整“洋葱”，按路径上所有节点的公钥逐层加密。
+
+\paragraph{第二代。} 客户端与节点被分离，电路长度改为可变，并引入了 mix 和电路间填充等机制，但这些机制后来被放弃。设计中计划加入网络信息的分发方式，却从未完整实现。
+
+\paragraph{第三代：Tor。} 最重要的变化，是电路改为\textbf{逐跳构建}：客户端与每个节点分别执行 Diffie--Hellman 交换（\cref{sec:circ-telescopio}）。这一思想借鉴自 Cebolla 项目。逐跳密钥交换提供前向保密，并允许客户端在扩展电路的同时逐个验证每一跳。Tor 还加入目录服务器、SOCKS 支持、使用汇合点的隐藏服务；更重要的是，它从一开始就被设计成可以真正部署，并由世界各地的志愿者共同运行。
+
+\begin{storia}[名称的由来]
+2004 年论文标题 \titolo{Tor: The Second-Generation Onion Router} 带来了两个后来由 Syverson 亲自承认的误解~\cite{syverson2011peel}。首先，Tor 属于\emph{第三}代，而不是第二代；其次，Tor 中的字母 \enquote{r} 并不代表 \emph{router}。Roger Dingledine 开始参与 NRL 项目时，已经存在许多洋葱路由系统。有人问\enquote{是哪一个？}时，他会回答\enquote{\emph{the onion routing}}，意思是最初的那一个。Rachel Greenstadt 注意到其首字母正好可以组成一个简洁的名称。Dingledine 还发现它也可以递归解释为 \emph{Tor's onion routing}，于是决定把名字写作 \enquote{Tor}，而不是 \enquote{TOR}。它还是一个普通单词，在德语中可表示“门”，例如城门。本书后续统一用 \emph{Tor} 指网络和项目，用小写 \emph{tor} 指程序。
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{Tor 网络}\label{sec:nascita-rete}
+
+2000 年代初，Roger Dingledine 加入 NRL 项目，不久 Nick Mathewson 也加入。Tor 网络在 \textbf{2002 年 10 月}正式上线，源代码从一开始就以自由软件许可证发布。到 2003 年底，网络中大约有十几个由志愿者运营的节点，几乎都位于美国，另有一个在德国~\cite{torhistory}。2004 年 8 月，Dingledine、Mathewson 和 Syverson 在 USENIX Security Symposium 上介绍了该项目~\cite{dingledine2004tor}。
+
+此后的主要里程碑如下~\cite{torhistory}：
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+年份 & 事件 \\
+\midrule
+2002 & Tor 网络开始运行，源代码自由公开 \\
+2004 & Electronic Frontier Foundation 开始资助 Dingledine 和 Mathewson 的工作 \\
+2006 & Tor Project, Inc. 作为美国非营利组织（501(c)(3)）成立 \\
+2007 & 开始开发用于抵抗审查的网桥（\cref{cap:16-censura}） \\
+2008 & 开始开发 Tor Browser（\cref{cap:23-browser}） \\
+2010--2011 & Tor 在“阿拉伯之春”期间成为重要工具 \\
+2013 & Edward Snowden 揭露大规模监控项目，Tor 在相关披露中发挥核心作用 \\
+2017 & v3 洋葱服务（\cref{cap:14-onion-services}） \\
+2021 & v2 洋葱服务被禁用 \\
+2022--2023 & 拥塞控制（\cref{sec:cc}）以及面向洋葱服务的工作量证明（\cref{cap:15-dos}） \\
+2024 & WebTunnel；网桥分发迁移到 rdsys \\
+2025--2026 & tor 中的 CGO（\cref{sec:cgo}）；Arti 作为客户端并支持洋葱服务（\cref{cap:30-arti}） \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ---------------------------------------------------------------------------
+\section{一个组织与一个社区}\label{sec:nascita-comunita}
+
+Tor Project, Inc. 负责开发软件、维护规范、与独立运营者共同运行目录权威、测量网络并支持社区。但它并不“拥有”Tor 网络：来自数十个国家的数千名志愿者——个人、大学和协会——运营着中继。这是一项设计选择，也吸取了 Freedom 的经验（\cref{sec:radici-bassa}）：任何单一实体都不应该能够控制整张网络，也不应被迫危及用户安全。
+
+Tor Project 的资金来源长期以来都是公共讨论的话题。多年来，它获得过政府机构的资助，尤其是美国政府机构，也接受私人基金会和个人捐赠。该组织每年公开财务报表。\enquote{一个部分由政府资助的软件是否值得信任？}这个问题首先是技术问题，而非政治判断：代码与规范公开可验证；设计决策通过提案公开讨论（\cref{cap:31-futuro}）；系统安全也并不依赖于“信任 Tor Project”。真正的安全基础，是把网络分散在众多彼此独立的运营者之间（\cref{cap:04-modello-minaccia}）。
+
+\begin{approfondimento}[2013 年的披露]
+Snowden 在 2013 年公开的文件中，包括 NSA 关于 Tor 的内部演示材料。这些材料承认，系统性去匿名化 Tor 用户并不容易，同时描述了一些针对个别用户的定向攻击；那些攻击利用的是浏览器漏洞，而不是 Tor 网络协议本身的弱点。这从侧面支持了本书会不断遇到的一个原则：最危险的薄弱点往往并不位于协议核心，而在围绕协议运行的其他系统中（\cref{cap:28-opsec}）。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item 洋葱路由于 1995 年诞生在 Naval Research Laboratory，由 Goldschlag、Reed 和 Syverson 提出，目标是把身份识别与路由分离。
+  \item 第一代采用固定五节点电路和静态网络。Tor 属于第三代，逐跳构建电路，并提供前向保密、目录系统和汇合点。
+  \item 名称 \enquote{Tor} 来自 \emph{the onion routing}；只有首字母大写。
+  \item Tor 网络自 2002 年运行；Tor Project, Inc. 自 2006 年存在；中继主要由独立志愿者运营。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:03-cinque}
+为什么第一代洋葱路由使用五节点电路？重建本章关于三跳和四跳的论证，并解释为什么今天的 Tor 通常只使用三跳。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:03-cipolla}
+从前向保密以及“能否立即识别不响应节点”这两个角度，比较第一代一次性构造完整洋葱的方式与 Tor 的逐跳（telescoping）电路构建方式。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:03-fiducia}
+围绕\enquote{考虑到 Tor 的资金来源，它是否值得信任？}写一页短文。明确区分哪些事情能够通过技术手段验证，哪些事情仍然需要信任。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item P.~Syverson, \titolo{A Peel of Onion}~\cite{syverson2011peel}.
+  \item D.~Goldschlag, M.~Reed, P.~Syverson, \titolo{Hiding Routing Information}~\cite{goldschlag1996hiding}.
+  \item Tor Project 历史页面~\cite{torhistory}。
+\end{itemize}

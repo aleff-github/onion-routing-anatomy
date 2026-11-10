@@ -1,0 +1,24 @@
+name: "Documentation improvement · Miglioramento della documentazione"
+description: "README, laboratory guides, contribution instructions, website texts. · README, guide dei laboratori, istruzioni, testi del sito."
+title: "[Docs] "
+labels: ["documentation", "status: to verify"]
+body:
+  - type: input
+    id: document
+    attributes:
+      label: "Document or page · Documento o pagina"
+      placeholder: "e.g. README.md, CONTRIBUTING.md, labs/it/wiki/Installazione.md, website «Contribute» (es)"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: "What is missing or unclear · Che cosa manca o non è chiaro"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Proposed change · Modifica proposta"
+    validations:
+      required: false

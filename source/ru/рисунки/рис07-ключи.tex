@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Цепочка аутентификации ретранслятора Tor: ключ идентичности Ed25519 KP\_relayid\_ed удостоверяет ключ подписи KP\_relaysign\_ed (тип сертификата 4). Ключ подписи удостоверяет дайджест SHA-256 TLS-сертификата отвечающей стороны (тип 5) либо ключ KP\_link\_ed для инициатора, проходящего аутентификацию (тип 6). Устаревший ключ идентичности RSA KP\_relayid\_rsa подписывает перекрёстный сертификат привязки к Ed25519 (тип 7), а также имеет самоподписанный сертификат X.509 (тип 2). Указанные 30 и 2 дня — сроки действия сертификатов в примере, а не неизменная длительность жизни всех ключей; не каждая стрелка означает подпись одной ключевой пары Ed25519 другой.}
+% Цепочка сертификатов relay.
+\begin{tikzpicture}[font=\sffamily\small,node distance=1.1cm,
+  chiave/.style={draw=torviola,fill=torviola!10,rounded corners,minimum width=3.6cm,minimum height=0.9cm,align=center},
+  legacy/.style={draw=torgrigio,fill=torgrigio!8,rounded corners,minimum width=3.4cm,minimum height=0.9cm,align=center},
+  cert/.style={-{Stealth[length=2.5mm]},thick,torverde!60!black},
+  etich/.style={font=\sffamily\scriptsize,fill=white,inner sep=1pt}]
+  \node[chiave] (id) {\texttt{KP\_relayid\_ed}\\ключ Ed25519 (долговременный)};
+  \node[chiave,below=of id] (sign) {\texttt{KP\_relaysign\_ed}\\ключ подписи (сертиф. 30 дн.)};
+  \node[chiave,below left=1.1cm and -1.2cm of sign] (tls) {TLS-сертификат\\SHA-256 (сертиф. 2 дн.)};
+  \node[chiave,below right=1.1cm and -1.2cm of sign] (link) {\texttt{KP\_link\_ed}\\аутентификация (сертиф. 2 дн.)};
+  \node[legacy,right=2.2cm of id] (rsa) {\texttt{KP\_relayid\_rsa}\\идентичность RSA (устар.)};
+  \draw[cert] (id) -- node[etich,right] {4 \texttt{IDENTITY\_V\_SIGNING}} (sign);
+  \draw[cert] (sign) -- node[etich,left] {5 \texttt{SIGNING\_V\_TLS\_CERT}} (tls);
+  \draw[cert] (sign) -- node[etich,right] {6 \texttt{SIGNING\_V\_LINK\_AUTH}} (link);
+  \draw[cert,torgrigio] (rsa) -- node[etich,above] {7} (id);
+  \draw[cert,torgrigio] (rsa.north east) to[out=60,in=0,looseness=4] node[etich,above] {2 (самоподписанный)} (rsa.east);
+  \node[font=\sffamily\scriptsize,text=torgrigio,below=2pt of tls] {отправляет отвечающая сторона};
+  \node[font=\sffamily\scriptsize,text=torgrigio,below=2pt of link] {отправляет инициатор, проходящий аутентификацию};
+\end{tikzpicture}

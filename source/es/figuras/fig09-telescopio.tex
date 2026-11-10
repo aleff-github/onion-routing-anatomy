@@ -1,0 +1,34 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible para EPUB.
+\altfig{Construcción telescópica de un circuito Tor de tres saltos con cuatro columnas: cliente, R1 guardia, R2 intermedio y R3 salida. El cliente intercambia CREATE2/CREATED2 con R1 y deriva K1. Luego envía EXTEND2 dentro del circuito existente: R1 procesa la petición, envía CREATE2 a R2 y las respuestas CREATED2/EXTENDED2 permiten derivar K2. Para el tercer salto EXTEND2 pasa por el guardia hasta R2, que lo procesa y envía CREATE2 a R3; la respuesta permite derivar K3. Cada intercambio establece claves independientes entre cliente y repetidor de destino; los repetidores anteriores retransmiten los mensajes para saltos posteriores tras procesar su propia capa de cifrado. Las flechas discontinuas representan rutas lógicas a través de los repetidores intermedios, no enlaces directos. Los nodos adyacentes utilizan canales TLS separados.}
+% Construcción telescópica del circuito
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  msg/.style={font=\ttfamily\scriptsize,fill=white,inner sep=1pt},
+  indietro/.style={-{Stealth[length=2.5mm]},thick,torverde!60!black},
+  circav/.style={cellaf,dashed},
+  circind/.style={indietro,dashed}]
+  \foreach \n/\x/\t in {c/0/Cliente,r1/3.4/$R_1$ guardia,r2/6.8/$R_2$ intermedio,r3/10.2/$R_3$ salida}
+    \node[font=\sffamily\small] (\n) at (\x,0) {\t};
+  \foreach \x in {0,3.4,6.8,10.2} \draw[torgrigio] (\x,-0.3) -- (\x,-5.5);
+  % primer salto
+  \draw[cellaf] (0,-0.9) -- node[msg,above]{CREATE2} (3.4,-0.9);
+  \draw[indietro] (3.4,-1.5) -- node[msg,above]{CREATED2} (0,-1.5);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-1.2) {claves $K_1$};
+  % segundo salto
+  \draw[circav] (0,-2.5) -- node[msg,above]{EXTEND2} (3.4,-2.5);
+  \draw[cellaf] (3.4,-2.5) -- node[msg,above]{CREATE2} (6.8,-2.5);
+  \draw[indietro] (6.8,-3.1) -- node[msg,above]{CREATED2} (3.4,-3.1);
+  \draw[circind] (3.4,-3.1) -- node[msg,above]{EXTENDED2} (0,-3.1);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-2.8) {claves $K_2$};
+  % tercer salto
+  \draw[circav] (0,-4.2) -- node[msg,above]{EXTEND2} (6.8,-4.2);
+  \draw[cellaf] (6.8,-4.2) -- node[msg,above]{CREATE2} (10.2,-4.2);
+  \draw[indietro] (10.2,-4.8) -- node[msg,above]{CREATED2} (6.8,-4.8);
+  \draw[circind] (6.8,-4.8) -- node[msg,above]{EXTENDED2} (0,-4.8);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-4.5) {claves $K_3$};
+  % canales
+  \foreach \a/\b/\y in {0/3.4/-5.8,3.4/6.8/-5.8,6.8/10.2/-5.8}
+    \draw[thick,torgrigio!60,{Bar}-{Bar}] (\a,\y) -- node[below,font=\scriptsize]{canal TLS} (\b,\y);
+  \node[font=\scriptsize,text=torgrigio,align=center] at (5.1,-6.6) {cada intercambio ocurre entre el cliente y un único repetidor};
+\end{tikzpicture}

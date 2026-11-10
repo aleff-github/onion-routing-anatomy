@@ -1,0 +1,133 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Aspetti legali ed etici in Italia e nell'UE}\label{cap:25-legale}
+\aggiornatoal{23 settembre 2026}{Regolamento (UE) 2022/2065; d.lgs.\ 196/2003 (testo coordinato del Garante); linee guida del Tor Research Safety Board}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item distinguere la legittimità di uno strumento dalla liceità di ciò che se ne fa;
+  \item leggere la regola europea del \enquote{semplice trasporto} alla luce del funzionamento di un exit;
+  \item individuare le domande aperte per chi gestisce un relay in Italia: responsabilità, conservazione dei dati, sequestri;
+  \item applicare alla ricerca su Tor i principi di sicurezza del Tor Research Safety Board.
+\end{itemize}
+\end{obiettivi}
+
+\begin{attenzione}[Questo capitolo non è una consulenza legale]
+Il diritto cambia, dipende dai fatti del caso concreto e, su Tor, conta pochissime decisioni. Questo capitolo inquadra i problemi e cita le norme che abbiamo potuto leggere nel testo ufficiale, indicando dove la risposta non è certa. Chi deve prendere una decisione, per esempio aprire un exit, farebbe bene a parlarne con un avvocato esperto di diritto delle tecnologie.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Uno strumento e i suoi usi}\label{sec:legale-strumento}
+
+In Italia, come nel resto dell'Unione europea, non esiste un divieto generale di usare Tor o altri strumenti che proteggono la riservatezza delle comunicazioni. Al contrario, la segretezza della corrispondenza e di ogni altra forma di comunicazione (art.~15 della Costituzione) e la libertà di manifestazione del pensiero (art.~21) sono diritti fondamentali, come il rispetto della vita privata e la protezione dei dati personali nella Carta dei diritti fondamentali dell'Unione (artt.~7 e~8).
+
+Ciò che si fa attraverso Tor resta invece soggetto alle stesse regole di ciò che si fa senza: un accesso abusivo a un sistema informatico (art.~615-\emph{ter} del codice penale) non diventa lecito perché passa per tre relay. La distinzione tra strumento e uso è la chiave dell'intero capitolo, e vale anche per chi offre lo strumento: chi gestisce un relay mette a disposizione capacità di trasmissione, come un fornitore di connettività, e non sceglie che cosa vi transita.
+
+% ---------------------------------------------------------------------------
+\section{Chi gestisce un relay}\label{sec:legale-relay}
+
+\subsection{Il semplice trasporto}
+
+Il regolamento europeo sui servizi digitali (\emph{Digital Services Act}, DSA), applicabile dal 17 febbraio 2024, ha ripreso e sostituito le regole sulla responsabilità degli intermediari che dal 2000 stavano nella direttiva sul commercio elettronico, recepita in Italia con il d.lgs.\ 70/2003~\cite{dsa2022}. L'art.~4 riguarda il \textbf{semplice trasporto} (\emph{mere conduit}): chi fornisce un servizio che consiste nel trasmettere su una rete informazioni fornite da altri non è responsabile di quelle informazioni a tre condizioni: non dà origine alla trasmissione, non ne seleziona il destinatario, non seleziona né modifica le informazioni trasmesse. La \cref{fig:conduit} mette a confronto le tre condizioni con il comportamento di un exit, come lo abbiamo visto a livello di celle.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig25-conduit}
+\caption{Confronto tecnico, non conclusione legale automatica, tra le tre condizioni di \emph{mere conduit} dell'art.~4 del regolamento (UE) 2022/2065 e un exit Tor. Il client specifica la destinazione tramite \texttt{RELAY\_BEGIN}; l'exit apre il collegamento TCP e può negarlo in base alla propria politica. I byte applicativi di \texttt{RELAY\_DATA} vengono trasferiti al flusso TCP, non le celle Tor intatte. L'eventuale esenzione richiede la valutazione del servizio concreto e di tutti i presupposti legali.}
+\label{fig:conduit}
+\end{figure}
+
+Due precisazioni dello stesso regolamento sono rilevanti. L'art.~8 esclude un obbligo \emph{generale} di sorvegliare le informazioni trasmesse o di cercare attivamente indizi di attività illecite: un operatore non è tenuto a ispezionare indiscriminatamente il traffico e, per un relay intermedio, il contenuto applicativo rimane cifrato. E l'art.~4, paragrafo~3, lascia alle autorità giudiziarie o amministrative il potere di ordinare al prestatore di impedire o far cessare una violazione.
+
+\paragraph{La domanda aperta.} Il regolamento si applica ai \enquote{servizi della società dell'informazione}, una nozione che il diritto europeo definisce come servizi prestati \emph{normalmente dietro retribuzione}. Un relay gestito gratuitamente da un volontario vi rientra? Ci sono buoni argomenti per un'interpretazione ampia, e l'esenzione esprime comunque un principio (chi trasporta non risponde di ciò che trasporta) che un giudice può tenere presente; ma non ci risulta che la questione sia stata decisa per Tor in Italia. È una delle ragioni per cui molti exit sono gestiti da associazioni o organizzazioni che offrono già servizi di rete.
+
+\subsection{Responsabilità civile e indagini penali}
+
+L'esenzione riguarda la responsabilità per le informazioni trasmesse; non impedisce che un'indagine penale parta dall'indirizzo di un exit. Un reato commesso attraverso Tor appare, a chi lo subisce, come proveniente dall'exit, e la prima mossa di chi indaga può essere una perquisizione o il sequestro dei computer dell'operatore. La FAQ legale preparata dalla Electronic Frontier Foundation per gli operatori, scritta per il diritto statunitense ma utile come esperienza, riporta di non conoscere casi di operatori condannati per il solo fatto di gestire un relay, ma ricorda indagini e sequestri basati su un fraintendimento del funzionamento di Tor~\cite{efflegalfaq}. Alcune precauzioni riducono il rischio:
+\begin{itemize}
+  \item gestire l'exit su un server dedicato, in un centro dati, non a casa propria e non sul computer con cui si lavora;
+  \item rendere evidente che l'indirizzo è un exit: un nome di rete (DNS inverso) che lo dica, e una pagina informativa, che tor può servire da solo sulla DirPort con l'opzione \opt{DirPortFrontPage};
+  \item informare prima il fornitore di connettività e concordare come gestire le segnalazioni di abuso;
+  \item rispondere alle segnalazioni spiegando che cos'è Tor, e conservare la corrispondenza.
+\end{itemize}
+
+\subsection{Conservare i dati}
+
+L'art.~132 del Codice in materia di protezione dei dati personali impone al \emph{fornitore} di conservare i dati di traffico telematico per dodici mesi a fini di accertamento e repressione dei reati~\cite{codiceprivacy} (ventiquattro mesi per il traffico telefonico). Lo stesso articolo, al comma 5-\emph{bis}, fa salva una disciplina speciale: l'art.~24 della legge 20 novembre 2017, n.~167 porta il termine a \textbf{settantadue mesi} per l'accertamento dei reati indicati negli artt.~51, comma 3-\emph{quater}, e 407, comma 2, lettera a), del codice di procedura penale, cioè terrorismo e altri delitti gravi~\cite{legge167}. Il titolo del Codice in cui si trova si applica ai servizi di comunicazione elettronica \emph{accessibili al pubblico su reti pubbliche di comunicazioni} (art.~121). Se l'operatore di un relay volontario sia un fornitore di questo tipo è, di nuovo, una questione non risolta, che dipende anche dalla forma in cui il servizio è offerto; va valutata con un legale prima di aprire un exit, soprattutto se lo gestisce un'organizzazione che è già un fornitore.
+
+I termini della normativa italiana non risolvono, da soli, la questione della sua
+\textbf{compatibilità con il diritto dell'Unione}. Il Garante ha segnalato al
+Parlamento e al Governo criticità di proporzionalità nella conservazione
+generalizzata fino a 72 mesi; la Corte di giustizia dell'UE, nelle cause riunite
+C-793/19 e C-794/19 (\emph{SpaceNet}, 20 settembre 2022), ha ribadito i limiti
+alla conservazione generalizzata e indiscriminata dei dati di traffico e di
+ubicazione, distinguendola da misure specifiche consentite a determinate
+condizioni~\cite{garante2021retention,spacenet2022}. Questi rilievi non
+permettono di concludere automaticamente né che ogni conservazione sia illecita
+né che un volontario che gestisce un relay sia un soggetto obbligato.
+
+Dal punto di vista tecnico, con le impostazioni di registrazione raccomandate tor non mantiene normalmente una cronologia delle destinazioni degli utenti. Un exit vede le destinazioni delle connessioni che inoltra, ma non conosce l'indirizzo IP originario del client. I dati concretamente disponibili dipendono dal ruolo del relay e dalla sua configurazione: non si deve presumere che l'exit possa identificare i singoli utenti Tor.
+
+\subsection{I log sono dati personali}
+
+Gli indirizzi IP sono dati personali, e il Regolamento generale sulla protezione dei dati (GDPR) chiede di trattarne solo quelli necessari, per il tempo necessario (art.~5, principio di minimizzazione). Per un relay la scelta coerente è la stessa che suggerisce la sicurezza: log al livello \texttt{notice}, con \opt{SafeLogging} attivo, e nessuna cattura di traffico (\cref{sec:traffico-log}).
+
+% ---------------------------------------------------------------------------
+\section{Chi fa ricerca}\label{sec:legale-ricerca}
+
+La ricerca su Tor ha una storia di esperimenti discutibili, alcuni dei quali racconteremo nel \cref{cap:27-casi-rete}: relay che osservavano o manipolavano il traffico degli utenti reali per dimostrare un attacco. Oltre al problema etico, in Italia un esperimento del genere può ricadere in norme penali, come l'intercettazione illecita di comunicazioni informatiche (art.~617-\emph{quater} c.p.), e nella disciplina dei dati personali.
+
+Il \textbf{Tor Research Safety Board} è un gruppo di ricercatori che offre consigli sulla sicurezza degli esperimenti e ha formulato alcune linee guida~\cite{trsb}:
+\begin{itemize}
+  \item usare una rete di prova ogni volta che è possibile, e attaccare solo il proprio traffico;
+  \item raccogliere solo dati che sarebbe sicuro rendere pubblici, e solo quelli che servono;
+  \item proteggere i dati raccolti e gli strumenti dell'esperimento;
+  \item ridurre il dettaglio dei dati, con arrotondamenti o rumore;
+  \item considerare i dati di terzi che, incrociati con i propri, potrebbero rivelare qualcosa;
+  \item chiedersi se gli utenti intendevano quei dati come privati;
+  \item fare in modo che i benefici superino i rischi.
+\end{itemize}
+Il Board chiede a chi propone un esperimento di descrivere che cosa vuole imparare, come lo farà, quali rischi introduce e perché i benefici li giustificano. È la stessa disciplina che questo libro ha seguito: i laboratori che generano traffico Tor attivo usano la rete privata (\cref{sec:rp-perche}), mentre le analisi di documenti pubblici, come quelle del \cref{cap:24-metrics}, si svolgono offline su dati aggregati e pubblici.
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item Usare Tor è lecito; ciò che si fa attraverso Tor resta soggetto alle regole ordinarie.
+  \item L'art.~4 del DSA esenta dalla responsabilità chi si limita a trasportare informazioni altrui, a condizioni con cui il normale funzionamento di un exit può essere compatibile; resta da valutare caso per caso se un relay volontario rientri nei servizi a cui il regolamento si applica.
+  \item L'esenzione non evita indagini e sequestri: server dedicato, identificazione chiara dell'exit e rapporti con il fornitore riducono i problemi.
+  \item Gli obblighi di conservazione dei dati di traffico riguardano i fornitori di servizi di comunicazione accessibili al pubblico; la loro applicazione ai relay è da valutare caso per caso.
+  \item La ricerca su Tor deve evitare per quanto possibile esperimenti sul traffico di utenti reali: rete di prova, minimizzazione, dati pubblicabili, bilancio tra benefici e rischi.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:25-condizioni}
+Per ciascuna delle tre condizioni dell'art.~4 del DSA, descrivi una modifica al comportamento di un exit che la violerebbe.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:25-strumento}
+Spiega con un esempio la differenza tra la liceità di uno strumento e la liceità dei suoi usi, applicandola sia a un utente di Tor sia a un operatore di relay.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:25-segnalazione}
+Scrivi la risposta a una segnalazione di abuso ricevuta dal fornitore di connettività di un exit, in cui un sito lamenta tentativi di accesso ripetuti dal tuo indirizzo. Che cosa puoi spiegare, e che cosa puoi fare?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:25-esperimento}
+Una ricercatrice vuole misurare quanti utenti di Tor visitano siti di notizie italiani, aprendo un exit e contando i nomi di dominio delle connessioni. Valuta la proposta con le linee guida del Research Safety Board e proponi un'alternativa più sicura.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:25-ricerca}
+Cerca le decisioni dei giudici europei, italiani o di altri paesi dell'Unione che riguardano operatori di relay Tor, e riassumi per ciascuna il problema giuridico e l'esito, citando le fonti primarie.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item Regolamento (UE) 2022/2065, in particolare gli artt.~4, 8 e~9~\cite{dsa2022}.
+  \item D.lgs.\ 196/2003, artt.~121 e~132, nel testo coordinato pubblicato dal Garante~\cite{codiceprivacy}.
+  \item Electronic Frontier Foundation, \titolo{Legal FAQ for Tor Relay Operators}~\cite{efflegalfaq}.
+  \item Il sito del Tor Research Safety Board~\cite{trsb}.
+\end{itemize}

@@ -1,0 +1,29 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Sequenza di esempio sul canale TLS client–guard. Dopo TLS, entrambi inviano VERSIONS con CircID 0; una freccia del guard raggruppa graficamente quattro celle distinte: VERSIONS, CERTS, AUTH\_CHALLENGE e NETINFO. Il client invia NETINFO, crea il primo hop con CREATE2/CREATED2 e aggiunge middle ed exit con due RELAY\_EARLY [EXTEND2], ricevendo RELAY [EXTENDED2]. Per aprire lo stream il disegno mostra BEGIN in RELAY\_EARLY, possibilità ammessa ma non obbligatoria; seguono CONNECTED, DATA (richiesta HTTP e risposta), SENDME se necessario e DESTROY. Il guard può vedere le celle del proprio collegamento ma non il testo in chiaro destinato a middle o exit. Le parentesi quadre esplicitano i comandi logici, non testo necessariamente visibile al guard.}
+% Sequenza di celle sul canale client-guard
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth]
+  \node[client] (c) at (0,0) {Client};
+  \node[relay] (g) at (7,0) {Guard};
+  \draw[torgrigio] (c.south) -- ++(0,-12.2);
+  \draw[torgrigio] (g.south) -- ++(0,-12.2);
+  \newcommand{\av}[3]{\draw[cellaf] (0,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (7,#1);
+    \node[font=\scriptsize,text=torgrigio,anchor=west] at (7.4,#1) {#3};}
+  \newcommand{\ind}[3]{\draw[risposta] (7,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (0,#1);
+    \node[font=\scriptsize,text=torgrigio,anchor=west] at (7.4,#1) {#3};}
+  \av{-1.1}{VERSIONS}{CircID 0}
+  \ind{-1.8}{VERSIONS, CERTS, AUTH\_CHALLENGE, NETINFO}{CircID 0}
+  \av{-2.5}{NETINFO}{canale pronto}
+  \av{-3.5}{CREATE2}{CircID 0x8\ldots, 1º salto}
+  \ind{-4.2}{CREATED2}{}
+  \av{-5.2}{RELAY\_EARLY [EXTEND2]}{verso il middle}
+  \ind{-5.9}{RELAY [EXTENDED2]}{}
+  \av{-6.9}{RELAY\_EARLY [EXTEND2]}{verso l'exit}
+  \ind{-7.6}{RELAY [EXTENDED2]}{}
+  \av{-8.6}{RELAY\_EARLY [BEGIN]}{stream verso il sito}
+  \ind{-9.3}{RELAY [CONNECTED]}{}
+  \av{-10.1}{RELAY [DATA]}{richiesta HTTP}
+  \ind{-10.8}{RELAY [DATA] \ldots}{risposta, SENDME}
+  \av{-11.7}{DESTROY}{fine del circuito}
+\end{tikzpicture}

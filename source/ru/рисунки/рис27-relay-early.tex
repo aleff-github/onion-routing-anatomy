@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Историческая атака 2014 года: вредоносный HSDir кодирует имя onion-сервиса типами ячеек RELAY и RELAY\_EARLY, направленных к клиенту. Сговорившийся с ним вредоносный guard читает видимые ретрансляторам типы и связывает клиента с запросом дескриптора, а не с доказанным посещением сервиса. Четыре нарисованные ячейки — лишь схема; на каналах заголовки защищены TLS.}
+% Атака 2014 года: сигнал в типе ячейки, читаемый guard
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  ostile/.style={relay,fill=avviso!20,draw=avviso,align=center,font=\sffamily\scriptsize}]
+  \node[client] (c) at (0,0) {клиент};
+  \node[ostile] (g) at (3,0) {вредоносный\\guard};
+  \node[relay] (m) at (6,0) {middle};
+  \node[ostile] (h) at (9,0) {вредоносный\\HSDir};
+  \draw[<-,thick] (c) -- (g);
+  \draw[<-,thick] (g) -- (m);
+  \draw[<-,thick] (m) -- (h);
+  \foreach \x/\t/\c in {7.1/E/avviso!40,7.5/R/white,7.9/R/white,8.3/E/avviso!40} {
+    \node[draw,minimum size=3.5mm,inner sep=0pt,fill=\c] at (\x,0.55) {\t};
+  }
+  \node[align=center,text=torgrigio] at (7.6,1.12) {схема: четыре ячейки для примера};
+  \node[align=center,text=avviso] at (9,-1) {кодирует имя сервиса\\типами RELAY (R) и\\RELAY\_EARLY (E)};
+  \node[align=center,text=avviso] at (3,-1) {читает типы ячеек:\\связывает клиента с\\запросом дескриптора};
+  \node[align=center,text=torgrigio] at (6,-1) {передаёт типы ячеек\\как в атаке 2014 года};
+\end{tikzpicture}

@@ -1,0 +1,25 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版可访问性替代文本（EPUB）。
+\altfig{Tor 现代通道建立时序简图：发起方先建立 TLS，此后消息受到加密；双方随后各发送 VERSIONS。响应方依次发送 CERTS、AUTH\_CHALLENGE、NETINFO。若发起方是公共中继，则必须发送 CERTS 和 AUTHENTICATE 进行身份认证（虚线框内）；客户端和网桥不发送这两个认证信元。无论是否认证，发起方最后发送 NETINFO，完成握手。图中省略了可选的 VPADDING 信元；箭头标明各消息的发送方向。}
+% 通道握手。
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth]
+  \node[client] (i) at (0,0) {发起方};
+  \node[relay,minimum size=1.3cm] (r) at (7,0) {\scriptsize 响应方};
+  \draw[torgrigio] (i.south) -- ++(0,-8.4);
+  \draw[torgrigio] (r.south) -- ++(0,-8.4);
+  \draw[<->,thick,torgrigio] (0,-1.1) -- node[above]{TLS 握手} node[below,font=\scriptsize]{从这里开始全部加密} (7,-1.1);
+  \newcommand{\av}[2]{\draw[cellaf] (0,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (7,#1);}
+  \newcommand{\ind}[2]{\draw[risposta] (7,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (0,#1);}
+  \av{-2.3}{VERSIONS}
+  \ind{-3.0}{VERSIONS}
+  \ind{-3.7}{CERTS}
+  \ind{-4.4}{AUTH\_CHALLENGE}
+  \ind{-5.1}{NETINFO}
+  \draw[dashed,torgrigio,rounded corners] (-0.4,-5.55) rectangle (7.4,-7.05);
+  \node[font=\scriptsize,text=torgrigio,anchor=east,align=right] at (-0.5,-6.45) {仅公共\\中继};
+  \av{-6.1}{CERTS}
+  \av{-6.8}{AUTHENTICATE}
+  \av{-7.8}{NETINFO}
+  \node[font=\scriptsize,text=torgrigio,anchor=west] at (7.5,-7.8) {通道已打开};
+\end{tikzpicture}

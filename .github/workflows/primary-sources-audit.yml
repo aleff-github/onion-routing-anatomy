@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Audit documentale privato: scarica fonti pubbliche in fonti/ (gitignored).
+# Non distribuisce o incorpora i repository di terzi nella pubblicazione.
+name: Audit fonti primarie e originalita (privato)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/primary-sources-audit.yml"
+      - "scripts/verify_spec_references.py"
+      - "scripts/check_originality.py"
+      - "scripts/tests/test_verify_spec_references.py"
+      - "source/it/**"
+      - "labs/it/**"
+
+permissions:
+  contents: read
+
+jobs:
+  source-audit:
+    name: Riferimenti Tor, Arti e originalita
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ottieni specifiche ufficiali e sorgenti congelati
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fonti
+          git clone --quiet --depth=1 https://gitlab.torproject.org/tpo/core/torspec.git fonti/torspec
+          git clone --quiet --depth=1 --branch tor-0.4.9.13 https://gitlab.torproject.org/tpo/core/tor.git fonti/tor
+          git clone --quiet --depth=1 --branch arti-v2.6.0 https://gitlab.torproject.org/tpo/core/arti.git fonti/arti
+          test "$(git -C fonti/tor rev-parse --short=8 HEAD)" = "3c575400"
+          test "$(git -C fonti/arti rev-parse HEAD)" = "a71097fdf7b141b56d1eb3709628ee38d232c9d1"
+          for p in torspec tor arti; do
+            printf "%s %s\n" "$p" "$(git -C "fonti/$p" rev-parse HEAD)"
+          done
+      - name: Verifica rigorosa dei riferimenti alle fonti
+        run: make fonti
+      - name: Somiglianze testuali (non sostituisce revisione manuale)
+        if: ${{ always() }}
+        run: make originalita

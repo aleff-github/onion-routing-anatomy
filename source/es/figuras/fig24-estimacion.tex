@@ -1,0 +1,18 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{Esquema de la estimación indirecta de Tor Metrics, con series separadas para clientes conectados directamente a repetidores y a través de puentes. Los servidores de directorio y puentes cuentan solicitudes correctas durante intervalos de unas 24 horas. En los descriptores extra-info, los recuentos por país de dirreq-v3-reqs se redondean al múltiplo de 8 superior. CollecTor archiva los descriptores. Tor Metrics resta 4 de cada recuento redondeado válido, obtiene r(R), estima la fracción de cobertura frac y calcula floor(r(R)/(frac multiplicado por 10)). Diez es una hipótesis sobre la media de solicitudes diarias por cliente. Se excluyen las fechas con frac inferior al 10 por ciento o superior al 110 por ciento. El resultado estima la media de clientes conectados, no personas distintas.}
+% Estimación indirecta de clientes medios a partir de solicitudes agregadas
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.5cm,
+  box/.style={draw,rounded corners=2pt,align=center,minimum height=0.9cm,text width=2.3cm}]
+  \node[box,fill=torviola!10] (r) {repetidores / puentes\\cuentan solicitudes\\de directorio};
+  \node[box,right=of r] (x) {extra-info\\\texttt{dirreq-v3-reqs}};
+  \node[box,right=of x] (c) {CollecTor\\archiva datos};
+  \node[box,right=of c,fill=torverde!15] (m) {Tor Metrics:\\$\lfloor r(R)/(\mathit{frac}\cdot10)\rfloor$};
+  \draw[->] (r) -- (x); \draw[->] (x) -- (c); \draw[->] (c) -- (m);
+  \node[below=2pt of r,font=\sffamily\tiny,text=torgrigio,align=center] {intervalos de\\unas 24 h};
+  \node[below=2pt of x,font=\sffamily\tiny,text=torgrigio,align=center] {por país; múltiplos\\de 8 (luego $-4$)};
+  \node[below=2pt of c,font=\sffamily\tiny,text=torgrigio,align=center] {$\mathit{frac}$: cobertura\\estimada};
+  \node[below=2pt of m,font=\sffamily\tiny,text=torgrigio,align=center] {clientes medios\\no personas};
+  \node[below=0.95cm of c,font=\sffamily\tiny,text=avviso,align=center] {excluir días con $\mathit{frac}<10\%$ o $\mathit{frac}>110\%$};
+\end{tikzpicture}

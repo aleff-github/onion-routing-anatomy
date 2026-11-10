@@ -1,0 +1,94 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{密码学进阶}\label[appendice]{cap:B-crittografia}
+\aggiornatoal{2026 年 9 月 23 日}{dir-spec 与 tor-spec（torspec 提交 \texttt{8e1f245}）；\texttt{cryptography} 库；实验网络}
+
+\Cref{cap:05-crittografia} 以最少的数学预备知识介绍了 Tor 的密码学基础。本附录进一步探讨此前只是简要提及的三个主题，并提供可执行的示例：X25519 密钥与经过钳制处理的比特；同一椭圆曲线的 Montgomery 与 Edwards 两种表示之间的转换，并通过真实证书验证；以及流密码的可篡改性，它使 \cref{sec:tor1-debolezze} 中的标记攻击成为可能。
+
+% ---------------------------------------------------------------------------
+\section{同一条曲线的两种表示}\label{sec:B-curve}
+
+X25519 与 Ed25519 使用的是有限域 $p = 2^{255} - 19$ 上的\emph{同一条}椭圆曲线，只是采用两种方程形式：
+\begin{description}
+  \item[Montgomery 形式] $v^2 = u^3 + 486662\,u^2 + u$。X25519 使用这种形式：公钥只包含曲线上点的 $u$ 坐标，以 32 个小端序字节编码。这种表示允许使用简单、高效、执行时间不依赖秘密密钥的标量乘法算法——\enquote{Montgomery 梯形算法}。
+  \item[扭曲 Edwards 形式] $-x^2 + y^2 = 1 + d\,x^2y^2$，其中 $d = -121665/121666$。Ed25519 用它实现签名：公钥存储 $y$ 坐标，并将 $x$ 坐标的符号写入最后一个字节的最高位。
+\end{description}
+两种形式之间存在显式转换，我们将在 \ref{sec:B-conversione} 中使用它。
+
+\subsection{X25519 密钥的比特钳制}
+
+X25519 私钥最初是 32 个字节，但实际使用前，实现会强制修改其中某些比特：将最低三位清零，将最高位清零，再把次高位置为 1。清除最低三位，使标量成为 8 的倍数，8 正是这条曲线的\emph{余因子}，因此收到的点的小阶分量不会泄露标量信息。固定高位还确定了 Montgomery 梯形算法执行的步数。可以使用与实验相同的库来验证：
+\begin{lstlisting}[language=Python,numbers=none]
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives import serialization as s
+import os
+def public_key(k):
+    return X25519PrivateKey.from_private_bytes(k).public_key().public_bytes(
+        s.Encoding.Raw, s.PublicFormat.Raw)
+a = bytearray(os.urandom(32)); b = bytearray(a)
+b[0] ^= 0x07                     # 仅改变最低三位
+print(public_key(bytes(a)) == public_key(bytes(b)))      # True
+\end{lstlisting}
+如果两份私钥字节串仅在钳制时会被覆盖的比特上不同，它们会产生相同公钥。
+
+\subsection{无穷远点}
+
+在 ntor 握手中，客户端和中继都会检查各自的 $\mathrm{EXP}()$ 运算是否产生无穷远点。规范指出，对于 Curve25519，这种检查足以代替验证 $Y$ 属于指定群的条件~\spec{tor-spec}{The "ntor" handshake}。否则，攻击者提供的小阶公钥点可能生成可预测的共享秘密，例如全零字节串。\texttt{cryptography} 库会自行执行该检查：如果使用全零的 32 字节公钥调用 \texttt{exchange}，它会抛出异常（\texttt{Error computing shared key}），而不是返回全零秘密。
+
+% ---------------------------------------------------------------------------
+\section{从 Montgomery 到 Edwards：ntor 交叉证书}\label{sec:B-conversione}
+
+每台中继在描述符中公布自己的 ntor 公钥，即 X25519 密钥，并通过 \texttt{ntor-onion-key-crosscert} 证明拥有对应私钥：这是一个类型为 \texttt{0a} 的 Ed25519 证书，用于认证中继的主 Ed25519 身份，却由\emph{ntor 密钥签名}~\spec{dir-spec}{ntor-onion-key-crosscert}。这带来一个问题：ntor 密钥使用 Montgomery 形式，而 Ed25519 签名需要 Edwards 形式。规范定义了如下转换~\spec{dir-spec}{Converting a curve25519 public key to an ed25519 public key}：
+\[ y = \frac{u - 1}{u + 1} \bmod p . \]
+$u$ 坐标能够决定 $y$，却不能决定 $x$ 的符号：每个 Montgomery 坐标对应两个对称的 Edwards 公钥。这个符号无法从公开的 Montgomery 密钥恢复，因此描述符会在交叉证书字段的第一个参数中明确提供：0 表示正，1 表示负。中继根据自己的私钥计算该符号。
+
+\file{labs/zh-Hans/代码/torlab/conversion.py} 模块只用几行代码就实现了这一转换：
+\begin{lstlisting}[language=Python,numbers=none]
+P = 2**255 - 19
+def montgomery_to_edwards(u_bytes, sign):
+    u = int.from_bytes(u_bytes, "little") & ((1 << 255) - 1)
+    y = (u - 1) * pow(u + 1, P - 2, P) % P      # 用模 p 的逆元进行除法
+    compressed = bytearray(y.to_bytes(32, "little"))
+    compressed[31] |= (sign & 1) << 7          # 最高位存储 x 坐标的符号
+    return bytes(compressed)
+\end{lstlisting}
+随后，模块使用实验~1 的证书解码器验证交叉证书。应用于实验网络的描述符（为便于阅读，公钥作了截断；每建立一个新网络，密钥都会改变）：
+\begin{lstlisting}[numbers=none]
+$ PYTHONPATH=labs/zh-Hans/代码 python3 -m torlab.conversion labs/zh-Hans/实验室/net/nodes/000a/cached-descriptors test004r
+test004r: ntor-onion-key DaxPE+Grnjex2Hmv+5qutl5dIX4La2jF6MIL7IK6+3E
+  Edwards 公钥（符号位 0）： c369d08f8083002a15fe22f65dca14bf...
+  交叉证书验证成功；已认证的身份： kjPIgDB2OFsGJzuwsT+KMS/El9qrlE2/4P5WvIvmzC8
+\end{lstlisting}
+在参考示例中，签名有效，所认证的身份与中继 \file{fingerprint-ed25519} 文件中的值一致；实验环境的其他中继也是如此。如果提供错误的符号，验证会失败，这也是该模块自动化负面测试中的一种情况。模 $p$ 除法通过费马小定理实现，即乘以 $(u+1)^{p-2}$。
+
+% ---------------------------------------------------------------------------
+\section{流密码的可篡改性}\label{sec:B-malleabilita}
+
+计数器模式的 AES（\cref{sec:cripto-cifrari}）产生一条字节流，并通过 XOR 与消息组合。任何人修改密文中的一个比特，都能在不知道密钥的情况下修改\emph{明文中的对应比特}；攻击者只需要知道或猜出原始内容。下面是 Python 示例：
+\begin{lstlisting}[language=Python,numbers=none]
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import os
+k, n = os.urandom(16), bytes(16)
+cipher = lambda d: Cipher(algorithms.AES(k), modes.CTR(n)).encryptor().update(d)
+c = bytearray(cipher(b"BEGIN www.example.org:443"))
+delta = bytes(x ^ y for x, y in zip(b"www.example.org", b"www.example.net"))
+for i, d in enumerate(delta):
+    c[6 + i] ^= d                 # 不知道密钥也可以实施定向修改
+print(cipher(bytes(c)))            # b'BEGIN www.example.net:443'
+\end{lstlisting}
+Tor 原来的分层 relay 加密 tor1 使用 AES-CTR，只在电路终点通过四字节摘要检查完整性。因此，恶意中继可能以可预测方式修改信元，让路径下游的同伙识别这种修改。这就是 \cref{sec:tor1-debolezze} 中的标记攻击，也是开发 CGO（\cref{sec:cgo}）的原因之一；CGO 的设计使被篡改的信元及后续信元都无法正常恢复。
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:B-bit}
+比特经过钳制后，一个 X25519 私有标量可以取多少种不同值？将结果与 $2^{256}$ 比较。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:B-inversa}
+推导并实现从 Ed25519 公钥的 $y$ 坐标到 Montgomery $u$ 坐标的逆转换。保留原始公钥的 $x$ 符号位，再使用 \file{conversion.py} 中的 \texttt{montgomery\_to\_edwards} 检查两次转换是否还原原来的 Ed25519 公钥（要求 $y \neq 1$）。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:B-digest}
+在 tor1 中，一条 cell 包含四字节摘要，以及两字节全零的 \texttt{recognized} 字段。如果随机修改某个信元，最终跳点将其接受为有效信元的概率是多少？为什么标记攻击仍然可能成功？
+\end{esercizio}

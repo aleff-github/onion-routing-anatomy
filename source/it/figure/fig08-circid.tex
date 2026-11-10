@@ -1,0 +1,19 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Schema di un circuito client–guard–middle–exit con tre canali, ciascuno con CircID locale non nullo e diverso: 0x8000A1C3 sul canale 1, 0x0000712F sul canale 2 e 0x93B40E07 sul canale 3. Le tabelle del guard e del middle associano rispettivamente (canale 1, 0x8000A1C3) a (canale 2, 0x0000712F), e (canale 2, 0x0000712F) a (canale 3, 0x93B40E07). Su link v4+ il CircID è di 32 bit: il bit più significativo dipende da quale parte ha iniziato la connessione di canale, non dal numero del salto nel circuito. Il solo CircID non basta per associare due canali, ma ciò non impedisce la correlazione del traffico con altri segnali.}
+% Il CircID è locale al canale
+\begin{tikzpicture}[node distance=2.9cm]
+  \node[client] (cl) {Client};
+  \node[relay,right=of cl] (g) {Guard};
+  \node[relay,right=of g] (m) {Middle};
+  \node[relay,right=of m] (x) {Exit};
+  \draw[thick,torgrigio] (cl) -- node[above,font=\sffamily\scriptsize]{canale 1} node[below,font=\ttfamily\scriptsize,text=torviola]{0x8000A1C3} (g);
+  \draw[thick,torgrigio] (g) -- node[above,font=\sffamily\scriptsize]{canale 2} node[below,font=\ttfamily\scriptsize,text=torviola]{0x0000712F} (m);
+  \draw[thick,torgrigio] (m) -- node[above,font=\sffamily\scriptsize]{canale 3} node[below,font=\ttfamily\scriptsize,text=torviola]{0x93B40E07} (x);
+  \node[below=0.9cm of g,draw=torgrigio,fill=white,font=\ttfamily\scriptsize,align=left] (tg)
+    {(can.1, 0x8000A1C3)\\\hspace*{1em}$\leftrightarrow$ (can.2, 0x0000712F)};
+  \node[below=0.9cm of m,draw=torgrigio,fill=white,font=\ttfamily\scriptsize,align=left] (tm)
+    {(can.2, 0x0000712F)\\\hspace*{1em}$\leftrightarrow$ (can.3, 0x93B40E07)};
+  \draw[dotted] (g) -- (tg); \draw[dotted] (m) -- (tm);
+\end{tikzpicture}

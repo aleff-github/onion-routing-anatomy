@@ -1,0 +1,115 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Tor's Threat Model}\label{cap:04-modello-minaccia}
+\aggiornatoal{23 September 2026}{Dingledine, Mathewson, Syverson (2004), Section 3}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item explain what a threat model is and why every security system needs one;
+  \item list the goals and \enquote{non-goals} stated by Tor's designers;
+  \item describe the adversary Tor is intended to protect against and the adversary it cannot withstand;
+  \item distinguish what Tor protects from what remains the responsibility of users and applications.
+\end{itemize}
+\end{obiettivi}
+
+No security system protects against everything. A \textbf{threat model} explicitly describes whom or what a system is intended to protect, which adversaries and threats it is meant to resist, and what assumptions it makes. It is the standard by which the system should be judged: a successful attack within the model reveals a defect, while an attack expressly excluded by the model does not. The latter is nevertheless a limitation that users must understand. This chapter presents Tor's threat model as its designers formulated it in 2004~\cite{dingledine2004tor}, and describes how it has evolved.
+
+% ---------------------------------------------------------------------------
+\section{Goals}\label{sec:minaccia-obiettivi}
+
+The primary goal is to prevent an adversary from \textbf{linking} the two parties to a communication, or linking multiple communications from the same user. Four criteria stated in the 2004 paper guided the design:
+\begin{description}
+  \item[Deployability] The system must work in the real world: it must not cost volunteers too much, expose operators to excessive liability, require operating-system changes, or force websites to install anything.
+  \item[Usability] A difficult system attracts fewer users, and fewer users mean less anonymity. As the authors explain, usability is not merely a convenience but \enquote{a security requirement}.
+  \item[Flexibility] The protocol must be well specified so it can serve as a foundation for future research.
+  \item[Simplicity] Only well-understood, established techniques should be used. Every additional feature complicates security analysis.
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{Non-Goals}\label{sec:minaccia-nonobiettivi}
+
+Equally important is what Tor explicitly does \emph{not} attempt to do:
+\begin{description}
+  \item[It is not peer-to-peer] Tor does not try to operate with thousands of short-lived nodes, many of which may be hostile. It uses a set of relays listed and verified by directory authorities (\cref{cap:12-directory}).
+  \item[It does not withstand end-to-end attacks] Tor does not claim to defeat timing correlation or intersection attacks by someone who observes both endpoints.
+  \item[It does not normalize protocols] Tor transports application data as it is. If an application reveals the user's identity, Tor cannot stop it. At the time, this required a filtering proxy; today, Tor Browser performs that role (\cref{cap:23-browser}).
+  \item[It is not steganographic] Tor does not hide the fact that a user is connected to the network. Pluggable transports, developed later, mitigate this limitation (\cref{cap:16-censura}).
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{The Adversary}\label{sec:minaccia-avversario}
+
+Many theoretical analyses of anonymity systems assume a \textbf{global passive adversary}: someone who can observe all Internet traffic. No practical low-latency system protects against such an adversary, and Tor states this openly. Tor instead assumes an adversary with only partial visibility but, in some respects, broader active capabilities~\cite{dingledine2004tor}. It can:
+\begin{itemize}
+  \item observe \emph{part} of the network's traffic;
+  \item generate, modify, delete, or delay traffic;
+  \item operate its own relays;
+  \item compromise some relays operated by others.
+\end{itemize}
+With these capabilities, the adversary can attempt many attacks: correlating incoming and outgoing traffic by watching the network's edges; compromising relays or keys; replaying traffic; denying service to honest relays to push users toward malicious ones (\cref{cap:15-dos}); marking traffic so it can be recognized elsewhere (\cref{sec:tor1-debolezze}); giving different users inconsistent views of the network through the directory system (\cref{cap:12-directory}); or making the network unreliable enough that users abandon it for less secure systems.
+
+\subsection{Confirmation and Analysis}
+
+Tor's designers distinguish two kinds of traffic-based attack. In a \textbf{confirmation} attack, the adversary already suspects a relationship (\enquote{Alice communicates with Bob}) and observes both endpoints to test that suspicion. Tor, like any low-latency system, cannot provide complete protection against such attacks. In an \textbf{analysis} attack, the adversary studies traffic to discover \emph{where} to look---that is, which network points to attack. Tor is designed primarily to resist this latter class. The entire path-selection process, including guards and bandwidth weights (\cref{cap:13-percorso}), seeks to make it unlikely that an adversary occupies both ends of a circuit.
+
+\begin{attenzione}[The Principle to Remember]
+Tor protects against someone who observes \emph{part} of the network, not against someone who manages to observe \emph{both ends} of a communication. An adversary that controls or observes both the user's connection to the guard and the exit's connection to the website can correlate traffic timing and volume. For an organization with access to an entire country's networks, the user and the website may both be located within that country. This is a practical scenario, not just a theoretical one.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{What Tor Protects, and What It Does Not}\label{sec:minaccia-sintesi}
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig04-visibility}
+\caption{What each point on the path knows. Tor's protection comes from separation: the guard knows the client but not the destination; the exit knows the destination but not the client.}
+\label{fig:sapere}
+\end{figure}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+Tor protects against & Tor does not protect against \\
+\midrule
+a website trying to learn a visitor's IP address & information the user reveals (logging in to an account or disclosing personal details) \\
+an observer on the local network or an Internet service provider that sees only a connection to Tor & an observer watching both ends of the communication \\
+an individual relay that knows at most one endpoint & an adversary controlling both the guard and exit of a circuit \\
+an exit trying to identify who sent a request & an exit reading or modifying unencrypted traffic (without HTTPS) \\
+IP-address-based censorship when bridges are used & a vulnerable, compromised, or misconfigured application or browser \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The model has expanded over time to address developments the 2004 paper could not anticipate: nationwide censorship (\cref{cap:16-censura}), browser \emph{fingerprinting} protection (\cref{cap:23-browser}), DoS defenses (\cref{cap:15-dos}), and the future threat from quantum computers (\cref{cap:31-futuro}). One principle remains constant: understanding the threat model is the first step toward using Tor safely.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item A threat model states which adversaries and attacks a system is designed to protect against.
+  \item Tor aims to prevent users and destinations from being linked, prioritizing deployability, usability, flexibility, and simplicity.
+  \item Tor is not peer-to-peer, does not defeat end-to-end attacks, does not normalize application protocols, and does not hide Tor use without pluggable transports.
+  \item The adversary can observe part of the network, operate and compromise relays, and take active measures. Tor is designed primarily to resist analysis attacks and offers less protection against confirmation attacks.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:04-casi}
+For each of these scenarios, state whether Tor protects the user and explain why: (a) a café Wi-Fi operator wants to know which websites a customer visits; (b) a website wants to learn its visitors' IP addresses; (c) a user logs in to a personal social-media account through Tor; (d) an agency controlling a country's networks suspects a user is communicating with a newspaper in the same country.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:04-usabilita}
+Give an example showing why usability is a security requirement, rather than merely a convenience, in an anonymity system.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:04-modello}
+Write a threat model for a journalist using Tor Browser to communicate with a source in another country. Identify possible adversaries, what they can observe, and which aspects remain outside Tor's protection.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item R.~Dingledine, N.~Mathewson, P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}, Sections 3 and 7.
+  \item R.~Dingledine, N.~Mathewson, \titolo{Anonymity Loves Company: Usability and the Network Effect}~\cite{dingledine2006company}.
+\end{itemize}

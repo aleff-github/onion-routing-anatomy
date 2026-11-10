@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Politica di uscita dell'exit del laboratorio Chutney: ExitPolicyRejectPrivate 0 disabilita soltanto nella rete di test il rifiuto preventivo delle destinazioni private. Due richieste BEGIN verso 127.0.0.1:8080 e 127.0.0.1:8081 attraversano le regole in ordine. La porta 8080 corrisponde prima a reject 127.0.0.1:8080 e riceve END EXITPOLICY. La 8081 non corrisponde al reject e passa grazie a accept 127.0.0.0/8:*, che consente di tentare una connessione TCP; CONNECTED richiede un server in ascolto. Se accept precedesse reject, il rifiuto sarebbe inefficace. Non disabilitare ExitPolicyRejectPrivate su exit pubblici.}
+% Politica di uscita nel solo laboratorio
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.45cm,
+  reg/.style={draw,rounded corners=1pt,minimum height=0.6cm,text width=4.6cm,font=\ttfamily\scriptsize},
+  esito/.style={draw,rounded corners=2pt,minimum height=0.6cm,text width=2.5cm,align=center}]
+  \node[font=\sffamily\scriptsize] (top) at (0,1.25) {due BEGIN: 127.0.0.1:8080 / :8081};
+  \node[draw,rounded corners=2pt,fill=torviola!10,font=\ttfamily\tiny] (r0) at (0,0.15) {ExitPolicyRejectPrivate 0};
+  \node[reg,fill=avviso!12,below=of r0] (r1) {reject 127.0.0.1:8080};
+  \node[reg,fill=torverde!12,below=of r1] (r2) {accept 127.0.0.0/8:*};
+  \node[reg,fill=torgrigio!10,below=of r2] (r3) {(altre regole predefinite)};
+  \draw[->] (top) -- (r0); \draw[->] (r0) -- (r1); \draw[->] (r1) -- node[right,font=\sffamily\tiny] {8081: non corrisponde} (r2); \draw[->] (r2) -- node[right,font=\sffamily\tiny] {altrimenti} (r3);
+  \node[esito,fill=avviso!15,draw=avviso,right=1.2cm of r1] (e1) {\texttt{END} motivo\\\texttt{EXITPOLICY}};
+  \draw[->,avviso,thick] (r1) -- node[above,font=\sffamily\tiny] {8080 corrisponde} (e1);
+  \node[esito,fill=torverde!15,draw=torverde!60!black,right=1.2cm of r2] (e2) {tentativo TCP\\CONNECTED solo\\se server attivo};
+  \draw[->,torverde!60!black,dashed] (r2) -- node[above,font=\sffamily\tiny] {8081 corrisponde} (e2);
+  \node[anchor=west,font=\sffamily\tiny,text=torgrigio,align=left] at (-5.9,-0.55) {vince la prima regola\\che corrisponde};
+  \node[anchor=west,font=\sffamily\tiny,text=avviso] at (-5.9,-1.95) {non su exit pubblico};
+  \node[font=\sffamily\tiny,text=torgrigio,anchor=south] at (r0.north) {solo laboratorio: ExitPolicyRejectPrivate 0};
+\end{tikzpicture}

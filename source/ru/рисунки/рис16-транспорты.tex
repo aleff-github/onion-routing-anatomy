@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Упрощённая архитектура подключаемых транспортов: tor подключается к локальному SOCKS-прокси клиентского PT, который преобразует трафик. На мосту серверный PT обращает преобразование и передаёт соединение tor через ORPort либо, если он настроен, Extended ORPort. Промежуточные добровольческие прокси Snowflake не показаны. Цензор видит преобразованный трафик на контролируемом участке, но всё ещё может его распознать. Примеры: obfs4 напоминает случайные байты, Snowflake использует WebRTC, WebTunnel выглядит как HTTPS.}
+% Архитектура pluggable transport (pt-spec)
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  proc/.style={draw,rounded corners=2pt,align=center,minimum height=0.8cm,minimum width=1.7cm},
+  mac/.style={draw=torgrigio,dashed,rounded corners=4pt,inner sep=6pt}]
+  \node[proc,fill=torviola!12] (tc) at (0,0) {tor\\(клиент)};
+  \node[proc,fill=torverde!15] (pc) at (2.6,0) {клиентский PT};
+  \node[proc,fill=torverde!15] (ps) at (8.2,0) {серверный PT};
+  \node[proc,fill=torviola!12] (tb) at (10.8,0) {tor\\(bridge)};
+  \node[mac,fit=(tc)(pc),label={[font=\sffamily\scriptsize]above:компьютер пользователя}] {};
+  \node[mac,fit=(ps)(tb),label={[font=\sffamily\scriptsize]above:bridge}] {};
+  \draw[->] (tc) -- node[above,font=\sffamily\tiny] {SOCKS} (pc);
+  \draw[->] (ps) -- node[above,align=center,font=\sffamily\tiny] {ORPort /\\Extended ORPort} (tb);
+  \draw[->,thick,decorate,decoration={snake,amplitude=1.2pt,segment length=6pt}] (pc) -- node[above] {преобразованный трафик} (ps);
+  \node[server,minimum width=1.4cm,fill=avviso!10,draw=avviso] (cen) at (5.4,-1.5) {цензор};
+  \draw[dotted,avviso] (cen) -- (5.4,-0.15);
+  \node[text=torgrigio,align=center] at (5.4,-2.3) {байты без узнаваемой структуры (obfs4),\\WebRTC (Snowflake), HTTPS (WebTunnel)};
+  \node[text=torgrigio,font=\sffamily\tiny,align=center,text width=10.5cm] at (5.4,-3.05) {Упрощённая схема: промежуточные добровольческие прокси Snowflake не показаны};
+\end{tikzpicture}

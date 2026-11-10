@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版可访问性替代文本（EPUB）。
+\altfig{Tor 中继身份认证链：Ed25519 身份密钥 KP\_relayid\_ed 认证签名密钥 KP\_relaysign\_ed（证书类型 4）；后者认证响应方 TLS 证书的 SHA-256 摘要（类型 5），或认证需要表明身份的发起方密钥 KP\_link\_ed（类型 6）。旧式 RSA 身份密钥 KP\_relayid\_rsa 签署将 RSA 身份与 Ed25519 身份关联的交叉证书（类型 7），并拥有自签名 X.509 身份证书（类型 2）。图示中的 30 天和 2 天表示示例证书的有效期，并非所有密钥固定的寿命；箭头并非都表示用一把 Ed25519 密钥签署另一把密钥。}
+% 中继证书链。
+\begin{tikzpicture}[font=\sffamily\small,node distance=1.1cm,
+  chiave/.style={draw=torviola,fill=torviola!10,rounded corners,minimum width=3.6cm,minimum height=0.9cm,align=center},
+  legacy/.style={draw=torgrigio,fill=torgrigio!8,rounded corners,minimum width=3.4cm,minimum height=0.9cm,align=center},
+  cert/.style={-{Stealth[length=2.5mm]},thick,torverde!60!black},
+  etich/.style={font=\sffamily\scriptsize,fill=white,inner sep=1pt}]
+  \node[chiave] (id) {\texttt{KP\_relayid\_ed}\\Ed25519 身份（长期）};
+  \node[chiave,below=of id] (sign) {\texttt{KP\_relaysign\_ed}\\签名密钥（证书 30 天）};
+  \node[chiave,below left=1.1cm and -1.2cm of sign] (tls) {TLS 证书\\SHA-256（证书 2 天）};
+  \node[chiave,below right=1.1cm and -1.2cm of sign] (link) {\texttt{KP\_link\_ed}\\认证（证书 2 天）};
+  \node[legacy,right=2.2cm of id] (rsa) {\texttt{KP\_relayid\_rsa}\\RSA 身份（旧式）};
+  \draw[cert] (id) -- node[etich,right] {4 \texttt{IDENTITY\_V\_SIGNING}} (sign);
+  \draw[cert] (sign) -- node[etich,left] {5 \texttt{SIGNING\_V\_TLS\_CERT}} (tls);
+  \draw[cert] (sign) -- node[etich,right] {6 \texttt{SIGNING\_V\_LINK\_AUTH}} (link);
+  \draw[cert,torgrigio] (rsa) -- node[etich,above] {7} (id);
+  \draw[cert,torgrigio] (rsa.north east) to[out=60,in=0,looseness=4] node[etich,right] {2（自签名）} (rsa.east);
+  \node[font=\sffamily\scriptsize,text=torgrigio,below=2pt of tls] {由响应方发送};
+  \node[font=\sffamily\scriptsize,text=torgrigio,below=2pt of link] {由需要认证的发起方发送};
+\end{tikzpicture}

@@ -1,0 +1,115 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Tor 的威胁模型}\label{cap:04-modello-minaccia}
+\aggiornatoal{2026 年 9 月 23 日}{Dingledine、Mathewson、Syverson（2004），第 3 节}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 解释什么是威胁模型，以及为什么每一个安全系统都需要明确的威胁模型；
+  \item 列出 Tor 设计者明确提出的目标与\enquote{非目标}；
+  \item 描述 Tor 试图抵抗的对手，以及它无法抵抗的对手；
+  \item 区分 Tor 能提供的保护与仍由用户和应用程序承担的责任。
+\end{itemize}
+\end{obiettivi}
+
+没有任何安全系统能够抵御一切。\textbf{威胁模型}会明确说明一个系统打算保护谁或保护什么、要抵抗哪些对手与威胁，以及建立在哪些假设之上。评价系统时也应以此为标准：如果某种攻击落在威胁模型范围之内且成功了，那说明系统存在缺陷；如果某种攻击被模型明确排除，则不能据此说系统违背了自身安全承诺。不过，这仍然是用户必须理解的局限。本章介绍 Tor 设计者在 2004 年提出的威胁模型~\cite{dingledine2004tor}，并说明它之后如何演变。
+
+% ---------------------------------------------------------------------------
+\section{目标}\label{sec:minaccia-obiettivi}
+
+Tor 的首要目标，是阻止对手把一次通信的双方\textbf{关联}起来，或把同一用户的多次通信相互关联。2004 年论文提出了四项指导设计的原则：
+\begin{description}
+  \item[可部署性] 系统必须能在现实世界中运行：不能让志愿者承担过高成本，不能让运营者暴露在过度法律风险之下，不能要求修改操作系统，也不能强迫网站额外安装软件。
+  \item[可用性] 难以使用的系统会吸引更少用户，而用户越少，匿名性越弱。正如作者所强调的，可用性并不仅仅是便利问题，而是\enquote{一项安全要求}。
+  \item[灵活性] 协议必须被清晰、完整地规范，才能成为后续研究的基础。
+  \item[简单性] 只使用已经被充分理解、经过验证的技术。每增加一个功能，都会增加安全分析的复杂度。
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{非目标}\label{sec:minaccia-nonobiettivi}
+
+同样重要的是理解 Tor 明确\emph{不试图}做到什么：
+\begin{description}
+  \item[它不是点对点系统] Tor 并不试图依赖成千上万个短时存在、其中许多可能恶意的节点运行。它使用由目录权威列出并验证的一组中继（\cref{cap:12-directory}）。
+  \item[它不能抵御端到端攻击] Tor 从未声称能够击败由同时观察两个端点的对手实施的时序关联或交集攻击。
+  \item[它不会规范化应用协议] Tor 按应用程序交给它的方式传输应用数据。如果某个应用主动暴露用户身份，Tor 无法阻止。当年这需要过滤代理；今天，这一角色主要由 Tor Browser 承担（\cref{cap:23-browser}）。
+  \item[它不是隐写系统] Tor 本身不会隐藏“用户正在连接 Tor 网络”这一事实。后来出现的可插拔传输可以缓解这一限制（\cref{cap:16-censura}）。
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{对手}\label{sec:minaccia-avversario}
+
+许多匿名系统的理论分析都会假设存在一个\textbf{全局被动对手}：能够观察互联网上全部流量的人。没有任何实用的低延迟系统能够抵御这种对手，Tor 对此明确承认。Tor 假设的对手可见范围较为有限，但在某些方面拥有更强的主动能力~\cite{dingledine2004tor}。它可以：
+\begin{itemize}
+  \item 观察网络中\emph{一部分}流量；
+  \item 生成、修改、删除或延迟流量；
+  \item 运营自己的中继；
+  \item 攻陷由其他人运营的一部分中继。
+\end{itemize}
+借助这些能力，对手可以尝试多种攻击：在网络边缘同时观察输入和输出流量并进行关联；攻陷中继或密钥；重放流量；对诚实中继发动拒绝服务攻击，迫使用户更多选择恶意中继（\cref{cap:15-dos}）；给流量添加标记，使其在网络另一处可以被识别（\cref{sec:tor1-debolezze}）；利用目录系统向不同用户提供彼此不一致的网络视图（\cref{cap:12-directory}）；或者让网络变得足够不可靠，迫使用户转而使用安全性更低的系统。
+
+\subsection{确认攻击与分析攻击}
+
+Tor 的设计者区分两类基于流量的攻击。在\textbf{确认攻击}中，对手已经怀疑某种关系存在——例如\enquote{Alice 正在与 Bob 通信}——于是同时观察两个端点，验证这个猜测。Tor 与其他低延迟系统一样，无法对此提供完整防护。在\textbf{分析攻击}中，对手研究流量，目标是发现\emph{应该去哪里观察}，也就是应该攻击网络中的哪些位置。Tor 主要被设计用来抵抗后一类攻击。包括守卫和带宽权重在内的整个路径选择过程（\cref{cap:13-percorso}），都试图降低对手同时占据电路两端的概率。
+
+\begin{attenzione}[必须牢记的原则]
+Tor 能够针对只观察网络\emph{一部分}的对手提供保护，却无法抵抗成功观察到一条通信\emph{两个端点}的对手。如果对手既能控制或观察用户到守卫的连接，又能观察出口到目标网站的连接，就可以根据流量时序和数据量进行关联。对于能够观察一国全部网络流量的组织来说，用户和网站甚至可能都位于同一个国家。这是现实威胁，而不只是理论模型。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Tor 能保护什么，又不能保护什么}\label{sec:minaccia-sintesi}
+
+\begin{figure}[htbp]
+\centering
+\input{图/图04-可见性}
+\caption{路径上的各个位置分别知道什么。Tor 的保护来自信息分离：守卫知道客户端，却不知道最终目的地；出口知道目的地，却不知道客户端。}
+\label{fig:sapere}
+\end{figure}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+Tor 能防护 & Tor 不能防护 \\
+\midrule
+网站试图获知访问者的 IP 地址 & 用户自己暴露的信息（例如登录个人账户或公开个人资料） \\
+本地网络观察者或只能看到用户连接 Tor 的互联网服务提供商 & 同时观察通信两端的观察者 \\
+最多只知道一个端点的单个中继 & 同时控制一条电路守卫与出口的对手 \\
+出口试图识别请求最初由谁发出 & 出口读取或修改未加密流量（未使用 HTTPS） \\
+配合网桥时，基于 IP 地址实施的审查 & 存在漏洞、已被攻陷或配置错误的应用程序与浏览器 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+随着时间推移，Tor 的模型也扩展到 2004 年论文无法预见的问题：全国级网络审查（\cref{cap:16-censura}）、浏览器\emph{指纹识别}防护（\cref{cap:23-browser}）、DoS 防御（\cref{cap:15-dos}），以及量子计算机带来的未来威胁（\cref{cap:31-futuro}）。但有一条原则始终不变：理解威胁模型，是安全使用 Tor 的第一步。
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item 威胁模型说明一个系统被设计来抵抗哪些对手和哪些攻击。
+  \item Tor 的目标是阻止用户与目的地被关联，同时优先考虑可部署性、可用性、灵活性和简单性。
+  \item Tor 不是点对点系统；不能击败端到端攻击；不会替应用程序规范化协议；若不使用可插拔传输，也不会隐藏“正在使用 Tor”这一事实。
+  \item 对手可以观察部分网络、运营或攻陷中继，并采取主动措施。Tor 主要用于抵抗分析攻击，对确认攻击的保护则较弱。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:04-casi}
+对下列每种情形，判断 Tor 是否能保护用户，并解释原因：（a）咖啡馆 Wi-Fi 运营者想知道顾客访问了哪些网站；（b）某网站想知道访客的真实 IP 地址；（c）用户通过 Tor 登录自己的个人社交媒体账户；（d）能够控制某国网络基础设施的机构怀疑一名用户正在与同一国家的一家报纸通信。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:04-usabilita}
+举一个例子，说明为什么在匿名系统中，可用性是一项安全要求，而不仅仅是便利性问题。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:04-modello}
+为一名使用 Tor Browser 与另一个国家的消息来源通信的记者编写威胁模型。指出可能的对手、这些对手能够观察什么，以及哪些风险仍然处于 Tor 的保护范围之外。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item R.~Dingledine, N.~Mathewson, P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}，第 3、7 节。
+  \item R.~Dingledine, N.~Mathewson, \titolo{Anonymity Loves Company: Usability and the Network Effect}~\cite{dingledine2006company}.
+\end{itemize}

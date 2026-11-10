@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa para el EPUB en español.
+\altfig{Un mezclador de Chaum recibe a la izquierda cuatro mensajes cifrados y de igual longitud, identificados como A, B, C y D. Tras reunir el lote, retirar una capa de cifrado y mezclarlo, emite a la derecha cuatro mensajes de aspecto uniforme marcados del 1 al 4. El diagrama no revela qué entrada corresponde a cada salida.}
+% Mix de Chaum: formar lotes, retirar una capa y mezclar el orden.
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  msg/.style={draw,minimum width=1.5cm,minimum height=0.5cm,rounded corners=1pt}]
+  \node[draw=torviola,fill=torviola!8,rounded corners=4pt,minimum width=2.4cm,minimum height=3.4cm] (mix) at (5.2,0) {};
+  \node[font=\sffamily\small,text=torviola] at (5.2,1.35) {\textbf{mix}};
+  \node[align=center,text=torviola] at (5.2,0.4) {agrupar lote\\retirar capa\\mezclar};
+  \foreach \i/\y/\c in {A/1.2/torverde!30,B/0.4/torviola!25,C/-0.4/avviso!25,D/-1.2/torgrigio!25} {
+    \node[msg,fill=\c] (in\i) at (1.6,\y) {\i};
+    \node[font=\sffamily\tiny,left=1pt of in\i] {rem.\ \i};
+  }
+  \foreach \i/\y in {1/1.2,2/0.4,3/-0.4,4/-1.2} {
+    \node[msg,fill=torgrigio!20] (out\i) at (8.8,\y) {\i};
+  }
+  \foreach \i in {A,B,C,D} \draw[->,torgrigio] (in\i) -- (mix.west |- in\i);
+  \foreach \i in {1,2,3,4} \draw[->,torgrigio] (mix.east |- out\i) -- (out\i);
+  \node[align=center,font=\sffamily\tiny] at (1.6,-1.9) {igual longitud,\\cifrados para el mix};
+  \node[align=center,font=\sffamily\tiny] at (8.8,-1.9) {aspecto distinto,\\orden mezclado};
+  \draw[decorate,decoration={brace,amplitude=4pt}] (0.6,1.55) -- node[above=4pt] {lote de entrada} (2.5,1.55);
+  \draw[decorate,decoration={brace,amplitude=4pt}] (7.9,1.55) -- node[above=4pt] {lote de salida} (9.7,1.55);
+\end{tikzpicture}

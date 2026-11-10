@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Расшифрованное тело традиционной ячейки RELAY (формат tor1): заголовок 11 байт содержит Cmd (1 байт, смещение 0), Recognized (2, смещение 1), StreamID (2, смещение 3), Digest (4, смещение 5) и Length (2, смещение 9). Данные занимают Length байт от смещения 11, не более 498 байт; остаток до смещения 509 при необходимости заполняется. При отправке значение Recognized равно нулю; традиционный скользящий дайджест включает и заполнение. Спецификация рекомендует сначала до четырёх нулевых байтов, а затем случайные байты. Если осталось менее четырёх байтов, все они нулевые; при Length = 498 заполнения нет. Получатель не должен полагаться на его содержимое.}
+% Расшифрованное тело RELAY-ячейки, традиционный формат.
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\scriptsize,inner sep=1pt,align=center}]
+  \node[campo,fill=torviola!35,minimum width=1.2cm] (a) {Cmd\\(1)};
+  \node[campo,fill=torviola!15,minimum width=1.6cm,right=0pt of a] (b) {Recognized\\(2)};
+  \node[campo,fill=torviola!15,minimum width=1.4cm,right=0pt of b] (c) {StreamID\\(2)};
+  \node[campo,fill=torviola!15,minimum width=1.4cm,right=0pt of c] (d) {Digest\\(4)};
+  \node[campo,fill=torviola!15,minimum width=1.3cm,right=0pt of d] (e) {Length\\(2)};
+  \node[campo,fill=torverde!15,minimum width=3.2cm,right=0pt of e] (f) {Data\\(Length)};
+  \node[campo,fill=torgrigio!10,minimum width=2cm,right=0pt of f] (g) {Padding\\нули + случайные};
+  \foreach \n/\o in {a/0,b/1,c/3,d/5,e/9,f/11} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (g.north east) {509};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]a.south west) -- ([yshift=-2pt]e.south east)
+    node[midway,below=6pt,font=\sffamily\small] {заголовок: 11 байт};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]f.south west) -- ([yshift=-2pt]g.south east)
+    node[midway,below=6pt,font=\sffamily\small] {498 байт};
+\end{tikzpicture}

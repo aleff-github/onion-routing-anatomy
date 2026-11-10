@@ -1,0 +1,21 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Общая разметка и стили TikZ; внутренние имена окружений сохраняются.
+\input{../it/macro}
+% Необязательный аргумент — падежная форма: \proposta[Предложения]{289} («из Предложения 289»).
+\renewcommand{\proposta}[2][Предложение]{#1~#2\index{Предложения Tor!#2}}
+% Сохраняем исходный английский термин из аргумента #2 для читателя.
+\renewcommand{\termine}[2]{\emph{#1} (#2)\index{#1}}
+\renewcommand{\aggiornatoal}[2]{%
+  \begin{center}\small\color{torgrigio}\textit{Последняя проверка: #1 --- #2}\end{center}}
+\renewcommand{\dacontrollare}[1]{\textcolor{avviso}{\textbf{[ПРОВЕРИТЬ: #1]}}}
+\renewtcolorbox{obiettivi}{base,colback=torviola!5,colframe=torviola,title={Цели главы}}
+\renewtcolorbox{approfondimento}[1][]{base,colback=torgrigio!4,colframe=torgrigio,title={Подробнее\ifx&#1&\else: #1\fi}}
+\renewtcolorbox{attenzione}[1][]{base,colback=avviso!5,colframe=avviso,title={Внимание\ifx&#1&\else: #1\fi}}
+\renewtcolorbox{storia}[1][]{base,colback=torverde!5,colframe=torverde!70!black,title={Историческая справка\ifx&#1&\else: #1\fi}}
+\renewtcolorbox{specbox}[1]{base,colback=white,colframe=torviola!60,title={Из спецификации: #1}}
+\renewtcolorbox{laboratorio}[2][]{base,colback=torverde!4,colframe=torverde!60!black,
+  title={\ifx&#1&\refstepcounter{laboratorio}Лабораторная работа \thechapter.\arabic{laboratorio}\else Лабораторная работа~#1\fi: #2}}
+\renewenvironment{esercizio}[1][1]{\refstepcounter{esercizio}\par\medskip
+  \noindent\textbf{Упражнение \theesercizio}\ \stelle{#1}\quad}{\par}
+\renewenvironment{soluzione}[1]{\par\medskip\noindent\textbf{Решение \ref{#1}.}\quad}{\par}

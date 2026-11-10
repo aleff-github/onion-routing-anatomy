@@ -1,0 +1,127 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Real Cases Against the Network}\label{cap:27-casi-rete}
+\aggiornatoal{23 September 2026}{Tor Project statements (2014, 2022, 2023); tor 0.4.9.13; laboratory network}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item reconstruct the 2014 attack involving \cella{RELAY\_EARLY} cells and the defense added to tor, and verify that defense in a live laboratory (Laboratory~17);
+  \item describe the KAX17 incident and the relay-monitoring work that followed;
+  \item connect the 2022--2023 denial-of-service attacks with the defenses described in \cref{cap:15-dos};
+  \item draw broader lessons about securing an open network.
+\end{itemize}
+\end{obiettivi}
+
+The previous chapter treated attacks as research topics: models, experiments, and percentages. Here, we examine three real-network security incidents reconstructed from public Tor Project statements. For KAX17, the operator's intentions and any malicious activity were not established. We focus on what they teach us about the protocol and managing an open network rather than on operational attack details.
+
+% ---------------------------------------------------------------------------
+\section{2014: Signaling Through Cell Types}\label{sec:casi-relayearly}
+
+\paragraph{What happened.} On 4 July 2014, the Tor Project discovered and removed a group of relays it believed were attempting to deanonymize people publishing onion-service descriptors or requesting information about onion services, then known as \emph{hidden services}. The relays had joined on 30 January: approximately 115 fast, non-exit relays across two /16 networks, collectively representing about 6.4\,\% of guard capacity. On 30 July, the Tor Project published a security advisory describing the attack and its countermeasures~\cite{torblog2014relayearly}.
+
+\paragraph{How it worked.} The attack combined Sybil placement (\cref{sec:att-sybil}) with active traffic confirmation (\cref{sec:att-correlazione}). The relays remained stable enough to obtain both \texttt{HSDir} and \texttt{Guard} flags. When an adversarial HSDir received a descriptor request, it replied with a sequence of cells whose alternating \cella{RELAY} and \cella{RELAY\_EARLY} types encoded the requested service name (\cref{fig:relayearly}). If another member of the group was the same client's guard, it could read this sequence and associate the client with a request for that service's descriptor, without establishing that the service was actually visited.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig27-relay-early}
+\caption{The historical 2014 attack: a malicious HSDir encoded the requested service in the outer RELAY and RELAY\_EARLY cell commands, visible to relays along the circuit but protected by TLS on the links. A colluding malicious guard could link the client to the descriptor request, not prove that a visit occurred. The four cells are schematic, not a complete onion-address encoding.}
+\label{fig:relayearly}
+\end{figure}
+
+Why this field? \cella{RELAY\_EARLY} cells constrain circuit length: clients must use them for extension requests, and relays accept at most eight per circuit (\spec{tor-spec}{Handling RELAY\_EARLY cells}). The old checks, however, applied only to client-to-network traffic. No one normally sent such cells in the opposite direction, and no one checked for them there. Unlike layered-encrypted contents (\cref{cap:10-cifratura-relay}), the outer cell command remains visible to every relay. A signal written there survives transit unchanged. The advisory also noted that the signal encoded the service name in readable form, so a relay receiving those cells could interpret it. A third-party observer relying only on recorded network packets would first have to decrypt the link-level TLS traffic to recover the signal retrospectively.
+
+\paragraph{The response.} Three steps followed: the malicious relays were excluded; tor 0.2.4.23 and 0.2.5.6-alpha began closing circuits on receipt of client-bound \cella{RELAY\_EARLY}; and work proceeded toward reducing each client's guards from three to one, limiting opportunities to observe each user's traffic. The advisory emphasized that \emph{passive} traffic confirmation remained an open problem. The cell-type channel made confirmation easier, not possible for the first time.
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: The RELAY\_EARLY Limit}\label{sec:lab-casi}
+
+\begin{laboratorio}[17]{Eight Are Allowed; Nine Are Not}
+\textbf{Objective.} Use \file{labs/en/code/torlab} to verify how a current relay applies the \cella{RELAY\_EARLY} cell limit.\\
+\textbf{Prerequisites.} Laboratories~4 and~5; the laboratory network running.\\
+\textbf{Estimated time.} 30 minutes.
+\end{laboratorio}
+
+Our \file{circuit.py} already refuses to send more than eight \cella{RELAY\_EARLY} cells. The \file{labs/en/lab/relay\_early.py} script bypasses that safeguard. It constructs a one-hop circuit to \texttt{test004r}, sends $n$ \cella{RELAY\_EARLY} cells containing a \texttt{DROP} message that the relay discards without replying, and then requests a directory connection with \texttt{BEGIN\_DIR} to check whether the circuit remains active:
+\begin{lstlisting}[language=bash,numbers=none]
+$ PYTHONPATH=labs/en/code python3 labs/en/lab/relay_early.py 0 8 9
+0 RELAY_EARLY cells -> CONNECTED
+8 RELAY_EARLY cells -> CONNECTED
+9 RELAY_EARLY cells -> circuit destroyed, reason 1
+\end{lstlisting}
+The ninth cell causes the circuit to close with a \cella{DESTROY} cell carrying reason 1, \texttt{PROTOCOL}. The listing comes from a reference run: addresses, circuit identifiers, and logs vary between runs. An example relay log reads:
+\begin{lstlisting}[numbers=none]
+[warn] Received too many RELAY_EARLY cells on circ 4045911407 from
+       127.0.0.1:58048.  Closing circuit.
+\end{lstlisting}
+The check is in \file{src/core/or/command.c}, before the cell is decrypted. A few lines above is the check introduced in 2014: a client-bound \cella{RELAY\_EARLY} results in a warning and circuit closure. The source comment explains that such cells once arose from an old tor bug, but relays affected by it have long disappeared. Today such a cell is considered \enquote{unexpected} and handled as an attack. This laboratory is also part of \texttt{make verifica-lab}.
+
+% ---------------------------------------------------------------------------
+\section{2020--2021: KAX17 and Network Health}\label{sec:casi-kax17}
+
+A second incident illustrates a less visible part of defense: discovering adversaries in the first place. The Tor Project discussed the incident in April 2022 in an article about its network-health team~\cite{torblog2022badrelays}.
+
+In December 2020, relay graphs showed an unusual pattern. Every month, precisely at midnight on the first day, dozens of relays joined the network and then slowly disappeared. The pattern resembled a bug in the hibernation logic (\opt{AccountingMax}, \cref{sec:relay-config}). In September 2021, groups of relays that appeared to share one operator began appearing without family declarations or contact information. Authorities excluded them, but replacements kept appearing. In late October, an anonymous report helped identify a group later called KAX17, which was removed. Both the monthly spikes and relay waves then ceased, leading the Tor Project to consider attribution to the same operator plausible. The operator's identity and objectives remain unknown.
+
+The article is unusually candid about the delayed response: monitoring tools had been neglected for years; trust between volunteers, employees, and authorities was weak; and the organization was not structured for this kind of work. It also explains the governance process. Network monitors propose excluding relays, but directory authorities make the decision by majority rather than Tor Project staff. This is the distributed trust described in \cref{cap:12-directory}, applied to network operations.
+
+\begin{approfondimento}[Relays Without Family Declarations]
+The initial warning sign in the KAX17 case was not an observed exploit but a breach of a social rule: numerous relays apparently controlled by the same operator with no declared family (\cref{sec:relay-famiglie}). The broader lesson is that an adversary may not need to break a protocol if they can bypass the conventions on which path selection relies.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{2022--2023: Denial of Service}\label{sec:casi-dos}
+
+Beginning in summer 2022, the network experienced months of varied denial-of-service attacks. In February 2023, the Tor Project reported that users sometimes could not load pages or reach onion services, that tactics and targets had changed over time, and that the attackers' identities could not be determined with certainty~\cite{torblog2023dos}. Onion services were especially exposed: they could not block attacking IP addresses because requests arrived over anonymous circuits.
+
+The longer-term response was the proof-of-work system introduced in August 2023 with tor 0.4.8 (\cref{sec:dos-onion})~\cite{torblog2023pow}. Normally dormant, the defense asks clients under attack to solve increasingly difficult computational problems and prioritizes those that have done the most work. The Tor Project described costs of a few milliseconds for a normal client and potentially about a minute during an intense attack. The principle is the same as in Laboratory~9: make an attack that was cheap for the attacker expensive, without asking users to identify themselves.
+
+% ---------------------------------------------------------------------------
+\section{Lessons}\label{sec:casi-lezioni}
+
+\begin{itemize}
+  \item \textbf{Every visible field is a potential channel.} The 2014 attack did not break cryptography. It exploited a field that relays could read and forward. An anonymity protocol must ask, for every unencrypted bit, who can write it and who can read it. This is among the motivations for the newer relay encryption design (\cref{sec:cgo}).
+  \item \textbf{Sybil attacks may be cheap; monitoring is not.} Adding relays costs relatively little compared with maintaining the tools, expertise, and trust needed to identify coordinated malicious behavior.
+  \item \textbf{Defenses must be evaluated over time.} Using one guard, keeping guards longer, and introducing vanguards all reduce the adversary's opportunities over time (\cref{sec:att-correlazione}).
+  \item \textbf{Transparency is a defense.} In all three incidents, the Tor Project published both what it knew and what it did not know, enabling users, operators, and researchers to assess risk.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item In 2014, a Sybil group whose relays served as both guards and HSDirs encoded the names of onion services whose descriptors were requested into cell types. tor now closes circuits receiving client-bound \cella{RELAY\_EARLY}, while the move from three guards to one, and later to two in 2018, reduced opportunities to select malicious guards (\cref{sec:guard}).
+  \item The eight-\cella{RELAY\_EARLY}-cell limit can be verified on the laboratory network: the ninth destroys the circuit.
+  \item KAX17 was identified after months of indirect clues, including monthly peaks and undeclared relay families, and an anonymous report. Directory authorities are responsible for excluding relays.
+  \item The 2022--2023 denial-of-service attacks contributed to the introduction of onion-service proof of work.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:27-campo}
+Why could a signal in a cell's encrypted contents, written by an HSDir, not have been read by the guard, while a signal in the outer cell type could?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:27-uno}
+Explain how reducing the number of guards from three to one mitigates an attack like the one in 2014, and what disadvantage this brings.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:27-verso}
+Modify Laboratory~17 to show that a \cella{RELAY\_EARLY} cell counts toward the limit even if it does not contain a circuit-extension request. Then inspect tor's code to determine what happens when a \cella{RELAY\_EARLY} cell arrives in the direction of a client.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:27-segnali}
+Using CollecTor data, which clues could reveal relays operated by one party without a declared family? Suggest three criteria and discuss false positives.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:27-canali}
+List the cell and relay-message fields visible in plaintext to a middle relay (\cref{cap:08-celle}). For each, discuss whether a malicious relay could exploit it as a channel toward another relay on the circuit and identify any existing or proposed defense.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item Tor Project, \titolo{Tor security advisory: \enquote{relay early} traffic confirmation attack}~\cite{torblog2014relayearly}.
+  \item Tor Project, \titolo{Malicious relays and the health of the Tor network}~\cite{torblog2022badrelays}.
+  \item Tor Project, \titolo{Introducing Proof-of-Work Defense for Onion Services}~\cite{torblog2023pow}.
+\end{itemize}

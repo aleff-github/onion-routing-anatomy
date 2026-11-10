@@ -1,0 +1,36 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Русское издание: точка входа PDF.
+\documentclass[11pt,openright,twoside]{book}
+\input{преамбула}
+\input{макросы}
+\input{права}
+\hypersetup{pdftitle={Анатомия Tor}, pdfsubject={Протокол анонимности побайтно},
+  pdfauthor={Alessandro Greco}, pdflang={ru-RU}}
+\title{Анатомия Tor\\[0.5em]\large Протокол анонимности побайтно}
+\author{Alessandro Greco}
+\date{Первое издание --- версия 1.0.0}
+% Листинг сразу после заголовка в строку (\paragraph) начинался на строке заголовка:
+% верхняя линейка рамки шла после заголовка и выходила за край страницы. Здесь заголовок
+% остаётся на отдельной строке (то же исправление, что и в source/it/main.tex).
+\makeatletter
+\AddToHook{env/lstlisting/before}{\if@noskipsec\leavevmode\par\fi}
+\makeatother
+
+\begin{document}
+\frontmatter
+\maketitle
+% Выходные сведения на обороте титульного листа.
+\thispagestyle{empty}
+\null\vfill
+\Colophon
+\clearpage
+\tableofcontents
+\include{главы/00-предисловие}
+
+\mainmatter
+\input{структура}
+\backmatter
+\printbibliography[heading=bibintoc,title={Литература}]
+\printindex
+\end{document}

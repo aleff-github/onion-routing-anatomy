@@ -1,0 +1,19 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Сравнение со статьёй 4 DSA не означает автоматического освобождения. Клиент использует RELAY\_BEGIN, узел exit открывает TCP, применяет правила и передаёт прикладные байты из RELAY\_DATA, а не сами ячейки Tor.}
+% Требования mere conduit в сопоставлении с поведением exit
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.35cm,
+  cond/.style={draw,rounded corners=2pt,text width=4.2cm,align=left,minimum height=0.8cm},
+  tor/.style={draw=torviola,fill=torviola!8,rounded corners=2pt,text width=5.4cm,align=left,minimum height=0.8cm}]
+  \node[cond] (a) {(a) не инициирует передачу};
+  \node[cond,below=of a] (b) {(b) не выбирает её получателя};
+  \node[cond,below=of b] (c) {(c) не выбирает и не изменяет информацию};
+  \node[tor,right=1.2cm of a] (ta) {клиент посылает \texttt{RELAY\_BEGIN}; exit открывает TCP};
+  \node[tor,right=1.2cm of b] (tb) {адрес задаёт клиент; policy может отказать};
+  \node[tor,right=1.2cm of c] (tc) {байты из \texttt{RELAY\_DATA} в TCP-поток};
+  \foreach \x in {a,b,c} \draw[<->,torgrigio] (\x) -- (t\x);
+  \node[above=4pt of a,font=\sffamily\small] {Регламент (ЕС) 2022/2065, ст.~4};
+  \node[above=4pt of ta,font=\sffamily\small] {Tor exit};
+  \node[font=\sffamily\tiny,text=torgrigio,align=center,below=0.5cm of c,xshift=3.3cm] {Освобождение оценивается по обстоятельствам};
+\end{tikzpicture}

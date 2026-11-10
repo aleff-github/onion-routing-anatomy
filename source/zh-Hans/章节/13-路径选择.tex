@@ -1,0 +1,232 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{路径选择、入口守卫与 Vanguards}\label{cap:13-percorso}
+\aggiornatoal{2026 年 9 月 23 日}{torspec 提交 \texttt{8e1f245}；tor 0.4.9.13；2026 年 9 月 23 日 15:00 UTC 的公共共识}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 描述 tor 为电路选择中继的顺序与约束；
+  \item 解释共识带宽和 \emph{bandwidth-weights} 如何平衡不同电路位置的负载；
+  \item 解释为什么使用 guard，并梳理它从三个变成一个、再到两个的历史；
+  \item 描述入口守卫算法中的已采样、已过滤、已确认和主要守卫节点；
+  \item 解释 vanguard 是什么，以及为什么洋葱服务需要它；
+  \item 使用真实公共网络共识模拟路径选择（实验~7）。
+\end{itemize}
+\end{obiettivi}
+
+目录系统（\cref{cap:12-directory}）给客户端一份中继列表。剩下的问题几乎比任何其他问题都更直接决定用户能受到多好保护：到底应该使用\emph{哪些}中继？如果对手同时控制一条电路的第一跳和最后一跳，它就可以关联进入和离开的流量，判断谁在和谁通信（\cref{cap:26-attacchi}）。因此，路径选择很大程度上就是：在不过度牺牲性能的前提下，让这种事件尽可能少发生。
+
+% ---------------------------------------------------------------------------
+\section{顺序与约束}\label{sec:percorso-vincoli}
+
+对于三跳电路，tor 先选择\textbf{出口}，然后选择 guard，最后选择 middle~\spec{path-spec}{Path selection and constraints}。之所以先选出口，是因为它受到的限制最多：出口策略必须允许目标目的地。如果客户端只知道目标域名而不知道 IP 地址，它会选择一个\emph{可能}接受该目标的出口，也就是在接受所请求端口之前，没有先拒绝它的出口。
+
+除少数例外，所有路径都满足：
+\begin{itemize}
+  \item 不使用没有 \texttt{Fast} 标志的中继；
+  \item 同一个中继不能出现两次；
+  \item 每个 IPv4 /16 网络（或 IPv6 /32 网络）最多一个中继，因为同一数据中心中的两个中继可能由同一运营者控制；
+  \item 每个\textbf{中继家族}最多一个中继：运营多个中继的人应把它们声明为同一家族，tor 会避免把两个成员放进同一条电路；
+  \item 第一跳必须是 guard（\cref{sec:guard}）；
+  \item 不能选择带有 \texttt{BadExit} 标志的出口。
+\end{itemize}
+预计会保持较长时间的连接——tor 会把某些端口归类为这类连接，例如 SSH 的 22 和 IRC 的 6667——还要求使用 \texttt{Stable} 中继。洋葱服务另有独立于端口的要求：服务端的引介电路和汇合路径会按 \texttt{Stable} 电路构建，端点还不能是 \texttt{MiddleOnly}~\spec{path-spec}{Path selection and constraints}。所谓“少数例外”主要出现在使用 vanguard 的洋葱服务电路中（\cref{sec:vanguards}）：它们有意放宽部分限制，例如允许拥有 \texttt{Guard} 标志的中继出现在 middle 位置。若禁止这些组合，反而会告诉对手\emph{哪些}中继没有被选中，从而泄露 guard 选择信息。
+
+\begin{approfondimento}[两种声明中继家族的方式]
+传统做法是在每个中继描述符中列出同一运营者的其他全部中继；只有两个中继彼此都列出对方时，它们才属于同一家族。中继很多时列表会非常大，而且一次配置失误就可能破坏家族关系。较新的 \emph{happy families} 机制为一个中继家族分配一把密钥，每个中继用该密钥签名的证书证明成员身份：描述符中的 \texttt{family-cert} 与微描述符中的 \texttt{family-ids}。共识参数 \texttt{use-family-lists} 和 \texttt{use-family-ids} 决定客户端使用哪些机制。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{按带宽加权}\label{sec:percorso-pesi}
+
+\subsection{为什么需要加权}
+
+如果客户端均匀随机选择中继，那么 1\,MB/s 的中继与 1\,GB/s 的中继获得流量的概率完全相同：前者会过载，后者则利用不足。因此 Tor 让每个中继的选择概率与共识中的\textbf{带宽}（\texttt{w} 行，\cref{sec:dir-anatomia}）成比例，以便按容量分配负载。
+
+\subsection{不同位置并不等价}
+
+这里还有一个问题。拥有 \texttt{Exit} flag 的中继相对稀缺，而真正能把流量送出 Tor 网络的带宽更是稀缺资源。如果把出口拿去当 guard 或 middle，就会消耗原本应该留给出口流量的容量。guard 也存在类似但较弱的问题。因此权威会为每份共识计算 \textbf{bandwidth-weights}：根据中继的\emph{类型}（纯 guard、纯 exit、guard+exit、两者都不是）和目标\emph{位置}，对中继带宽乘上不同系数~\spec{path-spec}{Weighting node selection}。
+
+每个权重写作 \texttt{W}\emph{pt}：\emph{p} 表示位置（\texttt{g}=guard、\texttt{m}=middle、\texttt{e}=exit、\texttt{b}=目录请求），\emph{t} 表示类型（\texttt{g}=guard、\texttt{e}=exit、\texttt{d}=同时为 guard 和 exit、\texttt{m}=两者都不是）。数值按万分比表示：\texttt{Wmg=3805} 表示一个 guard 被选作 middle 时，只计算其 38.05\,\% 带宽。
+
+\subsection{真实网络中的权重}
+
+下面这些值来自实验~7 从 CollecTor 下载的 2026 年 9 月 23 日 15:00 UTC 公共共识：
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+位置 $\backslash$ 类型 & guard (\texttt{g}) & middle (\texttt{m}) & exit (\texttt{e}) & guard+exit (\texttt{d}) \\
+\midrule
+guard (\texttt{Wg\,}) & 6195 & 6195 & --- & 0 \\
+middle (\texttt{Wm\,}) & 3805 & 10000 & 0 & 0 \\
+exit (\texttt{We\,}) & 10000 & 10000 & 10000 & 10000 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+结果很直观：exit 以及同时具有 Guard 和 Exit flag 的中继，在 guard 和 middle 位置权重都是\textbf{零}。这张网络的出口带宽只占总带宽 33\,\%，非常宝贵，因此全部保留给出口位置。guard 带宽则占 70\,\%，更充足：它们作为 guard 时按 62\,\% 加权，作为 middle 时按 38\,\% 加权。实验会看到，约 60\,\% 电路的 middle 本身带有 \texttt{Guard} 标志。
+
+权威计算这些权重的公式定义在目录规范中。它们会根据哪类带宽最稀缺采用不同情况，并尽可能让三个位置可用容量保持平衡。
+
+% ---------------------------------------------------------------------------
+\section{入口守卫（Guard）}\label{sec:guard}
+
+\subsection{它们解决什么问题}
+
+假设对手控制了可作为第一跳和出口的带宽比例 $c$。如果客户端每条电路都重新随机选择 guard 和 exit，那么单条电路两端都落入对手手中的概率大约是 $c^2$。构建 $C$ 条电路后，至少一次被攻陷的概率为
+$1 - (1 - c^2)^C$，并且随着 $C$ 增大趋近于 1~\spec{guard-spec}{Introduction and motivation}。每天使用 Tor 的用户会构建数千条电路；如果第一跳不断重新随机选择，迟早几乎必然有流量落入对手控制的两端。
+
+\textbf{Guard}（研究文献早期称 \emph{helper node}）的思想是：第一跳只选择一次，并在很长一段时间内重复使用。如果该 guard 是诚实的，那么这一类攻击下的所有电路都安全；如果它属于对手，则很多电路都会暴露。至少一次被攻陷的概率由接近 1 降到约 $c$。
+
+\begin{center}
+\begin{tabular}{rcc}
+\toprule
+电路数 & 不使用固定 guard & 使用固定 guard \\
+\midrule
+1 & 0.0025 & 0.0025 \\
+100 & 0.221 & 0.050 \\
+\num{1000} & 0.918 & 0.050 \\
+\num{10000} & 1.000 & 0.050 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent 实验~7 对 $c=5\,\%$ 的计算展示了这种取舍。guard 并不会让攻陷变得不可能，而是把一个长期几乎必然发生在\emph{所有人}身上的事件，变成只影响少量用户的低概率事件。这个模型刻意简化，例如没有考虑 guard 随时间更换的情况。
+
+\subsection{三个、一个、两个}
+
+Guard 于 2006 年引入，背景是 Øverlier 与 Syverson 展示了如何反复诱导洋葱服务连接攻击者控制的中继，从而定位服务~\cite{overlier2006locating}。多年间，客户端使用三个 guard，并每两三个月更换。之后研究发现，三个 guard 和频繁轮换都会增加暴露面。\proposta{236}（2014）建议只使用一个 guard，并保留九到十个月。但单一 guard 会让连通性更脆弱，也更容易被攻击者强迫替换。\proposta{291}（2018）改为\textbf{两个} guard。tor 内建默认值其实仍是一个（\file{src/feature/client/entrynodes.h} 中的 \file{DFLT\_N\_PRIMARY\_GUARDS\_TO\_USE}），但公共共识携带 \texttt{guard-n-primary-guards-to-use=2}，从而覆盖所有客户端默认值。这再次说明权威如何通过共识调节网络行为。
+
+\subsection{算法}
+
+当前算法由 \proposta{271} 和 guard 规范定义，它维护多个集合~\spec{guard-spec}{The algorithm}：
+\begin{description}
+  \item[已采样守卫（sampled guards）] 按带宽加权随机选出并持久化到磁盘的一组 guard。只有需要时才扩展，最多 60 个或共识中 guard 总数的 20\,\%。限制样本大小可以防止攻击者让客户端一个接一个尝试整张网络的所有 guard，直到最终碰到攻击者控制的中继。
+  \item[已过滤守卫（filtered guards）] 样本中仍存在于共识、并且在当前配置下可用的 guard，例如防火墙只允许某些端口时仍能连接的中继。
+  \item[已确认守卫（confirmed guards）] 真正用于用户流量的 guard，按偏好顺序排列。
+  \item[主要守卫（primary guards）] 默认从 filtered 集合选择三个守卫，先按优先级选取同时属于 confirmed 的守卫，不足时再加入其他已过滤但尚未确认的守卫。客户端优先使用可达的主要守卫（或根据前述共识参数使用前两个）；只有它们不可达时才尝试其他守卫。
+\end{description}
+
+\begin{figure}[htbp]
+\centering
+\input{图/图13-入口守卫}
+\caption{Tor 守卫算法的列表关系：持久样本来自共识中的守卫，而 FILTERED 与 CONFIRMED 是样本中不同且可能重叠的两个子集。PRIMARY 必须取自 FILTERED，优先已确认的守卫，再补充其他已过滤守卫。限制样本大小可以减少接触新守卫的机会。}
+\label{fig:guard}
+\end{figure}
+
+一个 guard 在 sample 中保留多久取决于其状态。\textbf{从未确认过}的守卫节点（\texttt{CONFIRMED\_ON\_DATE} 未设置）在被采样 \texttt{GUARD\_LIFETIME}=120 天后移除；真正被客户端使用过的\textbf{已确认}守卫节点则在确认后 \texttt{GUARD\_CONFIRMED\_MIN\_LIFETIME}=60 天移除。如果连续 20 天不在共识中，也会被删除。保存到状态文件的时间戳（\texttt{ADDED\_ON\_DATE} 和 \texttt{CONFIRMED\_ON\_DATE}）还会随机向过去偏移最多 \texttt{GUARD\_LIFETIME}/10=12 天，这样状态文件不会准确暴露客户端从何时开始使用 Tor，也使已确认守卫节点的实际寿命约为 48--60 天。因此，大约每两个月轮换的是\emph{已确认的}守卫节点，而不是每四个月。这一点对 \cref{cap:29-ricerca} 的模拟很重要。
+
+\begin{attenzione}[更换 Guard 本身就是线索]
+Tor 很谨慎地区分 guard \emph{无法连接}与普通\emph{电路失败}。如果客户端每当电路失败就换 guard，攻击者就可以故意让诚实 guard 上的电路失败，直到客户端最终选择恶意 guard。2026 年 9 月 23 日发布的 tor 0.4.9.13 安全更新正修复了这一点：客户端现在只在无法建立到 guard 的连接时把失败归因于 guard，而不会因为电路、数据流或目录请求失败就这样做。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Vanguards 防护机制}\label{sec:vanguards}
+
+Guard 保护的是\emph{第一跳}。洋葱服务（\cref{cap:14-onion-services}）还有另一个问题：恶意客户端可以不断诱导服务向攻击者选择的 rendezvous point 构建大量电路。如果每条电路的 middle 都重新随机选，那么迟早会出现攻击者控制的 middle，此时攻击者就能观察服务正在使用哪个 guard，再进一步攻击该 guard 或设法取得其数据。\textbf{Vanguards} 把 guard 的思想延伸到后续跳：第二层（某些配置还包括第三层）也固定使用一小组中继。
+
+\begin{description}
+  \item[Vanguards-lite]（\proposta{333}，tor 0.4.7.1-alpha）客户端和洋葱服务默认启用。它使用四个第二层中继，不写入磁盘，每个具有随机寿命。这里代码与规范存在差异：tor 0.4.9.13 使用 1--12 天范围，平均约一周，由 \file{src/feature/client/entrynodes.c} 中 \file{MIN\_SECOND\_GUARD\_LIFETIME} 和 \file{MAX\_SECOND\_GUARD\_LIFETIME} 定义。共识参数 \texttt{guard-hs-l2-lifetime-min} 与 \texttt{-max} 可以覆盖这些值，但 2026 年 9 月 23 日共识中并不存在。vanguards 规范仍写 1--22 天，平均两周。该模式面向活动时间不超过几周的服务和用户。
+  \item[Full vanguards] 第二层和第三层都固定使用中继，寿命更长，面向长期运行且高风险的洋葱服务。tor 通过 \emph{vanguards} 扩展组件实现，设置 \opt{HSLayer2Nodes} 和 \opt{HSLayer3Nodes}；Arti 则直接实现，同时提供 \texttt{Full} 和 \texttt{Lite} 模式。
+\end{description}
+
+在实验网络（\cref{sec:rp-stem}）中，我们曾看到用途标记为 \file{HS\_VANGUARDS} 的电路：它们是预先用 vanguard 构建好的电路，可随时进一步扩展到引介点或汇合点。
+
+% ---------------------------------------------------------------------------
+\section{实验：观察公共网络}\label{sec:lab-percorso}
+
+\begin{laboratorio}[7]{按带宽加权的路径选择}
+\textbf{目标。} 编写 \file{labs/zh-Hans/代码/torlab/path\_selection.py}，用真实公共网络共识分析路径选择。\\
+\textbf{前置条件。} 实验~6（\file{directory.py}）；从 Tor Project 的公开归档 CollecTor（\url{https://collector.torproject.org/}）下载的一份公共共识。这些数据本来就公开用于研究，下载它们不会接触任何网络用户。\\
+\textbf{预计时间。} 2 小时。
+\end{laboratorio}
+
+\paragraph{步骤 1：中继权重。}
+\begin{lstlisting}[language=Python]
+def _relay_type(r):  # g=纯 Guard，e=纯 Exit，d=两者兼有，m=两者都不是
+    g, e = "Guard" in r.flag, "Exit" in r.flag and "BadExit" not in r.flag
+    return {(1, 1): "d", (1, 0): "g", (0, 1): "e", (0, 0): "m"}[(g, e)]
+
+def weight(r, position, weights):
+    key = f"W{position[0]}{_relay_type(r)}"          # 例如 "Wmg"
+    return (r.bandwidth or 0) * weights.get(key, 10000) / 10000
+\end{lstlisting}
+
+\paragraph{步骤 2：选择路径。} \texttt{Selector} 类为每个位置预先计算一次权重。约束通过\emph{拒绝采样}施加：抽到一个中继，如果违反约束（同一中继或同一 /16），就重新抽取。
+\begin{lstlisting}[language=Python]
+def path(self, rng, guard=None):
+    e = self.choose("exit", [], rng)
+    g = guard or self.choose("guard", [e], rng)
+    m = self.choose("middle", [e, g], rng)
+    return g, m, e
+\end{lstlisting}
+
+最初版本每次选择都过滤九千多个中继，并重新计算权重和网络，构建 \num{2000} 条路径需要 310 秒。这个版本构建 \num{20000} 条只需 7 秒。在统计模拟中，性能不是次要问题。
+
+\paragraph{步骤 3：公共网络的数字。} 对 2026 年 9 月 23 日 15:00 UTC 的共识：
+\begin{lstlisting}[numbers=none]
+中继：9358
+带 Guard 标志的带宽：70.1%    带 Exit 标志的带宽：33.1%
+guard : 合格  5306; 前 10 = 1.7%; 前 100 = 12.6%
+middle: 合格  8961; 前 10 = 2.8%; 前 100 = 13.7%
+exit  : 合格  3126; 前 10 = 2.3%; 前 100 = 13.7%
+20000 条路径：gge 30.9%  ggd 29.4%  gme 20.4%  gmd 19.3%
+\end{lstlisting}
+
+\emph{合格}中继数量少于拥有相应 flag 的中继数（\cref{cap:06-architettura} 报告有 3177 个 \texttt{Exit}，这里为 3126）。因为 \texttt{eligible} 函数还要求 \texttt{Running}、\texttt{Valid} 和 \texttt{Fast}，并排除 \texttt{BadExit} 与 \texttt{MiddleOnly}。差值包括 48 个没有 \texttt{Fast} 的出口和 3 个标记为 \texttt{BadExit} 的出口。
+
+最后一行使用随机种子 7。若不固定随机种子，每次结果都会波动零点几个百分点，两个实验将难以直接比较。字母代码表示 guard、middle、exit 的类型，例如 \texttt{gme} 表示 guard + 没有两种标志的普通中间节点 + 纯 exit。正如权重所预示，没有路径把 exit 用于第一或第二位置；约 60\,\% 情况下，middle 自身带有 \texttt{Guard} 标志。集中度也不高：最常被选中的 10 个出口合计只占 2.3\,\%，前 100 个占 13.7\,\%。
+
+\paragraph{步骤 4：Guard 与对手。} \texttt{Adversary} 类计算 \cref{sec:guard} 中的表格。尝试改变对手份额：当 $c=1\,\%$ 或 $c=20\,\%$ 时，guard 的效果是否仍然明显？
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item tor 先选出口，再选 guard 和 middle，并避免重复中继、同一 /16 或同一 family 的中继出现在同一条电路。
+  \item 每个中继的选择概率与“带宽 × 位置/类型权重”成比例；在本章分析的网络中，exit 只用于出口位置。
+  \item Guard 把“长期重复随机选择第一跳最终几乎必然被攻陷”的风险，转变为影响少量用户的低概率事件；当前客户端使用两个。
+  \item Guard 算法维护有限 sample、confirmed guard 和 primary guard，并且谨慎判断何时把失败归因于 guard。
+  \item Vanguard 还为洋葱服务固定第二层；vanguards-lite 默认启用。
+  \item 共识参数可以覆盖软件内建默认值。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:13-ordine}
+为什么 tor 要先选择出口？如果先选择 guard，可能出现什么问题？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:13-peso}
+某中继同时具有 \texttt{Guard} 和 \texttt{Exit} 标志，共识带宽为 20000。按照本章给出的真实网络权重，它在三个电路位置上的权重分别是多少？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:13-guard}
+对 $c=1\,\%$ 与 $c=20\,\%$ 重复 guard 表格计算。两种情况下，不使用 guard 时至少需要多少条电路，攻陷概率才会超过 50\,\%？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:13-sybil}
+攻击者希望提高自己的中继被选为出口的概率。它必须投入哪些资源？带宽测量、family、单地址中继数量限制以及 bandwidth weight 分别如何增加攻击难度？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:13-campione}
+为什么 guard sample 被限制为最多 60 个或全部 guard 的 20\,\%？描述这一限制阻止的攻击。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:13-famiglie}
+扩展 \texttt{Selector}，利用微描述符中的 \texttt{family} 和 \texttt{family-ids} 字段实施家族约束。从 CollecTor 下载与共识匹配的微描述符，统计多少次抽样因为 family 冲突而被拒绝。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:13-operatori}
+按声明的中继家族对公共共识中继分组，计算最大的十个中继家族占出口选择概率的份额，并与单个中继中最常被选择的十个出口份额比较。你能对“经营大量中继的运营者”带来的风险得出什么结论？
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \titolo{Tor Path Specification} 与 \titolo{Tor Guard Specification}~\cite{torspec}。
+  \item L.~Øverlier 与 P.~Syverson，\titolo{Locating Hidden Servers}~\cite{overlier2006locating}：促成 guard 的攻击。
+  \item 提案 236、271、291、333：从单 guard 到双 guard、当前算法与 vanguards-lite。
+  \item vanguards 规范（vanguards-spec），其中包括 Sybil 攻击时间线表格。
+\end{itemize}

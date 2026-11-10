@@ -1,0 +1,15 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Формат ячейки Tor фиксированной длины для протокола канала v4 и выше: CircID (4 байта) со смещения 0, Command (1 байт) со смещения 4 и Body (509 байт) со смещения 5; следующий за ячейкой байт имеет смещение 514. На схеме условно показаны данные и неиспользованная часть, заполняемая нулями для многих команд с фиксированной длиной. Исключение — RELAY и RELAY\_EARLY: их зашифрованное тело на уровне канала всегда занимает все 509 байт. Ширина полей изображена не в масштабе.}
+% Ячейка фиксированной длины, протокол канала >= 4 (ширины полей не в масштабе).
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\small,inner sep=2pt}]
+  \node[campo,fill=torviola!15,minimum width=2.6cm] (c) {CircID (4)};
+  \node[campo,fill=torviola!35,minimum width=1.6cm,right=0pt of c] (k) {Cmd (1)};
+  \node[campo,fill=torverde!15,minimum width=5.2cm,right=0pt of k] (b) {Тело: данные};
+  \node[campo,fill=torgrigio!10,minimum width=2.2cm,right=0pt of b] (p) {нули};
+  \foreach \n/\o in {c/0,k/4,b/5} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (p.north east) {514};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]b.south west) -- ([yshift=-2pt]p.south east)
+    node[midway,below=6pt,font=\sffamily\small] {\texttt{CELL\_BODY\_LEN} = 509 байт};
+\end{tikzpicture}

@@ -1,0 +1,131 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Casos reales de ataques contra la red}\label{cap:27-casi-rete}
+\aggiornatoal{23 de septiembre de 2026}{comunicados del Tor Project (2014, 2022, 2023); tor 0.4.9.13; red de laboratorio}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item reconstruir el ataque de 2014 que utilizó celdas \cella{RELAY\_EARLY}, explicar la defensa añadida a tor y verificarla en un laboratorio en funcionamiento (laboratorio~17);
+  \item describir el incidente KAX17 y los trabajos posteriores de vigilancia de repetidores;
+  \item relacionar los ataques de denegación de servicio de 2022--2023 con las defensas explicadas en \cref{cap:15-dos};
+  \item extraer lecciones más generales sobre cómo proteger una red abierta.
+\end{itemize}
+\end{obiettivi}
+
+En el capítulo anterior tratamos los ataques como temas de investigación: modelos, experimentos y porcentajes. Aquí examinamos tres incidentes de seguridad de la red real, reconstruidos a partir de comunicados públicos del Tor Project. En el caso KAX17 no se establecieron ni las intenciones del operador ni eventuales actividades maliciosas. Nos centraremos en lo que enseñan sobre el protocolo y la gestión de una red abierta, y no en detalles operativos de los ataques.
+
+% ---------------------------------------------------------------------------
+\section{2014: señales mediante tipos de celda}\label{sec:casi-relayearly}
+
+\paragraph{Qué ocurrió.} El 4 de julio de 2014, el Tor Project descubrió y eliminó un grupo de repetidores que sospechaba que intentaban desanonimizar a personas que publicaban descriptores o solicitaban información sobre servicios onion, entonces llamados \emph{servicios ocultos}. Los repetidores se habían incorporado el 30 de enero: aproximadamente 115 repetidores rápidos sin función de salida, distribuidos entre dos redes /16 y que representaban conjuntamente cerca del 6,4\,\% de la capacidad de los guardias. El 30 de julio, el Tor Project publicó un aviso de seguridad donde describía el ataque y sus contramedidas~\cite{torblog2014relayearly}.
+
+\paragraph{Cómo funcionaba.} El ataque combinaba la colocación Sybil (\cref{sec:att-sybil}) con la confirmación activa de tráfico (\cref{sec:att-correlazione}). Los repetidores permanecían suficientemente estables para obtener los indicadores \texttt{HSDir} y \texttt{Guard}. Cuando un HSDir adversario recibía una solicitud de descriptor, respondía con una secuencia de celdas cuyos tipos alternados \cella{RELAY} y \cella{RELAY\_EARLY} codificaban el nombre del servicio solicitado (\cref{fig:relayearly}). Si otro miembro del grupo era el guardia del mismo cliente, podía leer la secuencia y vincular al cliente con la solicitud del descriptor del servicio, sin demostrar que llegara a visitarlo.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig27-relay-early}
+\caption{El ataque histórico de 2014: el HSDir malicioso codificaba el servicio solicitado en los comandos exteriores RELAY y RELAY\_EARLY, visibles para los repetidores del circuito pero protegidos por TLS en los enlaces. El guardia cómplice podía vincular al cliente con una solicitud de descriptor, sin demostrar que visitara el servicio. Las cuatro celdas son esquemáticas, no la codificación completa de una dirección onion.}
+\label{fig:relayearly}
+\end{figure}
+
+¿Por qué ese campo? Las celdas \cella{RELAY\_EARLY} limitan la longitud de los circuitos: los clientes deben utilizarlas para solicitar extensiones y los repetidores admiten como máximo ocho por circuito (\spec{tor-spec}{Handling RELAY\_EARLY cells}). Sin embargo, las comprobaciones antiguas solo se aplicaban al tráfico del cliente hacia la red. Normalmente nadie enviaba esas celdas en dirección contraria y nadie comprobaba su presencia. A diferencia del contenido cifrado por capas (\cref{cap:10-cifratura-relay}), el comando exterior de la celda permanece visible para todos los repetidores. Una señal escrita allí sobrevive al tránsito sin alteraciones. El aviso de seguridad también señaló que la señal codificaba el nombre del servicio de forma legible, por lo que un repetidor que recibiera esas celdas podría interpretar la señal. Un observador externo con simples capturas de red necesitaría antes descifrar el TLS de los enlaces para recuperarla retrospectivamente.
+
+\paragraph{La respuesta.} Se adoptaron tres medidas: excluir los repetidores maliciosos; hacer que tor 0.2.4.23 y 0.2.5.6-alpha cerrasen los circuitos al recibir \cella{RELAY\_EARLY} dirigidas al cliente; y avanzar hacia la reducción de los guardias de cada cliente de tres a uno, limitando las oportunidades de observar su tráfico. El aviso subrayó que la confirmación \emph{pasiva} de tráfico seguía siendo un problema abierto. El canal basado en el tipo de celda facilitaba confirmar el tráfico, pero no hacía posible por primera vez ese ataque.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: el límite de RELAY\_EARLY}\label{sec:lab-casi}
+
+\begin{laboratorio}[17]{Se permiten ocho; nueve, no}
+\textbf{Objetivo.} Utilizar \file{labs/es/codigo/torlab} para verificar cómo aplica un repetidor actual el límite de celdas \cella{RELAY\_EARLY}.\\
+\textbf{Requisitos previos.} Laboratorios~4 y~5; red de laboratorio en ejecución.\\
+\textbf{Tiempo estimado.} 30 minutos.
+\end{laboratorio}
+
+Nuestro \file{circuit.py} ya se niega a enviar más de ocho celdas \cella{RELAY\_EARLY}. El script \file{labs/es/laboratorio/relay\_early.py} omite intencionadamente esa protección en este experimento controlado. Solo permite los casos de ocho y nueve celdas. Construye un circuito de un salto hacia \texttt{test004r}, envía $n$ celdas \cella{RELAY\_EARLY} con un mensaje \texttt{DROP} que el repetidor descarta sin responder y después solicita una conexión de directorio mediante \texttt{BEGIN\_DIR} para comprobar si el circuito sigue activo. Desde la raíz del repositorio se utiliza el comando siguiente.
+
+\begin{lstlisting}[language=bash,numbers=none]
+$ PYTHONPATH=labs/es/codigo python3 labs/es/laboratorio/relay_early.py 8 9
+8 celdas RELAY_EARLY -> CONNECTED
+Comprobación: CORRECTA
+9 celdas RELAY_EARLY -> circuito destruido, motivo 1
+Comprobación: CORRECTA
+\end{lstlisting}
+
+La novena celda provoca el cierre del circuito mediante una celda \cella{DESTROY} de razón 1, \texttt{PROTOCOL}. El listado procede de una ejecución de referencia: direcciones, identificadores de circuito y registros varían entre ejecuciones. Un registro de referencia del repetidor indica:
+\begin{lstlisting}[numbers=none]
+[warn] Received too many RELAY_EARLY cells on circ 4045911407 from
+       127.0.0.1:58048.  Closing circuit.
+\end{lstlisting}
+
+La comprobación se encuentra en \file{src/core/or/command.c}, antes de descifrar la celda. Unas líneas más arriba está la comprobación introducida en 2014: recibir una \cella{RELAY\_EARLY} dirigida al cliente produce una advertencia y el cierre del circuito. El comentario del código explica que esas celdas procedieron en el pasado de un fallo de versiones antiguas de tor, pero los repetidores afectados desaparecieron hace mucho. En la actualidad, una celda así se considera \enquote{inesperada} y se trata como un ataque. Este laboratorio también forma parte de \texttt{make verifica-lab}.
+
+% ---------------------------------------------------------------------------
+\section{2020--2021: KAX17 y la salud de la red}\label{sec:casi-kax17}
+
+Un segundo incidente ilustra una parte menos visible de la defensa: descubrir a los adversarios. El Tor Project lo trató en abril de 2022 en un artículo sobre su equipo dedicado a vigilar la salud de la red~\cite{torblog2022badrelays}.
+
+En diciembre de 2020, los gráficos de repetidores mostraron un patrón extraño. Cada mes, exactamente a medianoche del primer día, decenas de repetidores se incorporaban a la red y después desaparecían lentamente. Parecía un fallo de la lógica de hibernación (\opt{AccountingMax}, \cref{sec:relay-config}). En septiembre de 2021 comenzaron a aparecer grupos de repetidores aparentemente controlados por un mismo operador, sin declaraciones de familia ni datos de contacto. Las autoridades los excluían, pero aparecían sustitutos. A finales de octubre, una denuncia anónima ayudó a identificar un grupo denominado posteriormente KAX17, que fue eliminado. A continuación cesaron tanto los picos mensuales como las oleadas de repetidores, por lo que el Tor Project consideró plausible atribuir ambos fenómenos al mismo operador. La identidad y los objetivos de este siguen siendo desconocidos.
+
+El artículo es excepcionalmente franco acerca de la respuesta tardía: las herramientas de vigilancia llevaban años desatendidas; la confianza entre voluntarios, empleados y autoridades era débil; y la organización no estaba preparada para ese tipo de trabajo. También explica cómo funciona la gobernanza. Quienes vigilan la red pueden proponer excluir repetidores, pero las autoridades de directorio deciden por mayoría, no el personal del Tor Project. Es la confianza distribuida estudiada en \cref{cap:12-directory}, aplicada a la operación de la red.
+
+\begin{approfondimento}[Repetidores sin declaración de familia]
+La señal de alerta inicial del caso KAX17 no fue observar una vulnerabilidad explotada, sino incumplir una norma social: numerosos repetidores aparentemente controlados por el mismo operador sin declarar su familia (\cref{sec:relay-famiglie}). La lección más general es que un adversario tal vez no necesite romper el protocolo si consigue eludir las convenciones de las que depende la selección de rutas.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{2022--2023: denegación de servicio}\label{sec:casi-dos}
+
+Desde el verano de 2022, la red experimentó durante meses ataques de denegación de servicio de diversa naturaleza. En febrero de 2023, el Tor Project comunicó que algunos usuarios no podían cargar páginas o acceder a servicios onion, que las tácticas y los objetivos habían cambiado con el tiempo y que no era posible determinar con certeza la identidad de los atacantes~\cite{torblog2023dos}. Los servicios onion estaban especialmente expuestos: no podían bloquear las direcciones IP atacantes porque las solicitudes llegaban por circuitos anónimos.
+
+La respuesta a largo plazo fue el sistema de prueba de trabajo introducido en agosto de 2023 con tor 0.4.8 (\cref{sec:dos-onion})~\cite{torblog2023pow}. Normalmente inactiva, esta defensa pide a los clientes bajo ataque resolver problemas computacionales de dificultad creciente y da prioridad a quienes han realizado más trabajo. El Tor Project describió costes de unos milisegundos para un cliente normal y de hasta aproximadamente un minuto durante un ataque intenso. El principio es el mismo del laboratorio~9: encarecer para el atacante un ataque que antes resultaba barato sin exigir a los usuarios que se identifiquen.
+
+% ---------------------------------------------------------------------------
+\section{Lecciones}\label{sec:casi-lezioni}
+
+\begin{itemize}
+  \item \textbf{Todo campo visible constituye un canal potencial.} El ataque de 2014 no rompió la criptografía. Aprovechó un campo que los repetidores podían leer y reenviar. Un protocolo de anonimato debe preguntarse, por cada bit no cifrado, quién puede escribirlo y quién puede leerlo. Esta es una de las motivaciones del diseño más reciente de cifrado relay (\cref{sec:cgo}).
+  \item \textbf{Los ataques Sybil pueden ser baratos; vigilar la red no lo es.} Añadir repetidores cuesta relativamente poco en comparación con mantener las herramientas, conocimientos y confianza necesarios para detectar comportamientos maliciosos coordinados.
+  \item \textbf{Las defensas deben evaluarse a lo largo del tiempo.} Utilizar un solo guardia, mantener los guardias durante más tiempo e introducir vanguards reduce las oportunidades del adversario a largo plazo (\cref{sec:att-correlazione}).
+  \item \textbf{La transparencia es una defensa.} En los tres incidentes, el Tor Project publicó tanto lo que sabía como lo que desconocía, permitiendo a usuarios, operadores e investigadores evaluar el riesgo.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item En 2014, un grupo Sybil cuyos repetidores funcionaban como guardias y HSDir codificó en los tipos de celda los nombres de los servicios onion cuyos descriptores se solicitaron. Actualmente tor cierra los circuitos que reciben \cella{RELAY\_EARLY} dirigidas al cliente; pasar de tres guardias a uno, y después a dos en 2018, redujo las oportunidades de seleccionar guardias maliciosos (\cref{sec:guard}).
+  \item El límite de ocho celdas \cella{RELAY\_EARLY} puede verificarse en la red de laboratorio: la novena destruye el circuito.
+  \item KAX17 se identificó después de meses de indicios indirectos, incluidos picos mensuales y familias no declaradas, y de una denuncia anónima. Las autoridades de directorio son responsables de excluir repetidores.
+  \item Los ataques de denegación de servicio de 2022--2023 contribuyeron a introducir la prueba de trabajo para servicios onion.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:27-campo}
+¿Por qué un guardia no podía leer una señal escrita por un HSDir en el contenido cifrado de una celda, mientras que sí podía leerla en el tipo exterior de la celda?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:27-uno}
+Explica cómo reduce un ataque semejante al de 2014 pasar de tres guardias a uno y qué inconveniente introduce.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:27-verso}
+Modifica el laboratorio~17 para demostrar que una celda \cella{RELAY\_EARLY} cuenta para el límite aunque no contenga una solicitud de extensión de circuito. Después examina el código de tor para determinar qué sucede al recibir una \cella{RELAY\_EARLY} en dirección a un cliente.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:27-segnali}
+Utilizando datos de CollecTor, ¿qué indicios podrían revelar repetidores gestionados por un mismo operador sin una declaración de familia? Sugiere tres criterios y analiza los falsos positivos.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:27-canali}
+Enumera los campos de las celdas y de los mensajes relay que un repetidor intermedio puede ver en claro (\cref{cap:08-celle}). Para cada uno, analiza si un repetidor malicioso podría aprovecharlo como canal hacia otro repetidor del circuito e identifica las defensas existentes o propuestas.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item Tor Project, \titolo{Tor security advisory: \enquote{relay early} traffic confirmation attack}~\cite{torblog2014relayearly}.
+  \item Tor Project, \titolo{Malicious relays and the health of the Tor network}~\cite{torblog2022badrelays}.
+  \item Tor Project, \titolo{Introducing Proof-of-Work Defense for Onion Services}~\cite{torblog2023pow}.
+\end{itemize}

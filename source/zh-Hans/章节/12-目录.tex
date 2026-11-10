@@ -1,0 +1,337 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{目录系统}\label{cap:12-directory}
+\aggiornatoal{2026 年 9 月 23 日}{torspec 提交 \texttt{8e1f245}；tor 0.4.9.13；共识方法 36}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 解释 Tor 为什么需要目录系统，以及这一系统必须避免哪些风险；
+  \item 区分描述符、微描述符、投票、共识和权威证书；
+  \item 描述目录权威如何每小时投票并把各自结果合并成共识；
+  \item 理解各种 flag 的分配标准；
+  \item 逐行阅读一份共识并验证其签名；
+  \item 使用自己的代码下载并验证实验网络的共识（实验~6）。
+\end{itemize}
+\end{obiettivi}
+
+在前面的实验中，我们总是提前知道要连接哪些中继、它们使用哪些密钥、监听哪些端口，因为这些信息可以直接从实验网络文件读取。真实客户端没有这种便利。它必须发现网络中有哪些中继、它们位于哪里、使用哪些密钥，以及哪些中继可以信任。这正是\textbf{目录系统}的职责。
+
+% ---------------------------------------------------------------------------
+\section{问题}\label{sec:dir-problema}
+
+Tor 的目录系统需要同时满足几项彼此存在张力的要求：
+\begin{description}
+  \item[正确性] 中继的地址、密钥等信息必须真实。若攻击者让客户端相信某个中继使用了另一把密钥，就可能截获流量。
+  \item[共同视图] 所有客户端必须看到\emph{同一份}中继列表。如果攻击者能向每个客户端提供不同列表，例如只包含少量自己控制的中继，那么客户端就可能因为所选中继集合而被识别。这称为\emph{分区（partitioning）}攻击，也称\emph{认知（epistemic）}攻击。
+  \item[抗滥用] 任何人都可以向网络加入中继，因此系统必须限制一次加入大量中继的攻击者的影响，也就是 \emph{Sybil} 攻击，并能够排除行为异常的中继。
+  \item[可扩展性] 数百万客户端每天多次下载目录信息，分发成本必须能够承受。
+\end{description}
+
+Tor 在三代目录协议演进后形成的解决方案，是由少量受信任服务器——\textbf{目录权威}——共同完成。它们每小时投票，联合产生并签署一份统一文档：\textbf{共识（consensus）}~\spec{dir-spec}{Outline}。
+
+\begin{storia}[三代目录协议]
+第一版协议中，每个权威各自发布中继列表，因此单个恶意权威就可能欺骗客户端。第二版要求客户端下载所有权威的列表并自行合并，带宽成本成倍增加。第三版已经使用十五年以上，它把合并工作交给权威：权威共同生成一份文档，客户端只需验证签名。与此同时，权威也不再使用必须长期明文驻留内存的中继密钥来签署共识。
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{参与者}\label{sec:dir-attori}
+
+\begin{description}
+  \item[目录权威] 由 Tor 社区中受信任成员运营的服务器。公共网络有九个，另有一个专门服务于网桥（\cref{cap:16-censura}）。它们的列表直接编译进 tor（\file{src/app/config/auth\_dirs.inc}），因此所有客户端从同一组信任锚开始。每个权威拥有离线保存的长期\emph{身份密钥}，用于认证有效期 3--12 个月的\emph{签名密钥}；后者用于给投票和共识签名。
+  \item[目录缓存] 从权威获取共识与描述符并重新分发给客户端的中继，用来降低权威负载。它们拥有 \texttt{V2Dir} 标志，并通过 \file{BEGIN\_DIR} 流提供服务（\cref{cap:11-stream}）。
+  \item[备用目录（Fallback directory）] 大约两百个稳定中继的列表，同样编译进 tor（tor 0.4.9.13 的 \file{fallback\_dirs.inc} 含 200 个条目）。新安装的客户端优先从这些中继之一获取第一份共识，而不是让所有新客户端直接压向目录权威。
+  \item[中继] 周期性把自己的描述符发布给权威。
+  \item[客户端] 下载并验证共识与微描述符，然后用它们选择路径（\cref{cap:13-percorso}）。
+\end{description}
+
+\Cref{fig:dir-flusso} 展示这些文档如何流动。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图12-目录流程}
+\caption{目录文档的流动。中继向目录权威发布描述符；权威交换投票，依据收到的投票计算共识，再交换签名；目录缓存下载共识和微描述符，并向客户端提供这些文档。}
+\label{fig:dir-flusso}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{文档类型}\label{sec:dir-documenti}
+
+所有目录文档都采用规范称为 \emph{netdoc} 的文本格式：由若干行\emph{条目（item）}组成，每行以关键词和参数开始，某些条目后还会跟随 Base64 编码对象，包在 \texttt{-----BEGIN ...-----} 与 \texttt{-----END ...-----} 之间。这种格式既容易人工阅读，也容易程序解析，实验中会直接处理它。
+
+\begin{description}
+  \item[中继描述符]（\emph{server descriptor}）由中继编写并签名，包含地址和端口、身份与 ntor onion key、Ed25519 证书、声明带宽、完整出口策略、中继家族、平台和版本等。至少每 18 小时重新发布一次（tor 源码中的 \file{FORCE\_REGENERATE\_DESCRIPTOR\_INTERVAL}），重要属性改变时会更早更新。
+  \item[Extra-info 文档] 保存协议运行本身不需要的统计数据，例如按国家划分的网桥流量；单独发布是为了避免让描述符膨胀。这些数据会进入 Tor Metrics（\cref{cap:24-metrics}）。
+  \item[微描述符] 客户端实际需要、且变化不频繁的描述符子集：ntor onion 密钥、中继家族、出口策略摘要和 Ed25519 身份。由权威计算，每份微描述符使用其文本的 SHA-256 digest 作为标识。
+  \item[投票] 某个权威对网络的评估：每个中继的标志、带宽与版本。
+  \item[共识] 多份投票合并后的结果，由权威签名。它有两种\emph{版本类型（flavor）}：\texttt{ns} 为每个中继列出完整描述符摘要，\texttt{microdesc} 则列出微描述符摘要。现代客户端只使用更紧凑的后者。
+  \item[权威密钥证书] 把权威的签名密钥绑定到其长期身份。
+\end{description}
+
+\begin{approfondimento}[为什么使用微描述符？]
+完整描述符往往有数 KB，而且例如声明带宽变化时就会更新。如果数百万客户端每天多次下载数千个中继的完整描述符，尤其对移动网络成本很高。微描述符只保留很少变化的信息；带宽与标志等频繁变化的信息放在客户端本来就要下载的共识里。客户端按摘要请求微描述符，而不是按中继身份请求，因此目录缓存也不能轻易单独向某个客户端提供一份和其他人不同的微描述符。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{投票}\label{sec:dir-voto}
+
+\subsection{投票时间表}
+
+每份共识包含三个时间戳~\spec{dir-spec}{Voting timeline}：
+\begin{description}
+  \item[\texttt{valid-after}] 从何时开始有效；
+  \item[\texttt{fresh-until}] 到何时不再是最新鲜的共识；通常等于下一份共识的 \texttt{valid-after}；
+  \item[\texttt{valid-until}] 超过该时间后客户端不能继续使用。
+\end{description}
+
+公共网络每小时投票一次，共识持续三个时段有效，对应 \opt{V3AuthVotingInterval} 和 \opt{V3AuthNIntervalsValid}。因此任意时刻通常会有多份仍在有效期内的共识，单次权威延迟不会立即阻断客户端。每轮开始前，权威有五分钟交换投票，再有五分钟交换签名（\opt{V3AuthVoteDelay} 与 \opt{V3AuthDistDelay}）。实验网络为了教学大幅加速：每 20 秒投票一次，两个阶段各 4 秒（\cref{sec:rp-opzioni}）。
+
+\subsection{合并投票}
+
+每个权威收集其他权威的投票，并使用确定性算法计算共识，因此所有权威应独立得到同一份文档并能够给它签名~\spec{dir-spec}{Computing a consensus from a set of votes}。主要规则包括：
+\begin{itemize}
+  \item 中继只有被足够多权威认识时才会进入共识；在当前共识方法（24 及以后；实验网络为 36）中，它还必须同时具有 \texttt{Running} 和 \texttt{Valid}；
+  \item 某项标志若获得参与该标志投票的权威中过半数支持，就赋给中继；
+  \item 带宽 \texttt{w} 通常取投票值的较低中位数；如果至少三个权威对其带宽进行了\emph{测量}，则优先采用测量值的中位数；
+  \item 网络参数 \texttt{params} 只有在全部权威中过半数，或者至少三个权威支持时才进入共识；源码条件是 \texttt{i > total\_authorities/2 || i >= 3}，最终值取较低中位数；
+  \item 时间戳取提议值的中位数。
+\end{itemize}
+
+因为不同权威可能运行不同 tor 版本，文档还会声明正在使用的\emph{共识方法（consensus method）}：一个精确指定算法规则集合的编号，由足够多权威共同支持的最高方法决定。实验网络使用方法 36。
+
+\subsection{中继标志（Flags）}\label{sec:dir-flag}
+
+标志概括权威对中继的评估~\spec{dir-spec}{Assigning flags in a vote}。规范明确提醒：具体标准可能随时间变化，客户端不能依赖这些标准永远不变。\cref{tab:flag} 总结当前规则。
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+标志 & 标准（摘要） \\
+\midrule
+\texttt{Running} & 权威在过去 45 分钟内成功连接该中继全部 ORPort \\
+\texttt{Valid} & tor 版本未被认定有缺陷，且中继未被权威排除 \\
+\texttt{Fast} & 带宽位于最快的八分之七，或至少 100\,KB/s \\
+\texttt{Stable} & 按时间加权的平均故障间隔至少达到中位数，或至少 7 天 \\
+\texttt{Guard} & 同时满足 \texttt{Fast}、\texttt{Stable}、\emph{长期稳定（familiar）}（已在网络存在数周）、可用性与带宽要求，并具有 \texttt{V2Dir} \\
+\texttt{Exit} & 对端口 80 和 443 都允许至少一个 /8 地址块的出口流量 \\
+\texttt{HSDir} & \texttt{Stable} 且 \texttt{Fast}，连续运行至少 96 小时，可保存洋葱服务描述符 \\
+\texttt{V2Dir} & 提供目录信息，即目录缓存 \\
+\texttt{Authority} & 是目录权威 \\
+\texttt{BadExit} & 不应作为出口使用的中继，例如会修改流量 \\
+\texttt{MiddleOnly} & 只应作为中间中继使用（0.4.7.2-alpha 引入） \\
+\texttt{StaleDesc} & 描述符发布时间已超过 18 小时 \\
+\texttt{Sybil} & 超过单个 IP 地址允许的最大中继数量，通常为 2 \\
+\bottomrule
+\end{tabularx}
+\caption{共识标志以及权威分配这些标志的标准摘要。}
+\label{tab:flag}
+\end{table}
+
+\texttt{BadExit} 和 \texttt{MiddleOnly} 允许权威限制可疑中继，而不必把它们彻底从网络删除。\texttt{Sybil} 则限制单个地址运行大量中继的影响。在实验网络中，所有中继都位于 127.0.0.1，因此通过 \texttt{AuthDirMaxServersPerAddr=0} 禁用该限制；实验会在 \texttt{params} 行看到这一点。
+
+\subsection{带宽}
+
+中继到底有多快？描述符里自报的值并不可信，恶意中继可以声称拥有极高带宽以提高被选中的概率。因此部分权威作为\emph{带宽测量权威（bandwidth authorities）}，使用专门工具——目前是 \emph{sbws}（\cref{cap:24-metrics}）——通过中继传输流量以测量带宽，并在投票中以 \texttt{Measured} 提交。如果至少存在三份测量，共识优先取它们的中位数；否则 \texttt{w} 行带有 \texttt{Unmeasured=1}，并使用受限值。共识中的 bandwidth 并不是严格意义上的速度，而是用于路径选择概率的\emph{权重}（\cref{cap:13-percorso}）。
+
+% ---------------------------------------------------------------------------
+\section{一份共识的结构}\label{sec:dir-anatomia}
+
+下面是实验~6 下载的一份 microdesc 共识节选。仓库保存了副本 \file{labs/zh-Hans/代码/torlab/test/data/consensus-microdesc.txt}，实验测试也使用它，因此无需启动网络就可以逐行检查。副本采集于 2026 年 9 月 23 日，当时实验中继仍运行 tor 0.4.9.12；这就是条目 \texttt{v} 行显示的版本，并不等于本书当前实验网络的参考版本。
+
+\paragraph{头部。}
+\begin{lstlisting}[numbers=none]
+network-status-version 3 microdesc
+vote-status consensus
+consensus-method 36
+valid-after 2026-09-23 15:37:20
+fresh-until 2026-09-23 15:37:40
+valid-until 2026-09-23 15:38:00
+voting-delay 4 4
+known-flags Authority Exit Fast Guard HSDir ... Running Stable ... Valid
+params AuthDirMaxServersPerAddr=0 cc_alg=2
+\end{lstlisting}
+
+\texttt{params} 行是\emph{共识参数}：权威可以通过它调整整张网络行为，而不要求软件更新。这里除了单地址限制外，还指定拥塞控制算法 \file{cc\_alg=2}，即 Vegas（\cref{sec:cc}）。公共网络包含数十个参数。
+
+\paragraph{一个中继条目。}
+\begin{lstlisting}[numbers=none]
+r test006e ml1aPg9UFy4VCx85YcpsRs/9shc 2038-01-01 00:00:00 127.0.0.1 5106 0
+m FfrgO+s4VYS6WKBq3pjfMDs+uZ2uVsvgG88JilbhIOo
+s Exit Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 ... Link=3-5 ... Relay=2-6
+w Bandwidth=4096
+\end{lstlisting}
+
+\begin{description}
+  \item[\texttt{r}] 中继昵称、RSA 身份摘要（Base64）、一个如今在共识中已无实际意义的日期字段、IPv4 地址、ORPort 和 DirPort；
+  \item[\texttt{m}] 需要下载的微描述符摘要；
+  \item[\texttt{s}] 标志；
+  \item[\texttt{v}、\texttt{pr}] tor 版本与支持的\emph{子协议}；客户端例如从这里知道该中继支持 CGO（\texttt{Relay=6}）或链路协议 3--5；
+  \item[\texttt{w}] 以 KB/s 表示的带宽权重。
+\end{description}
+
+在 \texttt{ns} 版本中，每个条目还会有一行 \texttt{p}，按端口概括出口策略；microdesc 版本则把这一摘要放在微描述符中，因此共识不再重复。
+
+\paragraph{尾部与签名。}
+\begin{lstlisting}[numbers=none]
+directory-footer
+bandwidth-weights Wbd=821 Wbe=0 Wbg=5000 Wbm=10000 Wdb=10000 ...
+directory-signature sha256 3776EF73A9214587AEFB3D732FA4A443CFF491BA
+                           79E102D226590BC5D1D1EBBAD8A16122EC0F9801
+-----BEGIN SIGNATURE-----
+...
+-----END SIGNATURE-----
+\end{lstlisting}
+
+\texttt{bandwidth-weights} 是客户端平衡不同电路位置中继使用量的系数（\cref{cap:13-percorso}）。之后每个权威各有一份签名，包含哈希算法、权威身份摘要、签名密钥摘要与签名本身。
+
+% ---------------------------------------------------------------------------
+\section{验证共识}\label{sec:dir-firme}
+
+客户端只有在一份共识包含\textbf{超过半数}已知权威的有效签名时才接受它。tor 源码阈值是 \file{n\_v3\_authorities/2 + 1}（\file{src/feature/nodelist/networkstatus.c}）：公共网络 9 个权威需要 5 个签名，实验网络 3 个权威需要 2 个。验证签名需要：
+\begin{enumerate}
+  \item 权威\textbf{证书}：客户端下载 \nolinkurl{/tor/keys/all}，并依据预先知道的权威身份验证；
+  \item \textbf{被签文本}：从文档开头一直到第一处 \texttt{directory-signature} 关键词后面的那个\emph{空格}，并包含该空格；
+  \item 签名方案：RSA + PKCS\#1 v1.5 填充，直接对摘要（SHA-1 或 SHA-256）签名，\emph{不包含}普通 PKCS\#1 签名通常期待的算法标识符~\spec{dir-spec}{Signing documents}。
+\end{enumerate}
+
+\begin{approfondimento}[到空格，还是到换行？]
+规范关于已签名文档的通用章节说签名覆盖签名行之后的\emph{换行}；但共识专门章节规定覆盖到 \texttt{directory-signature} 后的\emph{空格}。后者保证各权威即使拥有不同的签名行，也对完全相同的字节签名。实验~6 同时用两种解释验证真实实验网络共识：按空格规则，三份签名全部有效；按换行规则，一份也无效。遇到规范表述存在歧义时，对独立实现进行实验验证仍然是最终裁决。
+\end{approfondimento}
+
+\begin{attenzione}[权威列表是信任锚]
+整个系统建立在编译进软件的权威列表之上。用户技术上可以更改它，但规范不建议这样做：使用不同权威的客户端会看到与其他人不同的共识，因此本身变得可识别。权威同样是高价值攻击目标。如果多数权威被攻陷，它们就可能共同签署包含恶意中继的共识。正因如此，权威由不同国家、不同人员运营，而且长期身份密钥离线保存。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{客户端如何保持最新}\label{sec:dir-client}
+
+客户端不会在每个整点同时下载新共识，否则目录缓存会承受同步洪峰。它会在共识不再 fresh 之后第一个 interval 的四分之三处，与距离过期剩余时间的八分之七处之间随机选择更新时间~\spec{dir-spec}{Client operation}。规范给出的例子是：共识 1:00 开始有效，2:00 不再 fresh，4:00 过期，那么客户端会在 2:45 到 3:50 之间随机寻找新共识。
+
+为了节省带宽，客户端可以只请求相对于当前共识的\emph{差异}，即\emph{共识差异（consensus diff）}，并用当前共识的 SHA3-256 摘要标识基线。随后只下载缺失微描述符，按摘要请求：\nolinkurl{/tor/micro/d/} 后接以 \texttt{-} 分隔的摘要。
+
+% ---------------------------------------------------------------------------
+\section{实验：下载并验证共识}\label{sec:lab-directory}
+
+\begin{laboratorio}[6]{实验网络的共识}
+\textbf{目标。} 编写 \file{labs/zh-Hans/代码/torlab/directory.py}，通过电路从权威下载共识、证书和微描述符，解析并验证签名。\\
+\textbf{前置条件。} 实验~1--5；正在运行的实验网络。\\
+\textbf{预计时间。} 3 小时。
+\end{laboratorio}
+
+\paragraph{步骤 1：使用 BEGIN\_DIR 下载。} 与 tor 一样，使用到目录节点的单跳电路，不启用拥塞控制，并打开 \file{BEGIN\_DIR} 流；在其中发送 HTTP/1.0：
+
+\begin{lstlisting}[language=Python]
+def download(circ, path, stream_id):
+    s = Stream(circ, stream_id)
+    circ.send(RelayMessage(RelayCommand.BEGIN_DIR, stream_id, b""))
+    _, msg = s._next()                      # CONNECTED，空 body
+    s.send(f"GET {path} HTTP/1.0\r\n\r\n".encode())
+    header, _, body = s.receive_all().partition(b"\r\n\r\n")
+    return body
+
+circ = build([relay("000a")], cc=False)
+text = download(circ, "/tor/status-vote/current/consensus-microdesc", 1)
+\end{lstlisting}
+
+\paragraph{步骤 2：netdoc 格式。} 大约二十行的 \texttt{items} 函数把文档拆成条目，并收集 \texttt{-----BEGIN}/\texttt{-----END} 对象。在它之上构建两个解析器：\file{parse\_consensus} 为每个中继产生含 flag、带宽、策略和微描述符摘要的条目；\file{parse\_certificates} 解析权威证书。
+
+\paragraph{步骤 3：验证签名。}
+\begin{lstlisting}[language=Python]
+def signed_text(text):
+    start = text.index("network-status-version ")
+    pos = text.index("\ndirectory-signature ") + len("\ndirectory-signature ")
+    return text[start:pos].encode()
+
+def verify_signature(consensus, signature, cert):
+    h = hashlib.sha256 if signature.algorithm == "sha256" else hashlib.sha1
+    expected = h(signed_text(consensus.text)).digest()
+    recovered = cert.signing_key.recover_data_from_signature(
+        signature.signature, padding.PKCS1v15(), None)
+    return recovered == expected
+\end{lstlisting}
+
+\file{recover\_data\_from\_signature} 使用 algorithm=\texttt{None} 时会直接返回签名中携带的摘要，而不会要求算法标识符，正好符合 Tor 的格式。
+
+\paragraph{步骤 4：结果。} 在实验网络上的一次运行中（日期、名称和数量取决于网络实例）：
+\begin{lstlisting}[numbers=none]
+consensus：6035 字节；2026-09-23 15:37:20 -> 2026-09-23 15:38:00
+method 36；signatures 3；certificates 3
+params: {'AuthDirMaxServersPerAddr': 0, 'cc_alg': 2}
+  test006e 127.0.0.1:5106 w=4096 flags=['Exit', 'Fast', 'Guard', ...]
+  test000a 127.0.0.1:5100 w=20   flags=['Authority', 'Fast', 'Guard', ...]
+  ...
+有效签名：3（要求：2）
+microdescriptors：8；与 consensus m 行匹配：True
+\end{lstlisting}
+
+这份共识覆盖 40 秒，也就是两个 20 秒时段，由三个权威全部签名；每份下载的微描述符 SHA-256 都与共识对应 \texttt{m} 行一致。信任链从权威密钥一路延伸到每个中继的 ntor key。
+
+\paragraph{步骤 5：负向控制。} 永远不会失败的验证器等于什么都没有验证。把共识中的 \texttt{Bandwidth=4096} 改成 \texttt{4097}，有效签名数立刻降到零；如果只知道一个权威，则只能验证出一个签名。\file{test/test\_directory.py} 使用保存下来的共识副本重复这些检查，因此无需启动网络也能运行。
+
+\paragraph{步骤 6：真实共识。} 同样的代码也适用于公共网络。从 CollecTor 下载同一时期的共识与匹配的权威证书，然后验证：
+
+\begin{lstlisting}[language=Python,numbers=none]
+c = parse_consensus(open("consensus-microdesc-2026-09-23-15").read())
+cert = parse_certificates(open("certs").read())
+valid, required, _ = verify_consensus(c, cert, 9)
+print(valid, required)          # 9 5
+\end{lstlisting}
+
+示例中九份签名全部有效，高于所需的五份。第一次尝试时有一个容易误判为密码学错误的格式陷阱：CollecTor 文件开头有一行 \texttt{@type network-status-microdesc-consensus-3 1.0}，它不属于被签文档。如果把这一行也计入摘要，\emph{所有}签名都会失败。因此 \texttt{signed\_text} 必须从 \texttt{network-status-version} 开始，测试也应覆盖这一行为。
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item 目录系统必须让所有客户端看到相同且真实的网络视图，同时抵抗 Sybil 攻击，并能扩展到数百万用户。
+  \item 九个目录权威（另加一个网桥权威）被写入代码，每小时投票并签署一份统一共识；公共网络共识有效三小时。
+  \item 中继发布描述符；现代客户端使用 microdesc 共识和按摘要下载的微描述符。
+  \item 某项标志只有获得参与该项投票的过半数权威支持才会赋予；至少三个权威的测量带宽会优先于中继自报值。
+  \item 客户端只接受超过半数已知权威有效签名的共识；签名文本覆盖到 \texttt{directory-signature} 后的空格。
+  \item 共识参数允许权威在不发布软件更新的情况下调整整张网络的行为。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:12-validita}
+一份共识 \texttt{valid-after}=10:00、\texttt{fresh-until}=11:00、\texttt{valid-until}=13:00。客户端会在哪个时间区间寻找替代共识？如果 13:00 仍没有找到新共识会怎样？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:12-flag}
+某中继带宽 500\,KB/s，已在线两天，出口策略为 \texttt{accept *:443, reject *:*}。它可能获得哪些标志？为什么不能获得 \texttt{Exit}？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-partizione}
+描述一种分区攻击：恶意目录缓存只向某个特定客户端发送一份较旧但仍有效的共识。什么因素限制这种攻击？为什么按摘要请求微描述符有所帮助？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-mediana}
+三个权威测得某中继带宽分别为 5000、5200、90000。共识采用哪个值？如果第三个与中继串通的权威是唯一进行测量的权威，又会怎样？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-voti}
+在实验网络某个权威目录中找到 \file{v3-status-votes}，把该权威的投票与最终共识比较：哪些行不同？为什么？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-md}
+从实验下载的共识中选一个中继，使用 \cmd{sha256sum} 手工计算其微描述符摘要，并与 \texttt{m} 行比较。被哈希文本从哪一行开始，到哪里结束？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:12-autorita}
+停止实验网络三个权威中的一个，一分钟后重新下载共识。它包含几个签名？验证器是否接受？再停止第二个权威，解释共识过期后观察到的行为。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:12-ns}
+同时下载 \texttt{ns} 版本（\nolinkurl{/tor/status-vote/current/consensus}）并验证签名。它使用哪些哈希算法？与 microdesc 版本相比，\texttt{r} 行多了哪些信息？
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \titolo{Tor directory protocol, version 3}（dir-spec）~\cite{torspec}：格式、投票、中继标志分配以及客户端/缓存运行方式。
+  \item 共享随机性协议文档（shared-randomness protocol，srv-spec）：目录权威每天生成共同随机值的协议；\cref{cap:14-onion-services} 的洋葱服务需要它。
+  \item Tor Metrics 与 CollecTor，\url{https://metrics.torproject.org/}：共识、投票和描述符的历史归档。
+\end{itemize}

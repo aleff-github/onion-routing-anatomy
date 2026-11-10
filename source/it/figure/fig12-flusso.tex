@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Flusso semplificato della directory Tor: i relay caricano descrittori presso le authority note, di norma rigenerati dopo circa 18 ore oppure prima se cambiano dati rilevanti; la freccia verso una sola authority è schematica. Tre simboli rappresentano il gruppo delle authority, che si scambiano voti, calcolano il consenso dai voti disponibili e ne scambiano le firme; il consenso non è garantito identico in caso di voti discordanti o mancanti. Le cache distribuiscono consenso microdesc e microdescrittori. I client verificano le firme di più di metà delle authority attendibili e scaricano per digest i microdescrittori mancanti. La cadenza del consenso è normalmente oraria.}
+% Flusso dei documenti di directory
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  aut/.style={relay,fill=torviola!15,draw=torviola,minimum size=1cm,font=\sffamily\scriptsize},
+  doc/.style={font=\sffamily\scriptsize,fill=white,inner sep=1pt,align=center}]
+  \node[aut] (a1) at (0,2.2) {aut.~1};
+  \node[aut] (a2) at (1.8,3.2) {aut.~2};
+  \node[aut] (a3) at (3.6,2.2) {aut.~3};
+  \draw[<->,thick,torviola!70] (a1) -- (a2); \draw[<->,thick,torviola!70] (a2) -- (a3); \draw[<->,thick,torviola!70] (a1) -- (a3);
+  \node[doc,text=torviola] at (1.8,1.75) {voti e firme};
+  \node[relay] (r) at (-3.2,2.2) {relay};
+  \draw[cellaf] (r) -- node[doc,above]{descrittore\\(di norma 18 h)} (a1);
+  \node[relay,fill=torgrigio!10,draw=torgrigio] (c) at (1.8,-0.4) {\scriptsize cache};
+  \draw[risposta] (a1) -- node[doc,left=2pt]{consenso,\\microdescrittori} (c);
+  \draw[risposta] (a3) -- (c);
+  \node[client] (cl) at (6.2,-0.4) {Client};
+  \draw[risposta] (c) -- node[doc,above]{consenso microdesc\\(circa ogni ora)} (cl);
+  \draw[risposta] (c) to[bend right=25] node[doc,below]{microdescrittori mancanti, per impronta} (cl);
+  \node[font=\sffamily\scriptsize,text=torgrigio,align=center] at (6.2,2.6) {verifica: firme valide di\\più di metà delle autorità};
+  \draw[dotted,torgrigio] (6.2,2.2) -- (cl);
+\end{tikzpicture}

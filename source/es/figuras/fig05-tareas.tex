@@ -1,0 +1,21 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible para EPUB.
+\altfig{Cinco funciones criptográficas de Tor: confidencialidad mediante AES-CTR en las celdas y AES-GCM o ChaCha20-Poly1305 en los canales TLS (caps. 10 y 7); integridad mediante resúmenes SHA-1 y SHA3-256 y etiquetas CGO basadas en POLYVAL (cap. 10); acuerdo de claves X25519 en ntor y ntor-v3 (cap. 9); autenticación Ed25519 y RSA heredado para certificados y consenso (caps. 7 y 12); y derivación de claves mediante HKDF-SHA256 y SHAKE-256 (cap. 9).}
+% Cinco funciones criptográficas y las primitivas correspondientes.
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  compito/.style={draw=torviola,fill=torviola!8,rounded corners=2pt,minimum width=2.6cm,minimum height=0.7cm},
+  prim/.style={draw=torverde!60!black,fill=torverde!12,rounded corners=2pt,text width=3.9cm,align=center,minimum height=0.7cm},
+  dove/.style={font=\sffamily\tiny,text=torgrigio,anchor=west}]
+  \foreach \i/\c/\p/\d in {%
+    0/Confidencialidad/{AES-CTR; TLS con AES-GCM o ChaCha20-Poly1305}/{celdas (cap.~10), canales (cap.~7)},
+    1/Integridad/{SHA-1 y SHA3-256, POLYVAL}/{resúmenes de celdas RELAY, etiquetas de autenticación CGO (cap.~10)},
+    2/{Acuerdo de claves}/{X25519 (Diffie-Hellman)}/{ntor, ntor-v3 (cap.~9)},
+    3/Autenticación/{Ed25519, RSA (en retirada)}/{certificados, consenso (cap.~7, 12)},
+    4/Derivación/{HKDF-SHA256, SHAKE-256}/{claves de circuitos (cap.~9)}} {
+    \node[compito] (c\i) at (0,-\i*1.0) {\c};
+    \node[prim] (p\i) at (4.4,-\i*1.0) {\p};
+    \draw[->,torgrigio] (c\i) -- (p\i);
+    \node[dove] at (6.8,-\i*1.0) {\d};
+  }
+\end{tikzpicture}

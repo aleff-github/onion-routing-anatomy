@@ -1,0 +1,337 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{El sistema de directorios}\label{cap:12-directory}
+\aggiornatoal{23 de septiembre de 2026}{commit de torspec \texttt{8e1f245}; tor 0.4.9.13; método de consenso 36}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item explicar por qué Tor necesita un sistema de directorios y qué riesgos debe evitar;
+  \item distinguir sus documentos: descriptores, microdescriptores, votos, consensos y certificados de autoridades;
+  \item describir cómo votan las autoridades de directorio cada hora y combinan sus votos;
+  \item entender los criterios empleados para asignar indicadores;
+  \item leer un consenso línea por línea y verificar sus firmas;
+  \item descargar y verificar el consenso de la red de laboratorio utilizando código propio (laboratorio~6).
+\end{itemize}
+\end{obiettivi}
+
+En los laboratorios anteriores siempre sabíamos de antemano a qué repetidores conectarnos, qué claves utilizaban y en qué puertos escuchaban: obteníamos esa información de los archivos de la red privada. Un cliente real no goza de esa ventaja. Debe descubrir qué repetidores existen, dónde se encuentran, qué claves utilizan y qué confianza merecen. Esta es la función del \textbf{sistema de directorios}, objeto del presente capítulo.
+
+% ---------------------------------------------------------------------------
+\section{El problema}\label{sec:dir-problema}
+
+Un sistema de directorios para Tor debe satisfacer varios requisitos que compiten parcialmente entre sí:
+\begin{description}
+  \item[Corrección] La información sobre los repetidores (direcciones y claves) debe ser auténtica. Un adversario que convenciera a un cliente de que un repetidor concreto tiene otra clave podría interceptar su tráfico.
+  \item[Visión común] Todos los clientes deben ver \emph{la misma} lista de repetidores. Si un adversario pudiera proporcionar una lista distinta a cada cliente, quizás con solo unos pocos repetidores bajo su control, podría reconocer a los clientes por los repetidores que utilizan. Esto es un ataque de \emph{partición} o \emph{epistémico}.
+  \item[Resistencia a abusos] Cualquiera puede añadir repetidores a la red. El sistema debe limitar la influencia de alguien que añada numerosos nodos (ataque \emph{Sybil}) y poder excluir a los que se comporten indebidamente.
+  \item[Escalabilidad] Millones de clientes descargan información de directorio varias veces al día. La distribución debe consumir pocos recursos.
+\end{description}
+
+La solución de Tor, desarrollada a lo largo de tres versiones del protocolo de directorios, es un conjunto reducido de servidores de confianza: las \textbf{autoridades de directorio}. Cada hora, votan y firman conjuntamente un único documento: el \textbf{consenso}~\spec{dir-spec}{Outline}.
+
+\begin{storia}[Tres generaciones]
+En la primera versión del protocolo, cada autoridad publicaba su propia lista de repetidores, por lo que una autoridad deshonesta podía engañar a los clientes. En la segunda, los clientes descargaban las listas de todas las autoridades y combinaban ellos mismos las distintas perspectivas, multiplicando el consumo de ancho de banda. La tercera versión, utilizada desde hace más de quince años, delega esa combinación en las autoridades: producen un documento único, firmado por todas, que los clientes solo necesitan verificar. A partir de ese momento, las autoridades también dejaron de firmar con la misma clave que utilizaban como repetidores y que debían mantener en texto claro en la memoria.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{Los participantes}\label{sec:dir-attori}
+
+\begin{description}
+  \item[Autoridad de directorio] Servidor administrado por una persona de confianza de la comunidad Tor. La red pública cuenta con nueve, más una autoridad independiente para puentes (\cref{cap:16-censura}). Su lista está incorporada a \texttt{tor} (\file{src/app/config/auth\_dirs.inc}), de manera que todos los clientes parten del mismo conjunto. Cada autoridad posee una clave de \emph{identidad} de larga duración, mantenida fuera de línea, que certifica una clave de \emph{firma} válida durante 3 a 12 meses. Esta última firma los votos y los consensos.
+  \item[Caché de directorio] Repetidor que descarga consensos y descriptores desde las autoridades y los redistribuye a los clientes, reduciendo la carga de las primeras. Posee el indicador \texttt{V2Dir} y sirve flujos \file{BEGIN\_DIR} (\cref{cap:11-stream}).
+  \item[Directorio de reserva] Lista de aproximadamente doscientos repetidores estables, también incorporada a \texttt{tor} (\file{fallback\_dirs.inc}, 200 entradas en tor 0.4.9.13). Un cliente recién instalado solicita a uno de ellos su primer consenso, en lugar de sobrecargar las autoridades.
+  \item[Repetidor] Publica periódicamente sus propios descriptores ante las autoridades.
+  \item[Cliente] Descarga el consenso y los microdescriptores, los verifica y los utiliza para seleccionar rutas (\cref{cap:13-percorso}).
+\end{description}
+
+La \cref{fig:dir-flusso} muestra cómo circulan estos documentos.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig12-flujo-directorio}
+\caption{Flujo de documentos de directorio. Los repetidores publican descriptores ante las autoridades; estas intercambian votos, calculan el consenso a partir de los votos disponibles e intercambian firmas; las cachés descargan consensos y microdescriptores y los sirven a los clientes.}
+\label{fig:dir-flusso}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{Los documentos}\label{sec:dir-documenti}
+
+Todos los documentos de directorio son texto en el formato que la especificación denomina \emph{netdoc}: una secuencia de líneas (\emph{elementos}), cada una con una palabra clave y argumentos, a veces seguida de un objeto codificado en base64 entre líneas \texttt{-----BEGIN ...-----} y \texttt{-----END ...-----}. Es un formato sencillo de leer por personas y de analizar por programas, como veremos en el laboratorio.
+
+\begin{description}
+  \item[Descriptor de repetidor] (\emph{server descriptor}) Documento creado y firmado por el repetidor, con direcciones y puertos, claves (identidad, clave onion ntor, certificados Ed25519), ancho de banda anunciado, política de salida completa, familia, plataforma y versión. Se vuelve a publicar al menos cada 18 horas (\file{FORCE\_REGENERATE\_DESCRIPTOR\_INTERVAL} en el código de \texttt{tor}), o antes si cambia algún elemento importante.
+  \item[Documento extra-info] Estadísticas que no son necesarias para el funcionamiento del protocolo, como el tráfico de puentes desglosado por país, publicadas por separado para evitar que crezcan demasiado los descriptores. Alimentan Tor Metrics (\cref{cap:24-metrics}).
+  \item[Microdescriptor] Subconjunto de un descriptor que el cliente realmente necesita y que cambia poco: clave onion ntor, familia, resumen de política de salida e identidad Ed25519. Lo calculan las autoridades; cada microdescriptor se identifica por el resumen SHA-256 de su texto.
+  \item[Voto] Evaluación de una autoridad sobre el estado de la red: indicadores, ancho de banda y versión de cada repetidor.
+  \item[Consenso] Resultado de combinar los votos, firmado por las autoridades. Tiene dos \emph{variantes}: \texttt{ns}, con el resumen del descriptor completo para cada repetidor, y \texttt{microdesc}, con el resumen del microdescriptor. Los clientes modernos solo utilizan la segunda, más compacta.
+  \item[Certificado de clave de autoridad] Vincula la clave de firma de una autoridad con su identidad.
+\end{description}
+
+\begin{approfondimento}[¿Por qué microdescriptores?]
+Un descriptor completo ocupa varios kilobytes y cambia con frecuencia, por ejemplo cuando varía el ancho de banda anunciado. Descargar todos los descriptores de miles de repetidores varias veces al día consumiría mucho ancho de banda de los clientes, especialmente con conexiones móviles. Un microdescriptor contiene únicamente información que cambia poco. La información que varía a menudo, como el ancho de banda y los indicadores, se incorpora al consenso que el cliente descargará de todas formas. Como el cliente solicita microdescriptores por su resumen y no por la identidad del repetidor, una caché de directorio no puede entregar a un cliente un microdescriptor distinto del que reciben todos los demás.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Votación}\label{sec:dir-voto}
+
+\subsection{El calendario}
+
+Cada consenso contiene tres marcas temporales~\spec{dir-spec}{Voting timeline}:
+\begin{description}
+  \item[\texttt{valid-after}] instante a partir del cual se considera válido;
+  \item[\texttt{fresh-until}] instante en que deja de ser el consenso más reciente; normalmente coincide con \texttt{valid-after} del siguiente;
+  \item[\texttt{valid-until}] instante a partir del cual el cliente ya no puede utilizarlo.
+\end{description}
+
+En la red pública, el intervalo de votación es de una hora y cada consenso permanece válido durante tres intervalos (opciones \opt{V3AuthVotingInterval} y \opt{V3AuthNIntervalsValid}). Así, en un instante dado pueden coexistir varios consensos válidos y un retraso de las autoridades no tiene por qué bloquear a los clientes. Antes de cada intervalo, las autoridades disponen de cinco minutos para intercambiar votos y otros cinco para intercambiar firmas (\opt{V3AuthVoteDelay} y \opt{V3AuthDistDelay}). En la red de laboratorio todo se acelera: un voto cada 20 segundos y 4 segundos para cada fase (\cref{sec:rp-opzioni}).
+
+\subsection{Combinar los votos}
+
+Cada autoridad recoge los votos de las demás y calcula el consenso mediante un algoritmo determinista, para que todas obtengan el mismo documento y puedan firmarlo~\spec{dir-spec}{Computing a consensus from a set of votes}. Las reglas principales son:
+\begin{itemize}
+  \item un repetidor aparece en el consenso solo si lo conocen suficientes autoridades y, según los métodos actuales (24 y posteriores; el laboratorio usa 36), solo si posee los indicadores \texttt{Running} y \texttt{Valid};
+  \item un repetidor recibe un indicador cuando más de la mitad de las autoridades que votan sobre ese indicador se lo asignan;
+  \item el ancho de banda (\texttt{w}) es la mediana inferior de los valores votados, salvo que al menos tres autoridades hayan \emph{medido} su ancho de banda, caso en que se utiliza la mediana de esas mediciones;
+  \item los parámetros de red (\texttt{params}) se incluyen si vota por ellos una mayoría del total de autoridades o al menos tres (\texttt{i > total\_authorities/2 || i >= 3} en el código); el valor elegido es la mediana inferior;
+  \item las marcas temporales son las medianas de los tiempos propuestos.
+\end{itemize}
+
+Como las autoridades pueden ejecutar versiones distintas de \texttt{tor}, el documento declara el \emph{método de consenso} empleado: un número que identifica el conjunto exacto de reglas, elegido como el método más alto admitido por suficientes autoridades. El consenso de laboratorio utiliza el método 36.
+
+\subsection{Indicadores}\label{sec:dir-flag}
+
+Los indicadores resumen la valoración de cada autoridad sobre un repetidor~\spec{dir-spec}{Assigning flags in a vote}. La especificación advierte que los criterios exactos pueden cambiar y los clientes no deben depender de ellos. La \cref{tab:flag} resume los criterios actuales.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+Indicador & Criterio (resumen) \\
+\midrule
+\texttt{Running} & la autoridad alcanzó al repetidor en todos sus ORPorts durante los últimos 45 minutos \\
+\texttt{Valid} & versión de tor sin defectos conocidos; repetidor no excluido por las autoridades \\
+\texttt{Fast} & ancho de banda entre los siete octavos más rápidos, o al menos 100\,KB/s \\
+\texttt{Stable} & tiempo medio entre fallos ponderado por duración igual o superior a la mediana, o al menos 7 días \\
+\texttt{Guard} & \texttt{Fast}, \texttt{Stable}, \emph{conocido} (varias semanas en la red), buena disponibilidad, ancho de banda suficiente y \texttt{V2Dir} \\
+\texttt{Exit} & permite tráfico de salida a al menos un bloque /8 en los puertos 80 y 443 \\
+\texttt{HSDir} & \texttt{Stable} y \texttt{Fast}, en funcionamiento durante al menos 96 horas: puede almacenar descriptores onion \\
+\texttt{V2Dir} & ofrece información de directorio (caché de directorio) \\
+\texttt{Authority} & es una autoridad de directorio \\
+\texttt{BadExit} & salida que no debe utilizarse como tal (por ejemplo, porque modifica tráfico) \\
+\texttt{MiddleOnly} & debe usarse solo como repetidor intermedio (introducido en 0.4.7.2-alpha) \\
+\texttt{StaleDesc} & descriptor publicado hace más de 18 horas \\
+\texttt{Sybil} & supera el máximo de repetidores por dirección IP (normalmente 2) \\
+\bottomrule
+\end{tabularx}
+\caption{Indicadores del consenso y resumen de los criterios con los que las autoridades los asignan.}
+\label{tab:flag}
+\end{table}
+
+\texttt{BadExit} y \texttt{MiddleOnly} permiten a las autoridades reaccionar frente a repetidores sospechosos sin eliminarlos por completo. El indicador \texttt{Sybil} limita el efecto de que alguien ejecute muchos repetidores desde una misma dirección. En la red de laboratorio, donde todos funcionan en 127.0.0.1, se desactiva el límite mediante \texttt{AuthDirMaxServersPerAddr=0}; lo veremos en la línea \texttt{params}.
+
+\subsection{Ancho de banda}
+
+¿Cómo se mide la velocidad de un repetidor? El valor que anuncia en su descriptor no resulta fiable: un repetidor malicioso podría declarar un ancho de banda enorme para aumentar su probabilidad de selección. Por ello algunas autoridades, denominadas \emph{autoridades de ancho de banda}, miden los repetidores enviando tráfico a través de ellos con una herramienta específica (actualmente \emph{sbws}, \cref{cap:24-metrics}) e incluyen el resultado en sus votos como \texttt{Measured}. Si hay al menos tres mediciones, el consenso utiliza su mediana. En caso contrario, la línea \texttt{w} incorpora \texttt{Unmeasured=1} y un valor limitado. El ancho de banda de consenso no es estrictamente una velocidad, sino un \emph{peso}: determina la probabilidad de seleccionar un repetidor (\cref{cap:13-percorso}).
+
+% ---------------------------------------------------------------------------
+\section{Anatomía de un consenso}\label{sec:dir-anatomia}
+
+Este es un consenso \texttt{microdesc} abreviado de la red de laboratorio, descargado en el laboratorio~6. Los fragmentos de esta sección proceden de una copia conservada en el repositorio (\file{labs/es/codigo/torlab/test/data/consensus-microdesc.txt}), utilizada por las pruebas. Se pueden examinar línea por línea sin iniciar la red. La copia se obtuvo el 23 de septiembre de 2026, cuando los repetidores de laboratorio todavía ejecutaban tor 0.4.9.12. Esa es la versión de la línea \texttt{v} de la entrada, no la versión de referencia del libro, que utiliza actualmente la red.
+
+\paragraph{Cabecera.}
+\begin{lstlisting}[numbers=none]
+network-status-version 3 microdesc
+vote-status consensus
+consensus-method 36
+valid-after 2026-09-23 15:37:20
+fresh-until 2026-09-23 15:37:40
+valid-until 2026-09-23 15:38:00
+voting-delay 4 4
+known-flags Authority Exit Fast Guard HSDir ... Running Stable ... Valid
+params AuthDirMaxServersPerAddr=0 cc_alg=2
+\end{lstlisting}
+
+La línea \texttt{params} contiene los \emph{parámetros de consenso}, utilizados por las autoridades para ajustar el comportamiento de toda la red sin exigir actualizaciones del programa. Además del límite por dirección, aquí indica el algoritmo de control de congestión (\file{cc\_alg=2}, Vegas, \cref{sec:cc}). La red pública tiene decenas de parámetros.
+
+\paragraph{Entrada de un repetidor.}
+\begin{lstlisting}[numbers=none]
+r test006e ml1aPg9UFy4VCx85YcpsRs/9shc 2038-01-01 00:00:00 127.0.0.1 5106 0
+m FfrgO+s4VYS6WKBq3pjfMDs+uZ2uVsvgG88JilbhIOo
+s Exit Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 ... Link=3-5 ... Relay=2-6
+w Bandwidth=4096
+\end{lstlisting}
+
+\begin{description}
+  \item[\texttt{r}] sobrenombre, resumen de identidad RSA (base64), campo de fecha que ya no tiene significado en el consenso, dirección IPv4, ORPort y DirPort;
+  \item[\texttt{m}] resumen del microdescriptor que debe descargarse;
+  \item[\texttt{s}] indicadores;
+  \item[\texttt{v}, \texttt{pr}] versión de \texttt{tor} y \emph{subprotocolos} admitidos: aquí descubre el cliente, por ejemplo, que el repetidor admite CGO (\texttt{Relay=6}) o los protocolos de enlace 3--5;
+  \item[\texttt{w}] peso de ancho de banda en kilobytes por segundo.
+\end{description}
+
+En la variante \texttt{ns}, cada entrada incluye también una línea \texttt{p} con un resumen de la política de salida por puerto. En \texttt{microdesc}, ese resumen se incluye en el microdescriptor y no se repite en el consenso.
+
+\paragraph{Final y firmas.}
+\begin{lstlisting}[numbers=none]
+directory-footer
+bandwidth-weights Wbd=821 Wbe=0 Wbg=5000 Wbm=10000 Wdb=10000 ...
+directory-signature sha256 3776EF73A9214587AEFB3D732FA4A443CFF491BA
+                           79E102D226590BC5D1D1EBBAD8A16122EC0F9801
+-----BEGIN SIGNATURE-----
+...
+-----END SIGNATURE-----
+\end{lstlisting}
+
+Los valores de \texttt{bandwidth-weights} son coeficientes que el cliente utiliza para equilibrar el uso de repetidores entre las distintas posiciones del circuito (\cref{cap:13-percorso}). Después aparecen las firmas, una por autoridad: algoritmo hash, resumen de identidad de la autoridad, resumen de la clave de firma y firma.
+
+% ---------------------------------------------------------------------------
+\section{Verificar un consenso}\label{sec:dir-firme}
+
+Un cliente acepta un consenso solo si contiene firmas válidas de \textbf{más de la mitad} de las autoridades que conoce. En el código de \texttt{tor}, el umbral es \file{n\_v3\_authorities/2 + 1} (\file{src/feature/nodelist/networkstatus.c}): 5 firmas de 9 en la red pública y 2 de 3 en el laboratorio. Para verificar una firma, el cliente necesita:
+\begin{enumerate}
+  \item el \textbf{certificado de la autoridad}, que descarga de \nolinkurl{/tor/keys/all} y verifica frente a la identidad de autoridad conocida de antemano;
+  \item el \textbf{texto firmado}: todo el documento desde su principio hasta el espacio inmediatamente posterior al primer término \texttt{directory-signature}, inclusive;
+  \item el esquema de firma: RSA con relleno PKCS\#1 v1.5 aplicado directamente al resumen (SHA-1 o SHA-256), \emph{sin} el identificador del algoritmo que normalmente requiere PKCS\#1~\spec{dir-spec}{Signing documents}.
+\end{enumerate}
+
+\begin{approfondimento}[¿Hasta el espacio o hasta el salto de línea?]
+La sección general de la especificación sobre documentos firmados indica que la firma cubre el texto hasta el \emph{salto de línea} posterior a la línea de firma. Sin embargo, la sección específica del consenso establece el \emph{espacio} posterior a \texttt{directory-signature}, garantizando que todas las autoridades firmen exactamente los mismos bytes, aunque sus líneas de firma sean distintas. En el laboratorio~6 probamos ambas interpretaciones con un consenso real de la red privada. Las tres firmas fueron válidas siguiendo la regla del espacio y ninguna lo fue aplicando la regla del salto de línea. Ante la duda, una comprobación experimental contra una implementación independiente sigue siendo el criterio decisivo.
+\end{approfondimento}
+
+\begin{attenzione}[La lista de autoridades es un ancla de confianza]
+Todo el sistema descansa sobre la lista de autoridades incluida en el programa. Un usuario puede modificarla, pero la especificación desaconseja hacerlo: un cliente que emplee autoridades diferentes verá un consenso distinto del de los demás y resultará reconocible. Las propias autoridades son objetivos. Si una mayoría quedara comprometida, podría firmar un consenso con repetidores maliciosos. Por eso las administran personas distintas en diferentes países y mantienen las claves de identidad fuera de línea.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Cómo se mantiene actualizado un cliente}\label{sec:dir-client}
+
+Un cliente no descarga un consenso nuevo exactamente al comienzo de cada hora: si todos lo hicieran a la vez, las cachés de directorio quedarían saturadas. En cambio, elige un instante aleatorio entre tres cuartas partes del primer intervalo desde que el consenso deja de ser reciente y siete octavos del tiempo restante hasta su caducidad~\spec{dir-spec}{Client operation}. La especificación pone un ejemplo: si un consenso es válido desde las 1:00, reciente hasta las 2:00 y válido hasta las 4:00, el cliente buscará otro en un instante aleatorio entre las 2:45 y las 3:50.
+
+Para ahorrar ancho de banda, puede solicitar únicamente las \emph{diferencias} con respecto al consenso que ya posee (\emph{consensus diff}), identificado por su resumen SHA3-256. Después descarga solamente los microdescriptores que falten, solicitándolos por resumen (\nolinkurl{/tor/micro/d/}, seguido por los resúmenes separados con \texttt{-}).
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: descargar y verificar un consenso}\label{sec:lab-directory}
+
+\begin{laboratorio}[6]{El consenso de la red de laboratorio}
+\textbf{Objetivo.} Implementar \file{labs/es/codigo/torlab/directory.py} para descargar un consenso, certificados y microdescriptores desde una autoridad a través de un circuito, analizarlos y verificar sus firmas.\\
+\textbf{Requisitos previos.} Laboratorios~1--5 y red de laboratorio en funcionamiento.\\
+\textbf{Tiempo estimado.} 3 horas.
+\end{laboratorio}
+
+\paragraph{Paso 1: descargar mediante BEGIN\_DIR.} Igual que \texttt{tor}, utilizamos un circuito de un salto hacia un directorio, sin control de congestión, y abrimos flujos \file{BEGIN\_DIR}. Nos comunicamos por HTTP/1.0:
+
+\begin{lstlisting}[language=Python]
+def download(circ, path, stream_id):
+    s = Stream(circ, stream_id)
+    circ.send(RelayMessage(RelayCommand.BEGIN_DIR, stream_id, b""))
+    _, msg = s._next()                      # CONNECTED, cuerpo vacío
+    s.send(f"GET {path} HTTP/1.0\r\n\r\n".encode())
+    header, _, body = s.receive_all().partition(b"\r\n\r\n")
+    return body
+
+circ = build([relay("000a")], cc=False)
+text = download(circ, "/tor/status-vote/current/consensus-microdesc", 1)
+\end{lstlisting}
+
+\paragraph{Paso 2: formato netdoc.} Una función de unas veinte líneas, \texttt{items}, divide el documento en elementos y recopila los objetos \texttt{-----BEGIN}/\texttt{-----END}. A partir de ella se construyen dos analizadores: \file{parse\_consensus}, que produce una entrada por repetidor con sus indicadores, ancho de banda, política y resumen de microdescriptor, y \file{parse\_certificates}.
+
+\paragraph{Paso 3: verificar las firmas.}
+\begin{lstlisting}[language=Python]
+def signed_text(text):
+    start = text.index("network-status-version ")
+    pos = text.index("\ndirectory-signature ") + len("\ndirectory-signature ")
+    return text[start:pos].encode()
+
+def verify_signature(consensus, signature, cert):
+    h = hashlib.sha256 if signature.algorithm == "sha256" else hashlib.sha1
+    expected = h(signed_text(consensus.text)).digest()
+    recovered = cert.signing_key.recover_data_from_signature(
+        signature.signature, padding.PKCS1v15(), None)
+    return recovered == expected
+\end{lstlisting}
+
+El método \file{recover\_data\_from\_signature}, con algoritmo \texttt{None}, devuelve el resumen incluido en la firma sin exigir identificador de algoritmo: exactamente el esquema de Tor.
+
+\paragraph{Paso 4: los resultados.} En una de nuestras ejecuciones en la red de laboratorio (las fechas, los nombres y los recuentos dependen de la instancia de la red):
+\begin{lstlisting}[numbers=none]
+consensus: 6035 bytes; 2026-09-23 15:37:20 -> 2026-09-23 15:38:00
+method 36; signatures 3; certificates 3
+params: {'AuthDirMaxServersPerAddr': 0, 'cc_alg': 2}
+  test006e 127.0.0.1:5106 w=4096 flag=['Exit', 'Fast', 'Guard', ...]
+  test000a 127.0.0.1:5100 w=20   flag=['Authority', 'Fast', 'Guard', ...]
+  ...
+valid signatures: 3 (required: 2)
+microdescriptors: 8; match consensus m lines: True
+\end{lstlisting}
+
+El consenso cubre 40 segundos (dos intervalos de 20), está firmado por las tres autoridades y el resumen SHA-256 de cada microdescriptor descargado coincide con su línea \texttt{m} del consenso. La cadena de confianza se extiende desde las claves de las autoridades hasta la clave ntor de cada repetidor.
+
+\paragraph{Paso 5: controles negativos.} Un verificador que nunca falla no verifica nada. Si cambiamos una cifra del consenso (\texttt{Bandwidth=4096} por \texttt{4097}), el número de firmas válidas baja a cero; con una sola autoridad conocida, se reduce a una. Los archivos \file{test/test\_directory.py} repiten estas comprobaciones con una copia guardada del consenso, de modo que también pueden ejecutarse sin red.
+
+\paragraph{Paso 6: el consenso real.} El mismo código funciona con los documentos de la red pública. Descargamos un consenso y los certificados de autoridad del mismo período desde CollecTor y los verificamos:
+
+\begin{lstlisting}[language=Python,numbers=none]
+c = parse_consensus(open("consensus-microdesc-2026-09-23-15").read())
+cert = parse_certificates(open("certs").read())
+valid, required, _ = verify_consensus(c, cert, 9)
+print(valid, required)          # 9 5
+\end{lstlisting}
+
+Las nueve firmas son válidas, por encima de las cinco exigidas. Un detalle suele causar problemas al primer intento: los archivos de CollecTor empiezan con una línea de anotación, \texttt{@type network-status-microdesc-consensus-3 1.0}, que no pertenece al documento firmado. Incluirla modifica el resumen y hace que \emph{todas} las firmas fallen. Puede parecer un fallo criptográfico cuando en realidad es un error de formato. Por ello, la función \texttt{signed\_text} debe comenzar en \texttt{network-status-version}, y una prueba debe verificar expresamente ese comportamiento.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item El sistema de directorios debe ofrecer a todos los clientes una visión auténtica y compartida de la red, resistir ataques Sybil y escalar a millones de usuarios.
+  \item Nueve autoridades de directorio (más una para puentes), enumeradas en el código, votan cada hora y firman un único consenso, válido durante tres horas.
+  \item Los repetidores publican descriptores; los clientes utilizan el consenso \texttt{microdesc} y microdescriptores descargados por resumen.
+  \item Un indicador se asigna si lo vota más de la mitad de las autoridades responsables; el ancho de banda medido por al menos tres autoridades prevalece sobre el anunciado.
+  \item Un cliente acepta un consenso con firmas válidas de más de la mitad de las autoridades; la firma cubre el texto hasta el espacio posterior a \texttt{directory-signature}.
+  \item Los parámetros de consenso modifican el comportamiento de la red sin necesidad de actualizar el programa.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:12-validita}
+Un consenso tiene \texttt{valid-after} a las 10:00, \texttt{fresh-until} a las 11:00 y \texttt{valid-until} a las 13:00. ¿En qué intervalo buscará el cliente un sustituto? ¿Qué ocurre si no encuentra un nuevo consenso antes de las 13:00?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:12-flag}
+Un repetidor dispone de 500\,KB/s de ancho de banda, lleva dos días en la red y tiene la política de salida \texttt{accept *:443, reject *:*}. ¿Qué indicadores puede recibir? ¿Por qué no \texttt{Exit}?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-partizione}
+Describe un ataque de partición en el que una caché de directorio maliciosa entrega a un cliente concreto un consenso antiguo pero todavía válido. ¿Qué limita el ataque? ¿Por qué ayuda solicitar microdescriptores por su resumen?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-mediana}
+Tres autoridades miden el ancho de banda de un repetidor: 5000, 5200 y 90000. ¿Qué valor aparece en el consenso? ¿Y si la tercera autoridad, que colabora con el repetidor, fuera la única que lo midiera?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-voti}
+Busca el archivo \file{v3-status-votes} en el directorio de una de las autoridades de la red de laboratorio. Compara su voto con el consenso: ¿qué líneas son diferentes y por qué?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-md}
+Elige un repetidor del consenso descargado en el laboratorio. Calcula manualmente el resumen de su microdescriptor mediante \cmd{sha256sum} y compáralo con la línea \texttt{m}. ¿En qué línea comienza el texto sobre el que se calcula el hash y dónde termina?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:12-autorita}
+Detén una de las tres autoridades de la red de laboratorio y descarga de nuevo el consenso transcurrido un minuto. ¿Cuántas firmas contiene? ¿Lo acepta tu verificador? Repite la prueba con dos autoridades detenidas y explica lo que observas cuando el consenso caduca.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:12-ns}
+Descarga también el consenso \texttt{ns} (\nolinkurl{/tor/status-vote/current/consensus}) y verifica sus firmas. ¿Qué algoritmos hash utiliza? ¿Qué información adicional contiene la línea \texttt{r} en comparación con la variante microdesc?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item \titolo{Tor directory protocol, version 3} (dir-spec)~\cite{torspec}: formatos, votación, asignación de indicadores y funcionamiento de clientes y cachés.
+  \item Documento del protocolo de aleatoriedad compartida (srv-spec), utilizado por las autoridades para generar un valor aleatorio común cada día; lo necesitaremos para los servicios onion (\cref{cap:14-onion-services}).
+  \item Tor Metrics y CollecTor, \url{https://metrics.torproject.org/}: archivos históricos de consensos, votos y descriptores.
+\end{itemize}

@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Architettura schematica dei pluggable transports: tor comunica con il proxy SOCKS locale del PT client, che trasforma il traffico. Sul bridge il PT server inverte la trasformazione e inoltra il flusso a tor tramite ORPort oppure Extended ORPort quando configurato. Snowflake usa proxy volontari intermedi non disegnati. Il censore osserva il traffico trasformato sul collegamento monitorato, ma potrebbe comunque riconoscerlo. Esempi: obfs4 simile a byte casuali, Snowflake usa WebRTC e WebTunnel assomiglia a HTTPS.}
+% Architettura dei pluggable transports (pt-spec)
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  proc/.style={draw,rounded corners=2pt,align=center,minimum height=0.8cm,minimum width=1.7cm},
+  mac/.style={draw=torgrigio,dashed,rounded corners=4pt,inner sep=6pt}]
+  \node[proc,fill=torviola!12] (tc) at (0,0) {tor\\(client)};
+  \node[proc,fill=torverde!15] (pc) at (2.6,0) {PT client};
+  \node[proc,fill=torverde!15] (ps) at (8.2,0) {PT server};
+  \node[proc,fill=torviola!12] (tb) at (10.8,0) {tor\\(bridge)};
+  \node[mac,fit=(tc)(pc),label={[font=\sffamily\scriptsize]above:computer dell'utente}] {};
+  \node[mac,fit=(ps)(tb),label={[font=\sffamily\scriptsize]above:bridge}] {};
+  \draw[->] (tc) -- node[above,font=\sffamily\tiny] {SOCKS} (pc);
+  \draw[->] (ps) -- node[above,align=center,font=\sffamily\tiny] {ORPort /\\Extended ORPort} (tb);
+  \draw[->,thick,decorate,decoration={snake,amplitude=1.2pt,segment length=6pt}] (pc) -- node[above] {traffico trasformato} (ps);
+  \node[server,minimum width=1.4cm,fill=avviso!10,draw=avviso] (cen) at (5.4,-1.5) {censore};
+  \draw[dotted,avviso] (cen) -- (5.4,-0.15);
+  \node[text=torgrigio,align=center] at (5.4,-2.3) {vede byte casuali (obfs4),\\WebRTC (Snowflake), HTTPS (WebTunnel)};
+  \node[text=torgrigio,font=\sffamily\tiny,align=center,text width=10.5cm] at (5.4,-3.05) {Schema semplificato: Snowflake usa proxy volontari intermedi non illustrati};
+\end{tikzpicture}

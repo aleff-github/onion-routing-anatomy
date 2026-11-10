@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Esempio sintetico, non misurazioni reali, della correlazione del traffico in una direzione. In alto l'osservatore del collegamento client--guard vede il volume relativo di traffico cifrato in intervalli di 250 millisecondi; in basso l'osservatore exit--server vede un altro profilo di volume relativo. Le due serie inventate sono simili ma non identiche: nell'esempio lo scarto è di un intervallo e alcuni picchi cambiano altezza, con rumore aggiuntivo. La cifratura non elimina sempre i metadati di tempo e volume; buffering, overhead, multiplexing e traffico concorrente possono cambiare i profili. Il grafico non suggerisce un ritardo o un fattore di scala costanti, né una correlazione infallibile.}
+% Serie sintetiche e non osservazioni empiriche
+\begin{tikzpicture}[font=\sffamily\scriptsize,x=0.32cm,y=0.09cm]
+  \def\serieIngresso{0/6,1/0,2/0,3/9,4/12,5/2,6/0,7/0,8/0,9/5,10/14,11/14,12/3,13/0,14/0,15/7,16/0,17/0,18/11,19/4,20/0,21/0,22/8,23/2}
+  \def\serieUscita{0/0,1/5,2/0,3/0,4/8,5/11,6/3,7/0,8/0,9/1,10/4,11/13,12/12,13/4,14/0,15/0,16/6,17/0,18/1,19/10,20/5,21/0,22/1,23/7,24/3}
+  \foreach \x/\h in \serieIngresso {
+    \fill[torviola!70] (\x,20) rectangle ++(0.8,\h);
+  }
+  \foreach \x/\h in \serieUscita {
+    \fill[torverde!70!black] (\x,0) rectangle ++(0.8,\h);
+  }
+  \draw[->] (-0.5,20) -- (27,20) node[right] {$t$};
+  \draw[->] (-0.5,0) -- (27,0) node[right] {$t$};
+  \node[left,align=right] at (-0.6,26) {osservatore\\d'ingresso\\(client--guard)};
+  \node[left,align=right] at (-0.6,6) {osservatore\\d'uscita\\(exit--server)};
+  \draw[<->,torgrigio] (10,17) -- node[above,font=\sffamily\tiny] {ritardo esemplificativo: 1 intervallo} (11,17);
+  \node[text=torgrigio] at (13,40) {volume relativo per intervallo di 250\,ms};
+  \node[text=torgrigio,font=\sffamily\tiny] at (13,36.5) {tracce sintetiche, non misurate};
+\end{tikzpicture}

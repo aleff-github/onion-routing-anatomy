@@ -1,0 +1,15 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
+-- Copyright (C) 2026 Alessandro Greco
+-- Build file per tex4ebook/make4ht: esegue biber per la bibliografia biblatex.
+-- Sequenza: htlatex -> biber -> htlatex x3 (per risolvere citazioni e rimandi).
+Make:add("biber", "biber ${input}")
+Make:htlatex {}
+Make:biber {}
+Make:htlatex {}
+Make:htlatex {}
+Make:htlatex {}
+
+-- Testo alternativo delle formule display: ../shared/epub/epub-filters.lua.
+local filters = dofile("../shared/epub/epub-filters.lua")
+Make:match("html$", filters.display_math_alt("it"))
+Make:match("opf$", filters.without_build_date)

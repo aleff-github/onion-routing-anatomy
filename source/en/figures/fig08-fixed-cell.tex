@@ -1,0 +1,15 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% English EPUB alternative description.
+\altfig{Fixed-length Tor cell on link protocol v4 or later: a 4-byte CircID at offset 0, a 1-byte Command at offset 4, and a 509-byte Body starting at offset 5, ending just before offset 514. The diagram schematically divides body data and zero-filled unused space: unused bytes in many fixed-length command bodies must be zero-padded. RELAY and RELAY\_EARLY are exceptions at the channel layer: their encrypted bodies always occupy all 509 bytes. Drawn widths are not to scale.}
+% Fixed-length cell, link protocol >= 4 (field widths not to scale; RELAY bodies appear full).
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\small,inner sep=2pt}]
+  \node[campo,fill=torviola!15,minimum width=2.6cm] (c) {CircID (4)};
+  \node[campo,fill=torviola!35,minimum width=1.6cm,right=0pt of c] (k) {Cmd (1)};
+  \node[campo,fill=torverde!15,minimum width=5.2cm,right=0pt of k] (b) {Body: data};
+  \node[campo,fill=torgrigio!10,minimum width=2.2cm,right=0pt of b] (p) {zeros};
+  \foreach \n/\o in {c/0,k/4,b/5} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (p.north east) {514};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]b.south west) -- ([yshift=-2pt]p.south east)
+    node[midway,below=6pt,font=\sffamily\small] {\texttt{CELL\_BODY\_LEN} = 509 bytes};
+\end{tikzpicture}

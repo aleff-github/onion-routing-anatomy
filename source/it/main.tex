@@ -1,0 +1,57 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\documentclass[11pt,openright,twoside]{book}
+\input{preambolo}
+\input{macro}
+\input{diritti}
+% Metadati XMP del PDF: licenza e collegamento al testo della GPL.
+\usepackage{hyperxmp}
+\hypersetup{pdfcopyright={Copyright (C) 2026 Alessandro Greco. GNU General Public License v3.0 or later (GPL-3.0-or-later).},
+  pdflicenseurl={https://www.gnu.org/licenses/gpl-3.0.html},
+  pdfauthor={Alessandro Greco}, pdftitle={Anatomia di Tor}, pdflang={it-IT},
+  pdfsubject={Il protocollo dell'anonimato, byte per byte}}
+% Con hyperxmp l'autore finisce solo nei metadati XMP: lo si scrive anche nel dizionario Info.
+\AtBeginDocument{\pdfextension info{/Author (Alessandro Greco)}}
+
+\title{Anatomia di Tor\\[0.5em]\large Il protocollo dell'anonimato, byte per byte}
+\author{Alessandro Greco}
+\date{Prima edizione --- versione 1.0.0}
+
+% Un listato subito dopo un titolo in linea (\paragraph) cominciava sulla riga del
+% titolo: il filetto superiore della cornice partiva dopo il titolo e usciva dalla
+% pagina (7 casi). Qui il titolo resta su una riga sua. Solo A4: nel formato 7x10 i
+% listati non hanno cornice e la composizione non cambia.
+\makeatletter
+\AddToHook{env/lstlisting/before}{\if@noskipsec\leavevmode\par\fi}
+\makeatother
+
+% Per compilare un solo capitolo: make capitolo N=08
+\InputIfFileExists{solo.tex}{}{}
+
+\begin{document}
+\frontmatter
+\maketitle
+% Colophon sul verso del frontespizio (pagina che altrimenti resterebbe bianca).
+\thispagestyle{empty}
+\null\vfill
+{\footnotesize
+\noindent \textit{Anatomia di Tor --- Il protocollo dell'anonimato, byte per byte}\par
+\medskip
+\DirittiLicenza
+\medskip
+\DirittiMarchi
+\bigskip
+\noindent Prima edizione, versione 1.0.0. Formato A4.\par
+}
+\clearpage
+\tableofcontents
+\include{capitoli/00-prefazione}
+\input{capitoli/00-nota-edizioni-tradotte}
+
+\mainmatter
+\input{struttura}
+
+\backmatter
+\printbibliography[heading=bibintoc,title={Bibliografia}]
+\printindex
+\end{document}

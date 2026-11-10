@@ -1,0 +1,294 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{La cebolla: cifrado de celdas relay y CGO}\label{cap:10-cifratura-relay}
+\aggiornatoal{23 de septiembre de 2026}{commit de torspec \texttt{8e1f245}; tor 0.4.9.13; propuesta 359}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item describir cómo el cliente envuelve un mensaje en una capa de cifrado por cada salto y cómo los repetidores retiran esas capas;
+  \item explicar las funciones de Recognized y del resumen acumulativo, y por qué se necesitan ambos;
+  \item identificar las debilidades del esquema tradicional: maleabilidad y ataques de \emph{marcado} (\emph{tagging});
+  \item describir el funcionamiento básico de Counter Galois Onion (CGO), el esquema que lo sustituye;
+  \item extender un circuito real a tres saltos con el código propio (laboratorio~4).
+\end{itemize}
+\end{obiettivi}
+
+En el \cref{cap:09-circuiti}, el cliente acordó cuatro claves con cada repetidor del circuito: Kf y Kb para cifrar, y Df y Db para verificar la integridad. Ahora vamos a utilizarlas. Este mecanismo da nombre al encaminamiento cebolla: un mensaje se envuelve en tantas capas como repetidores haya en la ruta, y cada repetidor retira una, como al pelar una cebolla.
+
+% ---------------------------------------------------------------------------
+\section{El esquema tradicional}\label{sec:tor1}
+
+El esquema utilizado desde los orígenes de Tor, denominado \emph{tor1} en el código más reciente, combina dos herramientas por salto y dirección:
+\begin{itemize}
+  \item un cifrador de flujo, \textbf{AES-128 en modo contador} (CTR), con la clave Kf o Kb;
+  \item un \textbf{resumen SHA-1 acumulativo}, inicializado con Df o Db.
+\end{itemize}
+Ambos mantienen un \emph{estado} durante toda la vida del circuito. El contador de AES-CTR no vuelve a cero por cada celda: la primera utiliza los primeros 509 bytes del flujo de clave, la segunda los 509 siguientes, y así sucesivamente. De igual modo, el resumen no se calcula sobre una sola celda, sino sobre \emph{todas} las intercambiadas hasta ese momento con el mismo salto. Por tanto, el cliente y el repetidor deben procesarlas exactamente en el mismo orden: una celda perdida o duplicada desincronizaría ambos estados. TLS, que garantiza el orden y la integridad del canal, hace que esto sea posible.
+
+\subsection{Sentido de ida: del cliente al circuito}
+
+Para enviar un mensaje al salto $d$ de un circuito, el cliente~\spec{tor-spec}{Routing relay cells}:
+\begin{enumerate}
+  \item prepara el cuerpo en claro del mensaje relay (\cref{sec:relay}), con Recognized y Digest establecidos en cero;
+  \item actualiza el resumen de ida del salto $d$ con ese cuerpo y escribe sus primeros cuatro bytes en el campo Digest;
+  \item cifra el cuerpo con Kf del salto $d$, después con Kf de $d-1$ y así sucesivamente hasta el salto 1: la capa exterior pertenece al primer repetidor.
+\end{enumerate}
+Cada repetidor que recibe la celda la descifra con su propio Kf, retirando una capa, y comprueba si está destinada a él. Si no lo está, la reenvía al siguiente salto, que retira otra capa. La \cref{fig:cipolla} muestra el proceso.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig10-cebolla}
+\caption{Cifrado RELAY tradicional tor1: el cliente aplica Kf$_3$, Kf$_2$, Kf$_1$ y cada repetidor retira su capa. La salida reconoce el mensaje con Recognized = 0 y un resumen acumulativo correcto; la aplicación puede seguir cifrada mediante HTTPS. Las cajas internas representan datos todavía cifrados.}
+\label{fig:cipolla}
+\end{figure}
+
+\subsection{Sentido de vuelta: del circuito al cliente}
+
+En sentido contrario se invierten las funciones. Un repetidor que origina un mensaje lo firma con su resumen de vuelta y lo cifra con Kb. Cada repetidor posterior en dirección al cliente \emph{añade} otra capa utilizando su propia Kb. El cliente, que conoce todas las claves, retira las capas una a una desde el primer salto y comprueba después de cada capa si ese salto originó la celda.
+
+\subsection{El circuito como \enquote{tubería con salidas intermedias}}
+
+El cliente puede enviar un mensaje a \emph{cualquier} salto del circuito, no solo al último, simplemente interrumpiendo el cifrado en ese salto. Así se entrega al segundo repetidor un mensaje \texttt{EXTEND2} para extender el circuito hasta el tercero. La especificación denomina esta estructura \emph{leaky pipe topology}: el circuito se parece a una tubería por la que los mensajes pueden salir antes de llegar al extremo. El artículo original sobre Tor~\cite{dingledine2004tor} también propone aprovechar defensivamente esta propiedad: hacer salir algunos flujos por un repetidor intermedio dificultaría al observador de una salida determinar a qué circuito pertenecen. En la práctica, sin embargo, \texttt{tor} dirige los flujos únicamente por el último salto.
+
+% ---------------------------------------------------------------------------
+\section{Reconocer una celda}\label{sec:riconoscere}
+
+¿Cómo sabe un repetidor, después de retirar su capa, si la celda está destinada a él? No basta con \enquote{comprobar que el contenido tiene sentido}: para un programa, tanto una celda todavía cifrada como una celda en claro son secuencias de bytes. El esquema tradicional realiza dos comprobaciones consecutivas~\spec{tor-spec}{Relay cells}:
+
+\begin{enumerate}
+  \item \textbf{Recognized}: estos dos bytes deben ser cero. Si la celda sigue cifrada, son seudoaleatorios y solo valen cero una vez cada \num{65536} casos. La comprobación resulta prácticamente gratuita y descarta inmediatamente la inmensa mayoría de celdas en tránsito.
+  \item \textbf{Digest}: cuando Recognized es cero, el repetidor calcula el resumen acumulativo \emph{como si} la celda fuera para él, poniendo el campo Digest a cero, y compara los primeros cuatro bytes con el contenido del campo. Si coinciden, la celda se considera \enquote{reconocida}: el repetidor actualiza el estado del resumen y procesa la celda.
+\end{enumerate}
+
+Un detalle fácil de pasar por alto: si Recognized vale cero, pero el resumen no coincide, se trata de un falso positivo y \textbf{no debe} actualizarse el estado del resumen. En el laboratorio~4 lo conseguimos trabajando con una copia del estado (\texttt{self.digest.copy()}) y conservándola solo cuando la comprobación tiene éxito.
+
+El resumen cubre todo el cuerpo, incluidos los bytes de relleno, que por ello son aleatorios (\cref{sec:relay}). En los circuitos de servicios onion, donde el cliente y el servicio comparten las claves de un \enquote{salto virtual} (\cref{cap:14-onion-services}), se utiliza SHA3-256 en lugar de SHA-1.
+
+¿Qué ocurre cuando ningún salto reconoce la celda? Si el último repetidor recibe una celda de ida que no reconoce, se ha producido un error y destruye el circuito con \cella{DESTROY}. Si ninguno de los saltos reconoce una celda entrante, el cliente hace lo mismo.
+
+% ---------------------------------------------------------------------------
+\section{Debilidades de tor1}\label{sec:tor1-debolezze}
+
+\subsection{Maleabilidad}
+
+El modo contador tiene una propiedad problemática: el texto cifrado es simplemente $C = P \oplus S$, donde $S$ es el flujo de clave. Modificar un bit de $C$ modifica ese mismo bit de $P$ sin necesidad de conocer la clave. Si un adversario conoce o puede adivinar parte del texto en claro, puede reemplazarla por un contenido elegido: basta aplicar XOR al texto cifrado con la diferencia entre ambos textos. El laboratorio~4 contiene una prueba que hace exactamente esto, cambiando \enquote{paga 10 euros} por \enquote{paga 99 euros}.
+
+En tor1, la integridad se comprueba solo \emph{en el destino}: el repetidor previsto verifica el resumen, pero los intermedios no. Por ello, una celda alterada puede atravesarlos sin incidentes hasta llegar al destino, donde por fin falla la verificación.
+
+\subsection{El ataque de marcado}
+
+Estas propiedades permiten un ataque concreto denominado \emph{tagging}, o \emph{marcado}. Supongamos que un adversario controla tanto el guardia como la salida de un circuito:
+\begin{enumerate}
+  \item El guardia modifica algunos bits de una celda en tránsito según un patrón reconocible (la \enquote{marca}, o \emph{tag}).
+  \item La celda atraviesa el intermedio, que no puede detectar la modificación.
+  \item Antes de comprobar el resumen, la salida busca la marca en la celda. Si la encuentra, sabe que el circuito pasa por su guardia cómplice y puede asociar el destino del tráfico con la dirección del cliente, conocida por el guardia.
+\end{enumerate}
+Si la salida no coopera, el resumen falla, se destruye el circuito y el cliente construye otro. El adversario puede repetir el intento, y cada fallo aporta información. La marca también puede aplicarse en sentido inverso, desde la salida hacia el cliente.
+
+\begin{approfondimento}[¿Hasta qué punto importa el marcado?]
+Un adversario que controle el guardia y la salida ya puede correlacionar tiempos y volúmenes de tráfico sin ninguna marca (\cref{cap:26-attacchi}). Por eso los diseñadores de Tor consideraron durante mucho tiempo que el marcado era un problema real, pero de prioridad relativamente menor~\cite{dingledine2004tor}. Sin embargo, es más fiable que la correlación estadística y funciona incluso con muy poco tráfico. Durante más de una década se propusieron medidas para impedirlo: propuestas 202, 261 (basada en el cifrador AEZ), 295 y 308, seguidas por la 359, que introdujo CGO.
+\end{approfondimento}
+
+\subsection{Otras limitaciones}
+
+El resumen solo tiene cuatro bytes y su algoritmo subyacente, SHA-1, ya no se considera seguro para aplicaciones nuevas. Además, el esquema carece de secreto hacia adelante \emph{dentro} del circuito: alguien que obtenga las claves de un salto mientras el circuito está activo también puede descifrar todas las celdas anteriores que haya registrado, porque el flujo de clave depende por completo de la clave inicial.
+
+% ---------------------------------------------------------------------------
+\section{Counter Galois Onion}\label{sec:cgo}
+
+\textbf{CGO} (\emph{Counter Galois Onion}) es un esquema de cifrado de celdas relay diseñado por Degabriele, Melloni, Münch y Stam, y adoptado en la \proposta{359}. Aquí presentamos su funcionamiento general; la construcción criptográfica completa se describe en la propuesta y en los artículos de sus autores.
+
+\subsection{Propiedades}
+
+Según la propuesta, CGO introduce tres mejoras:
+\begin{itemize}
+  \item Es \textbf{no maleable}: cualquier modificación de una celda hace que esta y todas las celdas posteriores del circuito resulten indescifrables. Una marca no puede leerse ni eliminarse: únicamente puede destruir el circuito.
+  \item Proporciona \textbf{secreto hacia adelante a nivel de celda}: después de procesar una celda, una parte ya no conserva el material necesario para volver a descifrarla.
+  \item La autenticación ofrece una seguridad de 128 bits, en lugar de depender de la comprobación mucho más corta del esquema tradicional.
+\end{itemize}
+Como CGO ya no utiliza SHA-1, también debería ser más rápido en conjunto.
+
+\subsection{Cómo funciona, a grandes rasgos}
+
+Los elementos básicos son AES-128 y POLYVAL, una función hash universal de la misma familia utilizada en el modo AES-GCM-SIV. Con ellos, la propuesta construye un cifrador \emph{ajustable de bloque ancho} (\emph{wide-block tweakable cipher}): opera sobre los 509 bytes completos de una celda como si fueran un solo bloque, de manera que modificar un único bit en cualquier posición altera de forma impredecible todo el resultado. La celda descifrada consta de una \emph{marca de autenticación} (\emph{tag}) de 16 bytes y un cuerpo de 493 bytes, como vimos en \cref{sec:nuovo-formato}.
+
+Para cada salto y dirección, el cliente y el repetidor comparten:
+\begin{itemize}
+  \item una clave $K$ de 64 bytes y un valor $N$ de 16 bytes, derivados del intercambio de creación del circuito;
+  \item la \emph{marca} $T'$ de la última celda procesada, inicialmente cero.
+\end{itemize}
+
+Tres ideas hacen que el esquema resista el marcado:
+\begin{description}
+  \item[Reconocimiento mediante marca] Cuando el repetidor retira su capa, la celda le pertenece si la marca resultante coincide con $N$. Se trata de una comprobación de 16 bytes, frente a los dos bytes Recognized y los cuatro bytes Digest.
+  \item[Encadenamiento] La marca de la celda anterior interviene en el procesamiento de la siguiente como parámetro del cifrador. Una celda alterada produce una marca incorrecta que impide descifrar todas las posteriores: el circuito deja de funcionar.
+  \item[Actualización de claves] Cada vez que un salto reconoce u origina una celda, reemplaza $K$ y $N$ por nuevos valores derivados de los anteriores. Los valores antiguos se eliminan, proporcionando secreto hacia adelante a nivel de celda.
+\end{description}
+
+El byte de comando de la celda (\cella{RELAY} o \cella{RELAY\_EARLY}) participa en los cálculos como \emph{datos asociados}: un repetidor no puede convertir un comando en el otro sin impedir que la celda se descifre.
+
+\begin{attenzione}[Las direcciones no son intercambiables]
+La construcción subyacente de CGO es no maleable en una dirección y maleable en la otra. La propuesta escoge cuidadosamente qué dirección utilizar para el cliente y cuál para los repetidores, y advierte explícitamente a quienes implementan el protocolo que no deben invertirlas. Esto demuestra cómo una elección que parece un mero detalle de implementación puede comprometer la seguridad de todo un esquema criptográfico.
+\end{attenzione}
+
+\subsection{CGO en la práctica}
+
+\begin{itemize}
+  \item \textbf{Claves}: del flujo producido por el intercambio, cada dirección recibe $K$ de 64 bytes y $N$ de 16 bytes, en lugar de Df, Db, Kf y Kb.
+  \item \textbf{SENDME}: el control de flujo autenticado de la \proposta{289} utilizaba el resumen acumulativo para demostrar la recepción de los datos. CGO ya no tiene ese resumen, así que SENDME transporta la marca de la última celda confirmada (\cref{cap:11-stream}).
+  \item \textbf{Negociación}: el cliente solo utiliza CGO con un repetidor si este anuncia el subprotocolo \texttt{Relay=6} y el cliente lo solicita durante el intercambio ntor-v3 (\cref{sec:ntor3}). En \cref{cap:09-circuiti} vimos que el repetidor rechaza la solicitud cuando no va acompañada por otra de control de congestión.
+  \item \textbf{Despliegue}: \texttt{tor} admite CGO desde la serie 0.4.9 y Arti lo ha tenido siempre activado. Un mismo circuito puede combinar saltos CGO con otros que todavía utilicen tor1: la elección es independiente para cada salto.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: un circuito de tres saltos}\label{sec:lab-cifratura}
+
+\begin{laboratorio}[4]{Cifrado por capas y extensión del circuito}
+\textbf{Objetivo.} Implementar \file{labs/es/codigo/torlab/encryption.py}, que desarrolla el lado del cliente de tor1, y utilizarlo para extender un circuito real hasta una salida.\\
+\textbf{Requisitos previos.} Laboratorios~1--3; red de laboratorio en funcionamiento.\\
+\textbf{Tiempo estimado.} 3 horas.
+\end{laboratorio}
+
+\paragraph{Paso 1: una dirección de un salto.} En el núcleo del laboratorio hay una pequeña clase que combina un cifrador AES-CTR y el resumen SHA-1 de una dirección:
+
+\begin{lstlisting}[language=Python]
+class Direction:
+    @classmethod
+    def new(cls, key, digest_seed):
+        d = hashlib.sha1(); d.update(digest_seed)
+        return cls(_aes_ctr(key), d)
+
+    def apply(self, data):             # cifra o descifra: CTR usa la misma operación
+        return self.cipher.update(data)
+
+    def sign(self, body):                 # escribe el campo Digest
+        self.digest.update(_without_digest(body))
+        return body[:5] + self.digest.digest()[:4] + body[9:]
+
+    def recognizes(self, body):
+        if body[1:3] != b"\x00\x00":
+            return False
+        trial = self.digest.copy()
+        trial.update(_without_digest(body))
+        if trial.digest()[:4] != body[5:9]:
+            return False                 # falso positivo: no cambia el estado
+        self.digest = trial
+        return True
+\end{lstlisting}
+
+El objeto de cifrado de la biblioteca \texttt{cryptography} conserva el contador entre llamadas; es precisamente el comportamiento que necesitamos.
+
+\paragraph{Paso 2: el cliente.} Con un objeto \texttt{Direction} por dirección y por salto, cifrar y descifrar se reducen a un bucle:
+
+\begin{lstlisting}[language=Python]
+def encrypt(self, msg, destination):
+    body = self.hops[destination].forward.sign(encode_relay(msg))
+    for i in range(destination, -1, -1):
+        body = self.hops[i].forward.apply(body)
+    return body
+
+def decrypt(self, body):
+    for i, hop in enumerate(self.hops):
+        body = hop.backward.apply(body)
+        if hop.backward.recognizes(body):
+            return i, decode_relay(body)
+    raise CellError("celda no reconocida")
+\end{lstlisting}
+
+\paragraph{Paso 3: pruebas en memoria y sus limitaciones.} El archivo \file{labs/es/codigo/torlab/test/test\_encryption.py} construye una simulación de circuito con tres repetidores. Comprueba que cada salto reconoce únicamente sus propias celdas, que los repetidores intermedios solo ven bytes seudoaleatorios y que las modificaciones se detectan en el destino; también demuestra la maleabilidad de AES-CTR. Sin embargo, estas pruebas tienen una limitación importante: cliente y repetidores simulados utilizan \emph{el mismo código}. Si, por ejemplo, actualizáramos el resumen en un orden incorrecto, ambas partes cometerían el mismo error y aun así superarían las pruebas. La comprobación definitiva consiste en comunicarse con una implementación independiente.
+
+\paragraph{Paso 4: extender un circuito real.} Establecemos el primer salto mediante ntor-v3 hacia \texttt{test003r}, como en el laboratorio~3, y lo extendemos hacia \texttt{test004r} y la salida \texttt{test006e}. El módulo \file{labs/es/codigo/torlab/laboratory.py} lee por nosotros las identidades y las claves ntor de los repetidores a partir de los archivos de la red de laboratorio:
+
+\begin{lstlisting}[language=Python]
+for r, est in ((middle, []), (exit_, [(1, b"")])):
+    st, hd = ntor3_client_start(r.id_ed, r.ntor, encode_extensions(est))
+    body = extend2_body("127.0.0.1", r.port, r.id_rsa, r.id_ed,
+                          HTYPE_NTOR_V3, hd)
+    msg = RelayMessage(RelayCommand.EXTEND2, 0, body)
+    c.send(Cell(CIRC, CellCommand.RELAY_EARLY, circ.crypto.encrypt(msg)))
+    i, response = circ.crypto.decrypt(c.receive().body)
+    sm, k = ntor3_client_finish(st, hdata_created2(response.data))
+    circ.hops.append(Hop.from_keys(CircuitKeys.from_stream(k)))
+\end{lstlisting}
+
+El mensaje \texttt{EXTEND2} tiene StreamID igual a cero (es un mensaje de control) y viaja dentro de una celda \cella{RELAY\_EARLY}. También solicitamos control de congestión para la salida, igual que \texttt{tor}. La ejecución produce:
+
+\begin{lstlisting}[numbers=none]
+salto 1: 003r
+  <- CircID=0x80000100 RELAY cuerpo=509 bytes
+  del salto 1 EXTENDED2 67 bytes
+salto 2: 004r  extensiones del repetidor: []
+  <- CircID=0x80000100 RELAY cuerpo=509 bytes
+  del salto 2 EXTENDED2 70 bytes
+salto 3: 006e  extensiones del repetidor: [(2, b'\x1f')]
+\end{lstlisting}
+
+El circuito tiene ahora tres saltos. Cada línea \enquote{del salto} demuestra que nuestro código cifró correctamente para el repetidor previsto y que este cifró correctamente para nosotros. Una sola clave incorrecta, un byte del resumen diferente o un orden de capas equivocado habría provocado la destrucción del circuito. Las longitudes de \texttt{EXTENDED2} concuerdan con \cref{sec:ntor3}: dos bytes para HLEN, 32 para $Y$, 32 para $\mathit{AUTH}$ y el mensaje $SM$, de un byte (sin extensiones) en el intermedio y cuatro bytes (una extensión de un byte) en la salida.
+
+\paragraph{Paso 5: por fin aparece el relleno.} Seguimos escuchando el canal después de extender el circuito:
+
+\begin{lstlisting}[numbers=none]
+  4.1 s  <- CircID=0x00000000 PADDING cuerpo=509 bytes
+  7.1 s  <- CircID=0x00000000 PADDING cuerpo=509 bytes
+ 12.8 s  <- CircID=0x00000000 PADDING cuerpo=509 bytes
+ 21.5 s  <- CircID=0x00000000 PADDING cuerpo=509 bytes
+ 28.3 s  <- CircID=0x00000000 PADDING cuerpo=509 bytes
+\end{lstlisting}
+
+Es lo que predijimos en los capítulos \ref{cap:07-canali} y~\ref{cap:09-circuiti}: ahora que un circuito de varios saltos atraviesa el canal, el guardia lo considera \enquote{en uso} y envía celdas \cella{PADDING} a intervalos aleatorios mientras permanece inactivo. Los intervalos observados, de entre tres y 8,7 segundos, entran en la ventana de relleno de 1,5--9,5 segundos de la especificación.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item En tor1, cada salto tiene un flujo AES-128-CTR y un resumen SHA-1 acumulativo por dirección, ambos con estado durante la vida del circuito.
+  \item En sentido de ida, el cliente aplica las capas desde el último salto al primero y cada repetidor retira una. En sentido de vuelta, cada repetidor añade una capa y el cliente las retira todas.
+  \item El cliente puede dirigirse a cualquier salto (\emph{leaky pipe}).
+  \item Una celda se reconoce cuando Recognized vale cero y coincide el resumen acumulativo; un falso positivo de Recognized no debe modificar el estado del resumen.
+  \item AES-CTR es maleable y la integridad solo se verifica en el destino: esto permite el marcado.
+  \item CGO impide la maleabilidad, encadena las marcas, actualiza las claves tras cada mensaje y proporciona autenticación de 128 bits; se negocia por separado con cada salto mediante ntor-v3.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:10-ordine}
+Un cliente con un circuito de tres saltos quiere enviar un mensaje al segundo. ¿Qué claves utiliza para cifrarlo y en qué orden? ¿Qué ve el tercer salto?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:10-contatore}
+Después de que el cliente haya enviado 1000 celdas por el circuito, ¿en qué posición del flujo de clave AES-CTR está el primer salto? ¿Por qué no debe reutilizarse la misma clave en un segundo circuito?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-falso}
+Explica qué ocurriría si un repetidor actualizara su resumen acumulativo incluso cuando Recognized fuera cero pero el resumen no coincidiera. Por término medio, ¿después de cuántas celdas aparecería el problema?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-tag}
+Un guardia malicioso que coopera con una salida quiere marcar una celda de ida para que esta la reconozca. Dada la estructura de un mensaje \texttt{DATA} en claro, ¿qué bytes de la celda sería conveniente modificar? ¿Qué observaría una salida honesta?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-cgo-tag}
+Repite el escenario del ejercicio anterior utilizando CGO. ¿Qué ve la salida cómplice? ¿Qué sucede con las celdas posteriores del circuito?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:10-padding}
+En el paso 5 del laboratorio, calcula los intervalos entre las celdas \cella{PADDING} observadas. Según la especificación, el retardo se extrae de la distribución del máximo de dos variables aleatorias uniformes. ¿Cuál es el retardo esperado en el intervalo de 1,5 a 9,5 segundos? ¿Concuerda con las observaciones?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:10-drop}
+Amplía el laboratorio enviando un mensaje \texttt{DROP} (comando relay 10, relleno de largo alcance) al segundo salto. ¿Responde el repetidor? ¿Cómo puedes verificar que reconoció el mensaje y que no destruyó el circuito?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:10-alterazione}
+En el laboratorio, invierte deliberadamente un bit de una celda \cella{RELAY\_EARLY} cifrada que contiene \texttt{EXTEND2}. ¿Qué repetidor lo detecta y cómo reacciona? Predice el resultado y luego compruébalo.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification}, capítulos \enquote{Relay cells} y \enquote{Routing relay cells}~\cite{torspec}.
+  \item Propuesta 359, \titolo{Counter Galois Onion, Updated}, con referencias a los trabajos de Degabriele, Melloni, Münch y Stam.
+  \item Propuestas 202, 261, 295 y 308: larga historia de los intentos de impedir el marcado.
+  \item R.~Dingledine, N.~Mathewson y P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}, sección 4 (circuitos, tuberías con salidas intermedias y verificación de integridad).
+\end{itemize}

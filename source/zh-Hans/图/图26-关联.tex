@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 无障碍替代文本。
+\altfig{端到端流量关联的单向合成示例，并非实测数据。上方图表示在客户端到守卫链路上每 250 毫秒观察到的加密流量相对大小；下方是出口到服务器链路的相对流量。两条独立设定的示例序列有相似但不完全相同的突发模式。图中下方序列延后一段 250 毫秒，峰值高度和噪声也发生变化。加密不一定隐藏时间和流量规模特征；缓冲、协议开销、多路复用和并发流量会改变模式。这种固定延迟并非 Tor 的普遍特性，统计关联也不能保证判断正确。}
+% 合成曲线，非真实观测
+\begin{tikzpicture}[font=\sffamily\scriptsize,x=0.32cm,y=0.09cm]
+  \def\serieIngresso{0/6,1/0,2/0,3/9,4/12,5/2,6/0,7/0,8/0,9/5,10/14,11/14,12/3,13/0,14/0,15/7,16/0,17/0,18/11,19/4,20/0,21/0,22/8,23/2}
+  \def\serieUscita{0/0,1/5,2/0,3/0,4/8,5/11,6/3,7/0,8/0,9/1,10/4,11/13,12/12,13/4,14/0,15/0,16/6,17/0,18/1,19/10,20/5,21/0,22/1,23/7,24/3}
+  \foreach \x/\h in \serieIngresso {
+    \fill[torviola!70] (\x,20) rectangle ++(0.8,\h);
+  }
+  \foreach \x/\h in \serieUscita {
+    \fill[torverde!70!black] (\x,0) rectangle ++(0.8,\h);
+  }
+  \draw[->] (-0.5,20) -- (27,20) node[right] {$t$};
+  \draw[->] (-0.5,0) -- (27,0) node[right] {$t$};
+  \node[left,align=right] at (-0.6,26) {入口\\观察者\\（客户端至守卫）};
+  \node[left,align=right] at (-0.6,6) {出口\\观察者\\（出口至服务器）};
+  \draw[<->,torgrigio] (10,17) -- node[above,font=\sffamily\tiny] {示例：偏移一个区间} (11,17);
+  \node[text=torgrigio] at (13,40) {每 250\,ms 区间相对流量};
+  \node[text=torgrigio,font=\sffamily\tiny] at (13,36.5) {合成示例，非真实测量};
+\end{tikzpicture}

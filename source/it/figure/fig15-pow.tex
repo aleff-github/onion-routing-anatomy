@@ -1,0 +1,21 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Protezione PoW facoltativa per servizi onion. Se il servizio la abilita, pubblica pow-params con seme e sforzo suggerito E; il client sceglie l'effort effettivo, cerca nonce e soluzione Equi-X che soddisfano anche R per E non maggiore di 2^32−1, e inserisce la prova nell'estensione cifrata di INTRODUCE1. Il punto di introduzione inoltra INTRODUCE2 senza leggere la prova, con eventuale limite al ritmo. Il servizio verifica seme, nonce, Equi-X e test di sforzo, scartando prove non valide. Le richieste valide entrano nella coda ordinata per sforzo verificato decrescente; senza prova l'effort è zero. Quando la coda supera il limite, l'implementazione può eliminare la metà con sforzo inferiore. I valori 900, 400, 120, 40 e 0 sono esempi, non soglie fisse.}
+% La prova di lavoro degli onion service: dal descrittore alla coda a priorità
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  box/.style={draw,rounded corners=2pt,align=center,minimum height=1cm}]
+  \node[box,fill=torgrigio!8,text width=2.2cm] (d) at (0,0) {descrittore:\\\texttt{pow-params}\\seme, sforzo suggerito};
+  \node[box,fill=torviola!10,text width=3.2cm] (c) at (3.8,0) {client: sceglie $E$, cerca nonce\\e soluzione Equi-X con\\$R \cdot E \le 2^{32}-1$};
+  \node[box,fill=torgrigio!8,text width=2.2cm] (i) at (8.4,0) {punto di\\introduzione\\(limite al ritmo)};
+  \node[box,fill=torverde!12,text width=2.2cm] (s) at (8.4,-2.2) {servizio:\\verifica la prova\\(veloce)};
+  \draw[->] (d) -- (c);
+  \draw[->] (c) -- node[below,pos=0.45] {\texttt{INTRODUCE1}} (i);
+  \draw[->] (i) -- node[right] {\texttt{INTRODUCE2}} (s);
+  \foreach \k/\e/\c in {0/900/torverde!45,1/400/torverde!35,2/120/torverde!25,3/40/torverde!15,4/0/torgrigio!10}
+    \node[draw,minimum width=1.1cm,minimum height=0.55cm,fill=\c] (q\k) at (1.2+1.1*\k,-2.2) {$E{=}\e$};
+  \draw[->] (s) -- (q4.east);
+  \node[above=0.1cm of q2] {coda ordinata per sforzo (senza prova: $E=0$)};
+  \node[below=0.1cm of q0,align=center] {servita per prima};
+  \node[below=0.1cm of q4,align=center] {coda piena: si scarta\\la metà con sforzo minore};
+\end{tikzpicture}

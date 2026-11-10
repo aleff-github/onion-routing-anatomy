@@ -1,0 +1,36 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Edición española: punto de entrada del PDF.
+% Laboratorios ejecutables, cierre editorial y compilaciones de publicación pendientes.
+\documentclass[11pt,openright,twoside]{book}
+\input{preambulo}
+\input{macros}
+\input{derechos}
+\hypersetup{pdftitle={Anatomía de Tor}, pdfsubject={El protocolo del anonimato, byte a byte},
+  pdfauthor={Alessandro Greco}, pdflang={es-ES}}
+\title{Anatomía de Tor\\[0.5em]\large El protocolo del anonimato, byte a byte}
+\author{Alessandro Greco}
+\date{Primera edición --- versión 1.0.0}
+% Un listado justo después de un título en línea (\paragraph) empezaba en la línea del
+% título: el filete superior del marco empezaba tras el título y salía de la página. Aquí
+% el título queda en una línea propia (la misma corrección que en source/it/main.tex).
+\makeatletter
+\AddToHook{env/lstlisting/before}{\if@noskipsec\leavevmode\par\fi}
+\makeatother
+
+\begin{document}
+\frontmatter
+\maketitle
+% Colofón en el reverso de la portadilla.
+\thispagestyle{empty}
+\null\vfill
+\Colophon
+\clearpage
+\tableofcontents
+\include{capitulos/00-prefacio}
+\mainmatter
+\input{estructura}
+\backmatter
+\printbibliography[heading=bibintoc,title={Bibliografía}]
+\printindex
+\end{document}

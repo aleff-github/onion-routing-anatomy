@@ -1,0 +1,238 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{DoS 防护与资源管理}\label{cap:15-dos}
+\aggiornatoal{2026 年 9 月 23 日}{torspec 提交 \texttt{8e1f245}；tor 0.4.9.13；dos-spec、hspow-spec}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 解释为什么针对 Tor 的拒绝服务攻击也会威胁匿名性；
+  \item 描述 tor 如何保护中继的内存、CPU 处理能力和带宽；
+  \item 理解按 IP 地址限制连接与电路的机制，以及共识参数的作用；
+  \item 解释洋葱服务如何抵御大量引介请求；
+  \item 描述 v1 工作量证明机制（Equi-X 和 Blake2b）及其难度调节方式；
+  \item 在实验网络中触发并观察中继和洋葱服务的防御机制（实验~9）。
+\end{itemize}
+\end{obiettivi}
+
+一个开放、匿名且由志愿者运营的网络，自然容易成为试图使其瘫痪者的目标。本章研究 Tor 对\emph{拒绝服务}（denial-of-service，DoS）攻击的防护：攻击者试图耗尽中继或洋葱服务的资源，使其他人无法使用。近年来发生的具体事件，包括 2022--2023 年针对洋葱服务的一系列攻击，将在 \cref{cap:27-casi-rete} 中讨论。本章重点分析防御机制本身。
+
+% ---------------------------------------------------------------------------
+\section{为什么 DoS 也是匿名性问题}\label{sec:dos-anonimato}
+
+在普通网络中，DoS 攻击\enquote{只是}可用性问题；在 Tor 中，它还可能成为攻击匿名性的武器~\spec{dos-spec}{Overview}：
+\begin{itemize}
+  \item 能够按需使某个中继失效的对手，可以迫使以该中继为入口守卫的客户端重新选择守卫，并希望新守卫受其控制。Jansen、Tschorsch、Johnson 和 Scheuermann 曾展示，攻击者利用很少的资源就能耗尽中继内存，并借此对洋葱服务去匿名化。这就是\emph{狙击手攻击}（Sniper Attack）~\cite{jansen2014sniper}。
+  \item 使诚实中继变慢或无法访问，会把流量推向恶意中继，从而增加攻击者能够观察到的流量比例。
+  \item 选择性地使特定电路失效，还可以形成一个信号，例如用来判断哪些电路经过了某个中继。
+\end{itemize}
+因此，防御的目标不能只是\enquote{让中继继续运行}：防御本身也必须避免产生可供攻击者利用的可观察行为。
+
+% ---------------------------------------------------------------------------
+\section{物理资源}\label{sec:dos-risorse}
+
+\subsection{内存}
+
+内存是最敏感的资源，也是已有防护机制最成熟的资源~\spec{dos-spec}{Memory exhaustion}。在 Linux 上，进程申请过多内存时，通常不会马上收到错误。操作系统可能先承诺提供内存，等进程真正使用时再将其终止。因此，等待内存分配失败并不能有效防护。tor 自行施加 \opt{MaxMemInQueues} 上限；该值可由运营者设置，也可按系统内存的一定比例计算。计入的对象包括所有内存消耗项：电路中排队的信元（cell）、连接缓冲区、压缩状态、缓存的洋葱服务描述符以及 DNS 查询缓存。
+
+内存占用超过上限时，tor 分两个阶段释放内存。首先，它从占总量超过 20\,\% 的缓存中逐出最旧条目，直到这些缓存的占用降到 10\,\% 以下。如果用量仍超过上限的 90\,\%，它就按各电路和连接中最旧排队数据的年龄依次关闭它们，最先关闭那些数据滞留最久的对象。这样做旨在优先处理持续积累数据却不读取的参与者——这正是此类攻击的典型特征。
+
+\subsection{CPU}
+
+CPU 处理能力是 C 语言实现中的一个薄弱点，因为其网络处理依赖单个主线程。最耗时的操作是电路握手（\cref{cap:09-circuiti}），它们会排队并交给工作线程池处理。然而，如果握手请求过多，队列仍会增长，合法电路便可能超时。Tor 不直接测量 CPU 使用率，而是通过限制耗费 CPU 的操作间接保护它，包括创建电路和处理洋葱服务引介。
+
+\subsection{带宽}
+
+运营者可以通过 \opt{RelayBandwidthRate} 等选项限制带宽，但这些限制主要用于避免超出其网络接入方案的额度，本身并不能算作攻击防御。面对异常带宽消耗，Tor 依靠流量控制和拥塞控制（\cref{cap:11-stream}），以及在电路之间公平调度信元。
+
+% ---------------------------------------------------------------------------
+\section{按地址实施限制}\label{sec:dos-limiti}
+
+针对简单洪泛攻击，最有效的防御十分直接。入口守卫能看到建立连接的客户端 IP 地址，因此可以限制每个地址能够请求的资源。网络中只有这一位置能实施此类限制，因为后续跳点被刻意设计为不知道流量的来源。Tor 针对客户端（而非经过认证的中继）提供三类限制，可通过 \texttt{DoS\ldots} 选项配置：
+\begin{description}
+  \item[连接]（\texttt{DoSConnection\ldots}）限制每个地址同时建立的 TLS 连接数以及新连接的建立速率。超过阈值的连接会被关闭。
+  \item[电路]（\texttt{DoSCircuitCreation\ldots}）为每个地址设置\emph{令牌桶}：新建一条电路消耗一个令牌。令牌按固定速率补充，直至达到最大容量（\emph{突发容量}，burst）。当某地址的令牌耗尽，\emph{且}同时持有至少规定数量的连接时，该地址会被标记；随后一段时间内，它发起的新电路请求将被拒绝。
+  \item[单跳汇合]（\texttt{DoSRefuseSingleHopClientRendezvous}）拒绝来自单跳电路的汇合请求，例如 Tor2web 网关为在不保护客户端匿名性的情况下访问洋葱服务而使用的电路。这类请求能够以较低成本给网络带来负载。
+\end{description}
+
+\subsection{代码与共识}
+
+在 tor 的源码中，这些防御默认\textbf{关闭}（\file{src/core/or/dos.h} 中的 \file{DOS\_CC\_ENABLED\_DEFAULT 0}）。全网使用的设置来自共识参数。2026 年 9 月 23 日的公开共识包含以下数值：
+\begin{center}\small
+\begin{tabular}{lrr}
+\toprule
+参数 & 共识值 & 代码默认值 \\
+\midrule
+\texttt{DoSCircuitCreationEnabled} & 1 & 0 \\
+\texttt{DoSCircuitCreationMinConnections} & 2 & 3 \\
+\texttt{DoSCircuitCreationRate} & 2 & 3 \\
+\texttt{DoSCircuitCreationBurst} & 60 & 90 \\
+\texttt{DoSConnectionEnabled} & 1 & 0 \\
+\texttt{DoSConnectionMaxConcurrentCount} & 50 & 100 \\
+\texttt{DoSRefuseSingleHopClientRendezvous} & 1 & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+全网实际采用的数值比代码默认值更加严格：这是多年攻击和随后调整的结果。能够通过共识在数小时内修改这些数值，而无须更新数千个中继，是 Tor Project 在应对攻击时最有价值的手段之一。
+
+\begin{attenzione}[按地址限制的局限]
+拥有大量 IP 地址的攻击者，例如控制僵尸网络的人，可以绕过按地址设置的限制。反过来，过于严格的限制会伤及共用同一 IP 地址的合法用户，例如位于移动运营商或大学 NAT 后面的用户。因此，参数值始终是一种折中。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{遭受攻击的洋葱服务}\label{sec:dos-onion}
+
+洋葱服务尤其容易受到攻击。对客户端而言，每次引介请求的成本很低：发送一条 \texttt{INTRODUCE1} 即可（\cref{sec:os-rendezvous}）。对服务而言，同一请求却代价高昂：它必须解密请求、执行握手，并向指定的汇合点建立一条多跳电路。这样就产生了\textbf{放大效应}：攻击者只需相对较少的资源，就能迫使服务及其电路所经过的所有中继进行大量额外工作。由于服务从来看不到攻击者的 IP 地址，也无法按其地址进行封锁。
+
+\subsection{引介点的限速机制}
+
+第一层防御是让引介点限制请求速率。服务通过 \texttt{HiddenService\-EnableIntroDoS\-Defense} 及相关的 \texttt{\ldots RatePerSec} 和 \texttt{\ldots BurstPerSec} 选项，在 \file{ESTABLISH\_INTRO} 消息中使用 \file{DOS\_PARAMS} 扩展，告知各引介点每秒最多愿意接收多少条 \texttt{INTRODUCE2} 消息。这能保护服务，却无法区分攻击者和合法用户：在攻击期间，双方的请求都可能被拒绝。
+
+\subsection{工作量证明}
+
+较新的防御方法是\textbf{工作量证明}（proof of work，PoW），最初由 \proposta{327} 提出，自 tor 0.4.8.4（2023 年 8 月）起提供支持~\spec{hspow-spec}{Motivation}。客户端必须证明自己进行了一定量的计算，才会得到服务；证明了更高计算工作量的请求具有更高优先级。对合法用户而言，花几秒钟计算通常可以接受。但对于每秒发出数千次请求的攻击者，将成本乘以请求数量就可能变得难以承受。
+
+该机制由四个部分构成~\spec{hspow-spec}{Common protocol}：
+\begin{enumerate}
+  \item \textbf{描述符参数。}在描述符第二层（\cref{sec:os-descrittore}）中，服务发布一条 \texttt{pow-params} 记录，包括方案名称（\texttt{v1}）、随机的 32 字节\emph{种子}（seed）、\emph{建议工作量}和种子的到期时间。种子每 105--120 分钟更新一次。
+  \item \textbf{客户端求解难题。}客户端选定工作量 $E$ 后，针对以下挑战搜索 Equi-X 难题的解：
+  \[ \texttt{"Tor hs intro v1\textbackslash 0"} \,\|\, A' \,\|\, \mathit{seed} \,\|\, \mathit{nonce} \,\|\, E, \]
+  其中 $A'$ 为服务的盲化公钥。仅有 Equi-X 解还不够。客户端还要计算挑战与解的 32 位 Blake2b 哈希值 $R$；只有在 $R \cdot E \le 2^{32} - 1$ 时，该解才有效。否则就更换 nonce 并重新尝试。
+  \item \textbf{引介消息中的证明。}客户端在 \texttt{INTRODUCE1} 加密部分的扩展中放入 nonce、工作量、种子的前 4 个字节和求得的解；只有服务能读取这些内容。
+  \item \textbf{优先队列。}服务验证证明——这一过程远快于寻找证明——然后按照工作量将请求放入优先队列。工作量最高的请求先得到处理；没有证明的请求其工作量为零。如果队列已满，服务会立即丢弃工作量最低的一半请求。
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\input{图/图15-工作量证明}
+\caption{洋葱服务的工作量证明。客户端从描述符读取种子和建议工作量，寻找满足条件的解，并在 \texttt{INTRODUCE1} 的加密部分发送它。服务验证证明并按工作量对请求排序。}
+\label{fig:pow}
+\end{figure}
+
+\begin{approfondimento}[为什么使用 Equi-X？]
+Equi-X 由 tevador 专门为此设计，是一种\emph{非对称}难题：求解需要内存和较多计算，但检验解所需的计算量很小。它基于 HashX——一类实现会随种子变化、能够利用现代 CPU 并行执行能力的哈希函数。这使专用硬件加速更为困难，限制攻击者相对普通电脑用户的优势。现有两种通过自动化测试保持兼容的实现：tor 中采用 C 语言实现，Arti 则使用 Rust 实现。C 代码以 LGPL 许可发布；要将其纳入 tor，编译时必须使用 \texttt{--enable-gpl}。如果没有该选项，构建版本就不支持 PoW，\cmd{tor --list-modules} 会显示 \texttt{pow: no}，而不是我们将在 \cref{cap:17-torrc} 中见到的 \texttt{pow: yes}。不过，这并非常见情况：实验镜像和 Debian 的 \texttt{tor} 软件包都启用了该选项，因此都包含这一模块。
+\end{approfondimento}
+
+\subsection{线性工作量}
+
+为什么还需要 Blake2b 检验？寻找单个 Equi-X 解的成本大致固定。随机解满足 $R \cdot E \le 2^{32}-1$ 的概率约为 $1/E$，因此客户端平均需要尝试 $E$ 个解。这样，计算成本就随 $E$ \emph{线性}增长，便于细粒度调节。许多其他 PoW 系统要求哈希值开头有一定数量的零比特，每增加一个零比特，成本就会翻倍：这样的刻度对精细反馈控制来说太粗糙。工作量还必须在开始搜索前\emph{声明}，并成为挑战的一部分。因此，客户端不能先侥幸找到一个结果，再谎称自己进行了远高于实际的工作量。
+
+\subsection{控制工作量}
+
+建议工作量并不是永久不变的。服务最初建议的工作量为零，表示防御尚未主动施加计算成本。此后每五分钟，服务根据队列状态更新建议值：如果队列持续满载，或不得不丢弃具有建议工作量的请求，就提高该值；否则便降低。控制逻辑借鉴了 TCP 拥塞控制（加性增加、乘性减小）。客户端若在尝试连接时遇到超时，也会提高自己的工作量。最终形成一个双反馈环路：愿意投入更多计算资源的用户可以用更高工作量取得队列中的优先位置。
+
+% ---------------------------------------------------------------------------
+\section{实验：触发防御机制}\label{sec:lab-dos}
+
+\begin{laboratorio}[9]{在实验网络中观察抗 DoS 限制与工作量证明}
+\textbf{目标。}启用中继的电路创建限制并触发它；启用洋葱服务的工作量证明并读取参数；使用 \file{labs/zh-Hans/代码/torlab/pow.py} 研究 Blake2b 工作量检验。\\
+\textbf{前置条件。}实验~1--8；实验网络已运行，其镜像编译时启用了 \texttt{--enable-gpl}。\\
+\textbf{预计时间。}2 小时。
+\end{laboratorio}
+
+\begin{attenzione}[仅限自己的网络]
+本实验会有意生成异常流量。请只在本书提供的私有网络中运行。对真实中继或服务执行同样操作属于伤害其他用户的攻击行为，在许多司法管辖区也属于违法行为（\cref{cap:25-legale}）。
+\end{attenzione}
+
+\paragraph{步骤 1：启用中继限制。}我们在 \texttt{test003r} 中继的 \file{torrc} 中加入非常低的阈值，以便快速触发防御，然后通过 \texttt{HUP} 信号让它重新加载配置：
+\begin{lstlisting}[language=torrc,numbers=none]
+DoSCircuitCreationEnabled 1
+DoSCircuitCreationMinConnections 2
+DoSCircuitCreationRate 1
+DoSCircuitCreationBurst 10
+DoSCircuitCreationDefenseType 2
+DoSCircuitCreationDefenseTimePeriod 60 seconds
+\end{lstlisting}
+防御类型 2 表示\enquote{拒绝创建新电路}。
+
+\paragraph{步骤 2：超过阈值。}我们向中继建立一个或两个通道，使用 \cella{CREATE\_FAST} 连续快速请求 30 条电路。为使每次实验使用独立计数器，连接分别从不同环回地址（127.0.0.2、127.0.0.3）发起，并使用 \file{open\_channel} 的 \texttt{source\_address} 参数：
+\begin{lstlisting}[numbers=none]
+源地址 127.0.0.2，2 个通道：成功 9，DESTROY(5) 21；首次拒绝：第 10 次
+源地址 127.0.0.3，1 个通道：成功 30
+源地址 127.0.0.1，2 个通道：成功 9，DESTROY(5) 21；首次拒绝：第 10 次
+\end{lstlisting}
+可以得出三个结论：
+\begin{itemize}
+  \item 中继通过原因码为 5（\texttt{RESOURCELIMIT}）的 \cella{DESTROY} 信元拒绝请求。
+  \item 当 \emph{burst} 为 10 时，成功的是九条电路而不是十条。源码 \file{src/core/or/dos.c} 中的 \file{cc\_has\_exhausted\_circuits} 会在令牌桶归零时立即标记客户端，因此第十个请求已经被拒绝。
+  \item 只有一条通道时不会触发限制，因为该防御要求至少存在 \texttt{MinConnections} 个并发连接。这样就不会惩罚通常只维持一条入口守卫连接的普通客户端。
+\end{itemize}
+我们原本预测，从实验中继使用的地址 127.0.0.1 发起的连接应当获得豁免。实验否定了这个预测，而 \file{dos.c} 也证实电路创建并不存在这种豁免。实验结束后，将 \file{torrc} 恢复为原始配置。
+
+\paragraph{步骤 3：洋葱服务的工作量证明。}在 \texttt{test009h} 的 \file{torrc} 中，将以下配置加在 \texttt{HiddenService\ldots} 选项之后：
+\begin{lstlisting}[language=torrc,numbers=none]
+HiddenServicePoWDefensesEnabled 1
+\end{lstlisting}
+发送 \texttt{HUP} 信号后，服务会发布新的描述符。按照实验~8 下载并解密描述符，就会在第二层看到这一行：
+\begin{lstlisting}[numbers=none]
+pow-params v1 tx2Mtmzw5GHgWjcDoivTvWzwQPNZONwMwSMddOc+ZVQ= 0 2026-09-23T18:20:53
+\end{lstlisting}
+它记录方案 \texttt{v1}、以 base64 编码的种子、\textbf{零}建议工作量（服务尚未出现排队）以及种子到期时间：发布后 1 小时 50 分钟，在规定的 105--120 分钟范围内。
+
+\paragraph{步骤 4：工作量呈线性增长。}\file{pow.py} 模块实现 Blake2b 检验，并用随机字节模拟 Equi-X 解；对于这项检验，它们具有相同的统计分布：
+\begin{lstlisting}[language=Python]
+def check_value(service_id, seed, nonce, effort, solution):
+    challenge = P_STRING + service_id + seed + nonce + struct.pack(">I", effort)
+    h = hashlib.blake2b(challenge + solution, digest_size=4).digest()
+    return int.from_bytes(h, "big")
+
+def valid_effort(r, effort):
+    return r * effort <= UINT32_MAX
+\end{lstlisting}
+对于每个工作量，进行 400 次试验并测量求解所需的平均尝试次数，可得到：
+\begin{lstlisting}[numbers=none]
+工作量     1：1.0 次尝试
+工作量    10：9.7
+工作量   100：102.3
+工作量  1000：1068.8
+\end{lstlisting}
+尝试次数如预测所示，随工作量成比例增长。由于每次尝试成功的概率为 $1/\mathit{effort}$，而尝试次数遵循几何分布，因此其期望值等于工作量；标准差也与均值一样大。所以，400 次试验的平均值通常存在 $1/\sqrt{400} = 5\,\%$ 的相对偏差。即使条件完全不变，两次运行的结果也可能相差 10\,\%；重新测量时，我们确实得到过 969.9，而上面的输出为 1068.8。这提醒我们，解读样本均值时必须同时考虑不确定性。还有一个容易忽略的细节：使用 \file{digest\_size=4} 的 \texttt{blake2b} 结果，并不等于 64 字节 Blake2b 结果的前四个字节，因为输出长度会影响函数的初始状态。规范特别强调了这一点。
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item 在 Tor 中，DoS 也会威胁匿名性：按需使中继失效或发生故障，可以把流量引向攻击者。
+  \item \opt{MaxMemInQueues} 为内存设定内部上限；超过阈值时，tor 会逐出缓存并关闭持续积累数据的电路。
+  \item 入口守卫使用令牌桶限制每个客户端地址的连接数和电路数。这些防御在代码中默认关闭，通过共识启用和调节。
+  \item 洋葱服务面临放大效应：发起请求成本低，响应请求成本高。
+  \item v1 工作量证明将 Equi-X 与 Blake2b 检验结合，使计算成本线性增长。服务优先处理工作量更高的请求，并按队列状态调整建议工作量。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:15-bucket}
+按照公开共识，若 \texttt{DoSCircuitCreationRate} 为 2、突发容量（\texttt{Burst}）为 60，客户端从满令牌桶开始，一分钟内最多能创建多少条电路？一小时内又是多少？假设防御已被触发，即该地址同时建立的连接数达到 \texttt{DoSCircuitCreationMinConnections}。低于该阈值时不存在限制。
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:15-guard}
+为什么按地址限制只针对客户端，而且只能在第一跳实施？如果中间中继尝试\enquote{按地址}限制电路，会发生什么？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:15-amplificazione}
+估计一次引介请求中，客户端工作量与整个网络工作量的比率：服务的响应会产生多少条电路、多少次握手和多少个 cell？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:15-bit}
+将 Tor 的工作量证明与要求哈希值前 $k$ 位均为零的方案比较。两种方案各自能表达哪些工作量取值？为什么线性刻度更适合反馈控制？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:15-sforzo}
+某客户端声明工作量 $E = 50$，却碰巧很快找到一个 $R$ 极小、甚至满足 $E = 5000$ 条件的解。它能否把这份解作为 $E = 5000$ 的证明提交？为什么？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:15-oom}
+在实验网络上，将一台中间中继的 \opt{MaxMemInQueues} 设置为最小值，并建立经过它的电路，下载一个大文件，但\emph{不读取}传入的数据（也不发送 SENDME）。积累的信元会发生什么？请在该中继的日志中查找内存管理器的消息。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:15-coda}
+编写一个小程序模拟洋葱服务的优先队列。请求带有随机工作量（多数为零，少数较高）；服务每秒处理一定数量的请求，每当队列超过阈值，就丢弃工作量最低的一半。测量平均等待时间与工作量的关系。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \titolo{Tor denial-of-service mitigations}（dos-spec）与 \titolo{Onion service proof-of-work}（hspow-spec）~\cite{torspec}。
+  \item R.~Jansen、F.~Tschorsch、A.~Johnson、B.~Scheuermann，\titolo{The Sniper Attack: Anonymously Deanonymizing and Disabling the Tor Network}~\cite{jansen2014sniper}。
+  \item tevador 的 Equi-X 代码仓库及开发日志，参见规范中的引用。
+\end{itemize}

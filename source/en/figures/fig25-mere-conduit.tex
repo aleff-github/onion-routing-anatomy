@@ -1,0 +1,19 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Article 4 DSA is compared illustratively, not as an automatic legal exemption. The client uses RELAY\_BEGIN to specify the target; the exit opens TCP, applies policy and transfers application bytes from RELAY\_DATA rather than forwarding Tor cells intact.}
+% Mere-conduit requirements compared with exit behavior
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.35cm,
+  cond/.style={draw,rounded corners=2pt,text width=4.2cm,align=left,minimum height=0.8cm},
+  tor/.style={draw=torviola,fill=torviola!8,rounded corners=2pt,text width=5.4cm,align=left,minimum height=0.8cm}]
+  \node[cond] (a) {(a) does not initiate the transmission};
+  \node[cond,below=of a] (b) {(b) does not select its recipient};
+  \node[cond,below=of b] (c) {(c) does not select or modify the information};
+  \node[tor,right=1.2cm of a] (ta) {client sends \texttt{RELAY\_BEGIN}; exit opens TCP};
+  \node[tor,right=1.2cm of b] (tb) {client chooses destination; policy may reject};
+  \node[tor,right=1.2cm of c] (tc) {bytes from \texttt{RELAY\_DATA} to TCP stream};
+  \foreach \x in {a,b,c} \draw[<->,torgrigio] (\x) -- (t\x);
+  \node[above=4pt of a,font=\sffamily\small] {Regulation (EU) 2022/2065, Art.~4};
+  \node[above=4pt of ta,font=\sffamily\small] {Tor exit};
+  \node[font=\sffamily\tiny,text=torgrigio,align=center,below=0.5cm of c,xshift=3.3cm] {Exemption requires case-by-case review};
+\end{tikzpicture}

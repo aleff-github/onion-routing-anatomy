@@ -1,0 +1,96 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Chapter \ref{cap:19-rete-privata}: A Private Tor Network}
+
+\begin{soluzione}{es:19-porte}
+\texttt{test006e} is node number 6, so its ORPort is 5106 and its ControlPort is 8006. \texttt{test009h} has no ORPort: an onion service is not a relay and does not accept connections initiated by other network nodes. It builds outbound circuits to its introduction and rendezvous points.
+\end{soluzione}
+
+\begin{soluzione}{es:19-guard}
+The setting is \opt{TestingDirAuthVoteGuard}~\texttt{*} in the authorities' torrc files. On the public network, the Guard flag requires demonstrated stability and bandwidth over time (\cref{cap:12-directory}). In the laboratory, any relay may serve as a guard. Statistics concerning first-hop selection there are consequently not representative of the public network.
+\end{soluzione}
+
+\begin{soluzione}{es:19-socks}
+With \texttt{--socks5}, \texttt{curl} resolves \texttt{localhost} itself and supplies an IP address to the Tor client. With \texttt{--socks5-hostname}, it passes the name along for the exit to resolve. For an ordinary Internet hostname on the public network, local resolution would reveal visited sites to the client's DNS resolver and anyone observing that resolver, even though the subsequent connection would use Tor. This is a classic DNS leak.
+\end{soluzione}
+
+\begin{soluzione}{es:19-consenso}
+Every 20 seconds, as configured by \opt{V3AuthVotingInterval}. One day therefore contains $86400/20 = 4320$ laboratory consensuses, compared with 24 on the public network, where authorities vote hourly.
+\end{soluzione}
+
+\begin{soluzione}{es:19-autorita}
+With one authority stopped, the network can continue producing consensuses because a majority of the three authorities, or two signatures, is sufficient. With two stopped, the remaining authority cannot produce a newly valid consensus alone. Clients may nevertheless continue using the previous consensus as \emph{reasonably live} for approximately 24 hours after expiration (\cref{cap:12-directory}), so they can continue building circuits for some time. The laboratory consensus is valid for only 40 seconds, but its reasonably-live allowance remains 24 hours.
+\end{soluzione}
+
+\begin{soluzione}{es:19-stem}
+Outline: \file{c.get\_network\_status(fingerprint)} returns the corresponding consensus entry with its \texttt{address} and \file{or\_port} attributes. Call it for each fingerprint in \texttt{circ.path}, taking the first member of each tuple.
+\end{soluzione}
+
+\begin{soluzione}{es:19-rete}
+Use the same structure as the book's network definition, replacing the node counts with \texttt{getN(5)}, \texttt{getN(10)}, and \texttt{getN(4)}. Bootstrap time depends on hardware. As the network grows, much of the additional time is spent waiting for relays to appear in the consensus and for clients to download their microdescriptors.
+\end{soluzione}
+
+\begin{soluzione}{es:19-log}
+This is an exploratory exercise. Look for log messages covering path selection, sending \cella{CREATE2} and \texttt{EXTEND2}, receiving their responses, and completing the circuit. \emph{Info} logging does not show every cell. Enable domain-specific \emph{debug} logging in the client's torrc for more detail.
+\end{soluzione}
+
+\begin{soluzione}{es:19-cattura}
+No. Once TLS negotiation finishes, Tor cells travel encrypted and \cmd{tcpdump} can see only TLS records. Addresses, ports, record sizes, and timing remain observable. These are precisely the kinds of information exploited by traffic-analysis attacks (\cref{cap:26-attacchi}).
+\end{soluzione}
+
+\section*{Chapter \ref{cap:21-onion-pratica}: Publishing an Onion Service}
+
+\begin{soluzione}{es:21-vanity}
+A six-character prefix requires approximately $32^6 \approx 1.07 \times 10^9$ attempts, or about 107 seconds at ten million attempts per second. Eight characters require $32^8 \approx 1.1 \times 10^{12}$ attempts, approximately $1.1 \times 10^5$ seconds, slightly more than 30 hours. Each additional character multiplies the expected effort by 32.
+\end{soluzione}
+
+\begin{soluzione}{es:21-fuga}
+The error page reveals the web-server software and version, potentially useful for identifying vulnerabilities, and especially an IP address, 192.0.2.10, that might be the server's real public address. The service could therefore be located. Disable server signatures in headers and error pages, bind the server only to localhost or a Unix socket, and inspect its responses using a laboratory client.
+\end{soluzione}
+
+\begin{soluzione}{es:21-revoca}
+Delete \file{alice.auth} and reload the configuration. The service publishes a new descriptor excluding Alice's entry, encrypted using a fresh \emph{descriptor cookie} that she cannot decrypt. Clients retaining the older descriptor may continue using already known introduction points for as long as those points remain valid. For more complete revocation, rotate introduction points, for example by restarting the service. Beware the edge case: if Alice was the only authorized client, an empty directory remains, and the source laboratory observed HSDirs rejecting the descriptor (\cref{sec:onionp-ristretta}). To disable restricted discovery entirely, remove \file{authorized\_clients/} and reload the configuration. \end{soluzione}
+
+\begin{soluzione}{es:21-socket}
+Set \texttt{HiddenServicePort 80 unix:/path/socket} and configure the web server to listen on that Unix socket. Beyond avoiding an open TCP port, a filesystem socket can be protected with file permissions, cannot be reached through a network interface, and prevents accidentally exposing the service on a public interface.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:20-traffico}: Observing Traffic}
+
+\begin{soluzione}{es:20-dimensioni}
+TLS does not align records with Tor cells. tor writes cells into a buffer, and the TLS library groups them into records up to 16\,KB long, which relates to the 31-cell \texttt{sendme\_inc} value (\cref{sec:cc}). TLS adds its own headers and authentication tag. TCP can in turn split or combine TLS records into different segments. Fixed length applies to Tor cells, not network packets.
+\end{soluzione}
+
+\begin{soluzione}{es:20-relay}
+Outline: after \cella{CREATED2}, decrypt the circuit's \cella{RELAY\_EARLY} and \cella{RELAY} cells by removing their encryption layers in the correct order using the hop keys stored in \file{circuit.py}. AES-CTR keystream state must advance in exactly the order in which it was used. During circuit construction, the visible messages include \texttt{EXTEND2} and \texttt{EXTENDED2}, followed by possible \texttt{BEGIN}, \texttt{CONNECTED}, \texttt{DATA}, and \texttt{SENDME}.
+\end{soluzione}
+
+\begin{soluzione}{es:20-padding}
+On a client channel carrying multihop circuits, TLS records may appear every few seconds even without application traffic. These contain channel-level \cella{PADDING} cells, transmitted at randomized intervals between 1.5 and 9.5 seconds (\cref{sec:lab-cifratura}). By contrast, a channel that has carried no multihop circuits shows no such traffic.
+\end{soluzione}
+
+\begin{soluzione}{es:20-dissector}
+This is a programming exercise. A Lua analyzer registered as a \emph{heuristic dissector} for decrypted TLS data can read the first two bytes for the initial \cella{VERSIONS} cell, or four bytes afterward, as the CircID. It then reads the command and, for variable-length cells, the length field. Keep separate state for each connection and direction, as in \file{traffic.py}.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:22-relay}: Running a Relay or a Bridge}
+
+\begin{soluzione}{es:22-ordine}
+Yes. The first matching rule, \texttt{accept *:80}, accepts the connection, and subsequent rules are not considered. Reverse the first two rules: \texttt{reject 192.0.2.0/24:*}, \texttt{accept *:80}, \texttt{reject *:*}.
+\end{soluzione}
+
+\begin{soluzione}{es:22-riassunto}
+The summary lists only ports, not addresses, and is necessarily approximate. It includes a port when the exit accepts that port for \enquote{most} addresses, a precise technical threshold in dir-spec rather than simply more than 50\%: the exit must not block more than $2^{25}$ IPv4 addresses, one /7, or $2^{112}$ IPv6 addresses, one /16, excluding nonpublic addresses. When the client receives \texttt{END} with reason \texttt{EXITPOLICY}, it records that the exit rejects the given address and port for the specified TTL, then retries the stream on a different circuit with another exit.
+\end{soluzione}
+
+\begin{soluzione}{es:22-famiglia}
+With \opt{MyFamily}, only reciprocal declarations count. The five existing relays remain a family among themselves, but the sixth is not part of it because none of the old relays lists it. Clients may therefore select it together with an existing family member. With a family key, installing the same family key on the new relay is sufficient: its signed certificate binds it to the family without changing the other relays.
+\end{soluzione}
+
+\begin{soluzione}{es:22-refused}
+The logs successively report \enquote{in-progress connect failed \ldots (Connection refused)} and \enquote{Didn't recognize errno 115}. If the stream-end reason used the error returned by \texttt{getsockopt(SO\_ERROR)}, the client would instead receive \texttt{CONNECTREFUSED}. Similarly, \texttt{TIMEOUT} for \texttt{ETIMEDOUT}, \texttt{NOROUTE} for \texttt{ENETUNREACH} or \texttt{EHOSTUNREACH}, and \texttt{CONNRESET} could be reported correctly, rather than \texttt{MISC}, for connections failing after \texttt{EINPROGRESS}. The practical difference for a client is modest: the error message changes but stream failure handling remains the same.
+\end{soluzione}
+
+\begin{soluzione}{es:22-accounting}
+At 10\,MB/s, the relay transfers roughly 864\,GB per day, accounting for the maximum of sent and received traffic. A 1\,TB monthly allowance would be exhausted in a little over one day. A relay offline for most of the month loses its \texttt{Stable} and \texttt{Guard} flags and breaks circuits when it shuts down. A slower relay that remains online all month is much more useful, so configure \opt{RelayBandwidthRate} to make the allowance last through the whole interval.
+\end{soluzione}

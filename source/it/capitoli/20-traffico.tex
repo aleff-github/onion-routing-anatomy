@@ -1,0 +1,160 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Osservare il traffico: Wireshark e log}\label{cap:20-traffico}
+\aggiornatoal{23 settembre 2026}{tor 0.4.9.13; tshark (Debian trixie); rete di laboratorio}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item catturare il traffico di Tor con \cmd{tcpdump} e analizzarlo con \cmd{tshark} o Wireshark;
+  \item distinguere ciò che un osservatore esterno vede da ciò che resta nascosto;
+  \item decifrare il TLS del \emph{tuo} canale con le chiavi di sessione e leggere le celle che contiene (Laboratorio~12);
+  \item usare i log di tor per seguire il protocollo passo per passo.
+\end{itemize}
+\end{obiettivi}
+
+Nei capitoli precedenti abbiamo visto il protocollo \enquote{dall'interno}, scrivendo il codice che lo parla. In questo capitolo lo guardiamo \enquote{dall'esterno}, come lo vede chi osserva la rete. È un esercizio utile per due ragioni opposte: capire che cosa un avversario può ricavare dal traffico, e disporre di uno strumento di verifica indipendente per il proprio codice.
+
+\begin{attenzione}[Solo il tuo traffico, solo nel laboratorio]
+Catturare il traffico di altre persone senza autorizzazione è illecito in Italia come nella maggior parte dei paesi (\cref{cap:25-legale}), e su una rete di anonimato è anche contrario all'etica della ricerca (\cref{sec:rp-perche}). Tutte le catture di questo capitolo riguardano la rete privata del libro o connessioni aperte da noi.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Che cosa vede un osservatore}\label{sec:traffico-osservatore}
+
+Chi osserva il collegamento tra un client e il suo guard, per esempio il fornitore di connettività, vede:
+\begin{itemize}
+  \item gli indirizzi IP e le porte: il client si collega a un indirizzo che, se non è un bridge, compare nel consenso pubblico ed è quindi riconoscibile come relay Tor;
+  \item l'handshake TLS: con TLS~1.3 i certificati viaggiano cifrati, ma l'inizio del messaggio \texttt{ClientHello} resta visibile; nei collegamenti che negoziano TLS~1.2 i certificati non hanno la stessa protezione. L'osservazione precisa dipende dalla versione TLS effettivamente negoziata;
+  \item la dimensione dei record TLS e i loro tempi.
+\end{itemize}
+Non vede il contenuto delle celle, né i circuiti, né le destinazioni. Ma dimensioni e tempi sono proprio il materiale su cui si basano gli attacchi di \emph{website fingerprinting} e di correlazione del \cref{cap:26-attacchi}: il fatto che il contenuto sia cifrato non significa che il traffico non dica nulla.
+
+Nella \cref{sec:lab-censura} abbiamo già confrontato una connessione Tor normale, riconoscibile come TLS, con una obfs4, che non ha struttura riconoscibile. Qui facciamo un passo in più: guardiamo dentro il TLS.
+
+% ---------------------------------------------------------------------------
+\section{Gli strumenti}\label{sec:traffico-strumenti}
+
+\begin{description}
+  \item[\cmd{tcpdump}] cattura i pacchetti da un'interfaccia e li salva in un file \texttt{pcap}. Per esempio, nel container del laboratorio, il traffico verso la ORPort di \texttt{test004r}:
+\begin{lstlisting}[language=bash,numbers=none]
+$ docker exec -u 0 torlibro-rete tcpdump -i lo \
+    -w /lab/net/tls.pcap "tcp port 5104"
+\end{lstlisting}
+  \item[Wireshark e \cmd{tshark}] analizzano le catture: il primo con un'interfaccia grafica, il secondo da riga di comando. Riconoscono TLS, ma non esiste un analizzatore ufficiale del protocollo di Tor: le celle, anche una volta decifrate, appaiono come dati grezzi. Il nostro modulo \file{celle.py} farà da analizzatore.
+\end{description}
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig20-incapsulamento}
+\caption{Schema concettuale del canale Tor: i segmenti TCP trasportano un flusso TLS, i cui record non coincidono necessariamente con i confini delle celle. IP, porte, lunghezze e tempi sono osservabili; la decifratura TLS consente di leggere le celle. Nel protocollo di collegamento v4+ una cella a lunghezza fissa misura 514 byte (5 di intestazione, 509 di corpo), ma esistono anche celle variabili. Solo i corpi delle celle \texttt{RELAY} sono cifrati a strati dalle chiavi del circuito; le celle di padding non vanno confuse con i messaggi RELAY.}
+\label{fig:incapsulamento}
+\end{figure}
+
+\subsection{Decifrare il proprio TLS}
+
+TLS usa chiavi di sessione che nessun osservatore conosce. Chi però è \emph{una delle due parti} della connessione può esportarle: i browser e le applicazioni Python che attivano il registro delle chiavi possono scriverle in un file. La nostra \file{canale.py} imposta esplicitamente \texttt{SSLContext.keylog\_filename} quando è definita la variabile \texttt{SSLKEYLOGFILE}. Wireshark e \cmd{tshark} usano quel file per decifrare la cattura. Il Laboratorio~1 (\file{canale.py}) rispetta questa convenzione: basta impostare la variabile prima di eseguirlo. Il file contiene righe come
+\begin{lstlisting}[numbers=none]
+# TLS secrets log file, generated by OpenSSL / Python
+SERVER_HANDSHAKE_TRAFFIC_SECRET 4878224d3f9fb9aedb96d... 0da89dff6feb...
+\end{lstlisting}
+cioè, per ogni sessione, il valore casuale del client e i segreti delle varie fasi di TLS~1.3.
+
+\begin{approfondimento}[Perché questo non è un attacco a Tor]
+Decifrare il TLS del proprio canale non rivela nulla che il client non sappia già. E anche con le chiavi TLS, le celle \cella{RELAY} restano cifrate a strati con le chiavi dei singoli salti (\cref{cap:10-cifratura-relay}): per leggerle servirebbero le chiavi dei circuiti, che solo il client e i relay coinvolti possiedono. TLS è il guscio più esterno della cipolla, non il solo.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: le celle dentro il TLS}\label{sec:lab-traffico}
+
+\begin{laboratorio}[12]{Catturare, decifrare e leggere un canale}
+\textbf{Obiettivo.} Catturare il canale aperto dal nostro client verso un relay, decifrarlo con le chiavi di sessione e ricostruire la sequenza delle celle con \file{labs/it/codice/torlab/traffico.py}.\\
+\textbf{Prerequisiti.} Laboratori~1--3; la rete di laboratorio avviata; \cmd{tcpdump} e \cmd{tshark} nel container.\\
+\textbf{Tempo stimato.} 1--2 ore.
+\end{laboratorio}
+
+Per eseguire il Laboratorio~12, avvia la rete privata e apri due terminali dalla radice del repository. Il comando di cattura qui sotto va lanciato sul sistema host e avvia \cmd{tcpdump} come utente root \emph{nel solo container del laboratorio}; il Makefile esegue infatti la normale shell con i permessi dell'utente. Lascia attiva la cattura mentre esegui il client nel secondo terminale, poi interrompila con Ctrl+C. Il file viene salvato nel volume condiviso \file{labs/it/laboratorio/net/}.
+
+\paragraph{Passo 1: catturare.} Avviamo la cattura nel container, poi, dall'host, apriamo un canale verso \texttt{test004r} e creiamo un circuito di un salto, con le chiavi esportate:
+\begin{lstlisting}[language=bash,numbers=none]
+$ umask 077  # limita la lettura dei nuovi file di chiave all'utente
+$ PYTHONPATH=labs/it/codice SSLKEYLOGFILE=labs/it/laboratorio/net/chiavi-tls.log python3 -c "
+from torlab.laboratorio import relay
+from torlab.circuito import costruisci
+costruisci([relay('004r')], cc=False)"
+\end{lstlisting}
+
+Il comando Python va eseguito dalla \emph{radice del repository} su Linux con rete host, dove \file{labs/it/codice/} e \file{labs/it/laboratorio/net/} sono accessibili. \texttt{PYTHONPATH} serve per trovare \file{torlab}; la variabile \texttt{SSLKEYLOGFILE} viene letta esplicitamente dall'implementazione \file{labs/it/codice/torlab/canale.py}. \textbf{Prima di aprire il file} è opportuno applicare \texttt{umask 077} nella shell che lancerà Python: il log contiene segreti TLS utilizzabili per decifrare la sessione. Non pubblicare né il log né la cattura, che può contenere metadati di rete; cancellali dopo l'esperimento, una volta chiusi gli strumenti che li usano.
+
+\paragraph{Passo 2: trovare la nostra connessione.} Sulla stessa porta si collegano anche gli altri relay della rete, che hanno le proprie chiavi. Chiediamo a \cmd{tshark} di seguire, decifrato, ciascuno stream TCP, e teniamo quello per cui la decifratura riesce:
+\begin{lstlisting}[language=bash,numbers=none]
+$ docker exec torlibro-rete tshark -r /lab/net/tls.pcap \
+    -o tls.keylog_file:/lab/net/chiavi-tls.log \
+    -q -z follow,tls,raw,2
+\end{lstlisting}
+Il numero di stream \texttt{2} è soltanto un esempio di una precedente cattura: per individuare quello corretto puoi elencare gli identificatori con \cmd{tshark} usando \texttt{-T fields -e tcp.stream} e provare il follow TLS sugli stream candidati. L'output seguente è storico e i valori dei certificati, delle chiavi e del CircID variano per esecuzione.
+L'uscita contiene, in esadecimale, i dati decifrati dei due versi della connessione; quelli di un verso sono rientrati con una tabulazione.
+
+\paragraph{Passo 3: leggere le celle.} La funzione \texttt{celle\_da\_follow} ricompone i due flussi e li passa a \texttt{decodifica} del Laboratorio~2. Il collegamento negozia \textbf{una sola versione comune}: ciascuna parte invia la propria \cella{VERSIONS} con CircID di 2 byte, ma entrambe usano poi la \emph{massima versione condivisa} (5 nella cattura di riferimento), con CircID di 4 byte. Il parser legge entrambe le offerte e rifiuta una cattura priva delle celle iniziali, non assumendo più la versione 5 a priori. Il risultato:
+\begin{lstlisting}[numbers=none]
+client -> relay  CircID=0x0000 VERSIONS corpo=4 byte
+relay  -> client CircID=0x0000 VERSIONS corpo=6 byte
+relay  -> client CircID=0x00000000 CERTS corpo=1443 byte
+relay  -> client CircID=0x00000000 AUTH_CHALLENGE corpo=36 byte
+relay  -> client CircID=0x00000000 NETINFO corpo=509 byte
+client -> relay  CircID=0x00000000 NETINFO corpo=509 byte
+client -> relay  CircID=0xc244f1f6 CREATE2 corpo=509 byte
+relay  -> client CircID=0xc244f1f6 CREATED2 corpo=509 byte
+\end{lstlisting}
+È, osservata dall'esterno, esattamente la sequenza della \cref{fig:sessione} e del \cref{cap:07-canali}. La \cella{VERSIONS} del client ha un corpo di 4 byte, perché \file{canale.py} offre solo le versioni 4 e 5; il CircID del circuito, \texttt{0xc244f1f6}, ha il bit più significativo a 1, perché il canale l'ha aperto il client (\cref{sec:circid}).
+
+\begin{attenzione}[Due errori nella prima versione]
+Nelle prime prove l'analisi aveva due errori: interpretava le \cella{VERSIONS} con il formato dei CircID \emph{successivo} alla negoziazione, e attribuiva i blocchi al verso sbagliato. Il parser ora riconosce le \cella{VERSIONS} iniziali con CircID di due byte e seleziona una \textbf{versione comune} per i due versi. Nel formato \texttt{follow,tls,raw} di una cattura \emph{completa dall'inizio}, il primo blocco della nostra sessione deve contenere la \cella{VERSIONS} del client; senza questo prerequisito il parser rifiuta l'analisi, invece di indovinare i versi. Non è un dissector generico per catture iniziate a metà del flusso.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{I log di tor}\label{sec:traffico-log}
+
+Una cattura mostra \emph{che cosa} passa sulla rete; i log di tor spiegano \emph{perché}. Al livello \texttt{info} tor registra le fasi della costruzione dei circuiti, le scelte dei guard, i descrittori scaricati e pubblicati; al livello \texttt{debug} arriva fino alle singole celle. Abbiamo già usato i log come strumento di verifica: per scoprire a quale HSDir si era rivolto il client (\cref{sec:lab-onion}), o quando l'onion service aveva ruotato i suoi descrittori.
+
+Qualche consiglio pratico:
+\begin{itemize}
+  \item il livello \texttt{debug} produce moltissimo testo: conviene attivarlo solo per un dominio, per esempio \texttt{Log [circ]debug file circ.log}, che limita il dettaglio ai messaggi sui circuiti;
+  \item nella rete reale \opt{SafeLogging} maschera gli indirizzi: i log di un client non dovrebbero mai contenere le destinazioni visitate;
+  \item i log di un relay pubblico sono dati personali di terzi, con le conseguenze legali del \cref{cap:25-legale}: vanno tenuti al minimo necessario.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item Un osservatore del collegamento vede indirizzi, handshake TLS, dimensioni e tempi, ma non le celle né le destinazioni.
+  \item Con \texttt{SSLKEYLOGFILE} si può decifrare il TLS del proprio canale e leggerne le celle; le celle \cella{RELAY} restano comunque cifrate a strati.
+  \item L'analisi di una cattura è un modo indipendente per verificare un'implementazione.
+  \item I log di tor, a livello \texttt{info} o \texttt{debug}, spiegano le scelte del programma; in un uso reale vanno ridotti e protetti.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:20-dimensioni}
+Nella cattura di un download attraverso Tor, i record TLS non hanno tutti dimensioni multiple di 514 byte. Perché, se le celle sono di dimensione fissa?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:20-relay}
+Estendi il Laboratorio~12 decifrando anche le celle \cella{RELAY} del tuo circuito, usando le chiavi di \file{circuito.py}. Quali messaggi relay vedi durante la costruzione di un circuito di tre salti?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:20-padding}
+Cattura un canale di un client della rete di laboratorio per un minuto senza generare traffico, e conta i record TLS in ciascun verso. Collega il risultato al padding di canale del \cref{cap:07-canali}.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:20-dissector}
+Scrivi un piccolo analizzatore per Wireshark in Lua che riconosca, nei dati decifrati, le celle di Tor e ne mostri CircID e comando.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item La documentazione di Wireshark sulla decifratura di TLS con il file delle chiavi di sessione.
+  \item Il manuale di tor, alla voce \opt{Log}, per i domini e i livelli di registrazione.
+\end{itemize}

@@ -1,0 +1,96 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% ===========================================================================
+% Edizione EPUB 3, distribuita gratuitamente.
+% Riusa preambolo, macro e TUTTI i capitoli dell'edizione A4 (una sola fonte di
+% verita'). La conversione avviene con tex4ebook (tex4ht) in modalita'
+% dvilualatex (DVI), cosi' fontspec funziona e le figure TikZ/bytefield/tcolorbox
+% si estraggono come SVG; i listati diventano <pre>, la bibliografia via biber.
+%
+% Build (in Docker):  make book-epub   ->   book/it/anatomia-di-tor_it.epub
+%
+% Differenze dall'edizione stampata: niente indice analitico (i numeri di pagina
+% non hanno senso in un testo a impaginazione fluida; il lettore usa la ricerca).
+% ===========================================================================
+\documentclass[11pt]{book}
+\input{preambolo}
+\input{macro}
+\input{diritti}
+
+% tex4ht: i comandi \guillemotleft/right emessi da csquotes venivano segnalati
+% come non disponibili nella codifica del passo htlatex. Li mappiamo sui
+% caratteri Unicode « » letterali.
+\AtBeginDocument{%
+  \renewcommand{\guillemotleft}{«}%
+  \renewcommand{\guillemotright}{»}%
+}
+
+% Accessibilita': in EPUB, \altfig{...} imposta il testo alternativo (attributo
+% alt) dell'immagine che segue, tramite la configurazione tex4ht Picture-alt.
+% \Configure esiste solo durante la conversione tex4ht: la guardia lascia
+% \altfig come no-op in una compilazione LaTeX normale.
+\makeatletter
+\@ifundefined{Configure}{}{%
+  \renewcommand{\altfig}[1]{\Configure{Picture-alt}{#1}}%
+}
+\makeatother
+
+% Metadati del pacchetto EPUB 3. tex4ebook userebbe come identificatore il
+% segnaposto http://example.com/epub e dichiarerebbe da se' «MathML» e la
+% conformita' WCAG 2.0 AA: le formule sono immagini SVG e nessuna verifica WCAG e'
+% stata fatta, quindi la build passa l'opzione daisy- (Makefile) e qui si
+% dichiara solo cio' che il libro ha davvero. L'identificatore resta fisso fra
+% una build e l'altra: identifica questa edizione, non il singolo file.
+\makeatletter
+\@ifundefined{Configure}{}{\AtBeginDocument{%
+  % tex4ht trasforma la correzione italica del corsivo matematico in uno spazio
+  % («KEY _SEED»): gli identificatori in \mathit si compongono in corsivo testuale.
+  \renewcommand{\mathit}[1]{\textit{#1}}%
+  \Configure{UniqueIdentifier}{urn:uuid:65f7a12e-349f-499d-8998-4603fb0e47cb}%
+  % Copertina interna: solo come immagine dichiarata nell'OPF (properties="cover-image"),
+  % senza una pagina HTML che la ripeterebbe. Il file viene da make cover.
+  \Configure{CoverMimeType}{image/jpeg}%
+  \CoverMetadata{copertina.jpg}%
+  % Reflow: su uno schermo stretto le figure SVG (larghe quanto la pagina A4) e le
+  % stringhe lunghe dei listati (esadecimale, percorsi) uscivano dal margine.
+  \Css{img{max-width:100\%;height:auto;}}%
+  \Css{p,li,dd,td,pre,code{overflow-wrap:anywhere;}}%
+  \Configure{OpfMetadata}{\HCode{<dc:publisher>Alessandro Greco</dc:publisher>}}%
+  \Configure{OpfMetadata}{\HCode{<dc:rights>Copyright 2026 Alessandro Greco. GNU General Public License v3.0 or later (GPL-3.0-or-later). Sorgenti: https://github.com/aleff-github/onion-routing-anatomy</dc:rights>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessMode">textual</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessMode">visual</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">alternativeText</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">tableOfContents</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityFeature">readingOrder</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilityHazard">none</meta>}}%
+  \Configure{OpfMetadata}{\HCode{<meta property="schema:accessibilitySummary">Testo strutturato in capitoli con indice navigabile; figure e formule sono immagini SVG con testo alternativo. Non è stata eseguita una verifica di conformità WCAG.</meta>}}%
+}}
+\makeatother
+
+\title{Anatomia di Tor. Il protocollo dell'anonimato, byte per byte}
+\author{Alessandro Greco}
+\date{}
+
+\begin{document}
+\frontmatter
+\maketitle
+% Colophon (diritti e indipendenza dal Tor Project), come nelle edizioni stampate.
+{\small
+\noindent \textit{Anatomia di Tor --- Il protocollo dell'anonimato, byte per byte}\par
+\medskip
+\DirittiLicenza
+\medskip
+\DirittiMarchi
+\medskip
+\noindent Prima edizione, versione 1.0.0. Formato digitale (EPUB).\par
+}
+\tableofcontents
+\include{capitoli/00-prefazione}
+\input{capitoli/00-nota-edizioni-tradotte}
+
+\mainmatter
+\input{struttura}
+
+\backmatter
+\printbibliography[heading=bibintoc,title={Bibliografia}]
+\end{document}

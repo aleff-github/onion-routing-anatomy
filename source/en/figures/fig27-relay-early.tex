@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{In the historical 2014 attack, a malicious HSDir encodes an onion-service name in the types of RELAY and RELAY\_EARLY cells sent toward the client. A colluding malicious guard reads these relay-visible types and links the client to a descriptor request, not to a proven visit. The four illustrated cells are schematic; link TLS protects cell headers on the wire.}
+% 2014 attack: a cell-type signal read by the guard
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  ostile/.style={relay,fill=avviso!20,draw=avviso,align=center,font=\sffamily\scriptsize}]
+  \node[client] (c) at (0,0) {client};
+  \node[ostile] (g) at (3,0) {malicious\\guard};
+  \node[relay] (m) at (6,0) {middle};
+  \node[ostile] (h) at (9,0) {malicious\\HSDir};
+  \draw[<-,thick] (c) -- (g);
+  \draw[<-,thick] (g) -- (m);
+  \draw[<-,thick] (m) -- (h);
+  \foreach \x/\t/\c in {7.1/E/avviso!40,7.5/R/white,7.9/R/white,8.3/E/avviso!40} {
+    \node[draw,minimum size=3.5mm,inner sep=0pt,fill=\c] at (\x,0.55) {\t};
+  }
+  \node[align=center,text=torgrigio] at (7.6,1.12) {schematic: four example cells};
+  \node[align=center,text=avviso] at (9,-1) {encodes the service name\\in RELAY (R) and\\RELAY\_EARLY (E) types};
+  \node[align=center,text=avviso] at (3,-1) {reads the cell types:\\links the client to a\\descriptor request};
+  \node[align=center,text=torgrigio] at (6,-1) {forwards cell types\\as in the 2014 case};
+\end{tikzpicture}

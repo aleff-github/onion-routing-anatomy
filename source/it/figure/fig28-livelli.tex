@@ -1,0 +1,18 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Quattro livelli di possibile esposizione dell'identità: rete (IP e circuiti), applicazione (DNS, plugin e impronte), contenuto (metadati, account e stile), comportamento (orari, abitudini e contatti). Tor riduce alcuni rischi di rete, strumenti e sistemi dedicati aiutano su altri livelli, mentre contano anche le scelte dell'utente. Nessuno strato garantisce da solo l'anonimato.}
+% I livelli a cui un'identità può trapelare, e chi protegge ciascuno
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  liv/.style={draw,rounded corners=2pt,minimum width=5.2cm,minimum height=0.75cm,align=center},
+  chi/.style={align=left,text width=5cm}]
+  \node[liv,fill=torviola!15] (r) at (0,0) {rete: indirizzo IP, circuiti};
+  \node[liv,fill=torviola!9] (a) at (0,0.95) {applicazione: DNS, plugin, impronte};
+  \node[liv,fill=torgrigio!10] (c) at (0,1.9) {contenuto: metadati, account, stile};
+  \node[liv,fill=avviso!12] (b) at (0,2.85) {comportamento: orari, abitudini, contatti};
+  \node[chi,right=0.4cm of r] {tor: protezione di rete non assoluta};
+  \node[chi,right=0.4cm of a] {Tor Browser, Tails, Whonix (\cref{cap:23-browser})};
+  \node[chi,right=0.4cm of c] {strumenti e scelte sui contenuti};
+  \node[chi,right=0.4cm of b] {scelte, abitudini, strumenti di supporto};
+  \draw[->,thick,torgrigio] (-3.1,-0.3) -- node[left,rotate=90,anchor=south] {protezione non del tutto automatica} (-3.1,3.2);
+\end{tikzpicture}

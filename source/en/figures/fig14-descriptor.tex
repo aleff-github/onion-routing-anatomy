@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Three-level v3 onion descriptor: the HSDir-readable signed wrapper contains hs-descriptor 3, lifetime, type-8 signing certificate, revision, superencrypted and Ed25519 signature. First-layer encryption derives from the blinded public key and subcredential and contains desc-auth-type, desc-auth-ephemeral-key, auth-client and encrypted. Dummy auth-client entries appear even without restricted discovery. The inner layer contains handshake, flow-control and introduction points with keys. With restricted discovery, the authorized client's X25519 private key unwraps a descriptor cookie from auth-client; the cookie then decrypts the inner layer. Numeric values are examples.}
+% Descriptor layers
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  strato/.style={draw,rounded corners=3pt,align=left,inner sep=5pt,text width=#1},
+  lab/.style={font=\sffamily\scriptsize\bfseries,anchor=north west}]
+  \node[strato=10.5cm,fill=torgrigio!8,draw=torgrigio,minimum height=6.3cm] (e) at (0,0) {};
+  \node[lab] at ([shift={(0.15,-0.1)}]e.north west) {Outer layer (plaintext, signed)};
+  \node[anchor=north west,align=left,font=\ttfamily\scriptsize] at ([shift={(0.3,-0.5)}]e.north west)
+    {hs-descriptor 3\\descriptor-lifetime 180\\descriptor-signing-key-cert \normalfont\sffamily(type 8, from blinded key)\\\ttfamily revision-counter 662427\\superencrypted};
+  \node[strato=9.6cm,fill=torviola!10,draw=torviola,minimum height=3.35cm] (s) at (0.35,-0.85) {};
+  \node[lab] at ([shift={(0.15,-0.1)}]s.north west) {First layer: blinded key + subcredential};
+  \node[anchor=north west,align=left,font=\ttfamily\scriptsize] at ([shift={(0.3,-0.5)}]s.north west)
+    {desc-auth-type, desc-auth-ephemeral-key, auth-client \ldots\\encrypted};
+  \node[strato=8.7cm,fill=torverde!15,draw=torverde!60!black,minimum height=1.75cm] (i) at (0.7,-1.35) {};
+  \node[lab] at ([shift={(0.15,-0.1)}]i.north west) {Second layer (client cookie if restricted)};
+  \node[anchor=north west,align=left,font=\ttfamily\scriptsize] at ([shift={(0.3,-0.5)}]i.north west)
+    {create2-formats 2 \quad flow-control 1-2 31\\introduction-point \ldots\ onion-key ntor \ldots\ auth-key \ldots\ enc-key \ldots};
+  \node[anchor=south west,font=\ttfamily\scriptsize] at ([shift={(0.3,0.15)}]e.south west) {signature \normalfont\sffamily(Ed25519, prefix \texttt{"Tor onion service descriptor sig v3"})};
+\end{tikzpicture}

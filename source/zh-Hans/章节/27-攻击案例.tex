@@ -1,0 +1,127 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{针对真实 Tor 网络的攻击案例}\label{cap:27-casi-rete}
+\aggiornatoal{2026 年 9 月 23 日}{Tor Project 公告（2014、2022、2023 年）；tor 0.4.9.13；实验网络}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 重建 2014 年涉及 \cella{RELAY\_EARLY} cell 的攻击与随后加入 tor 的防御，并在运行中的实验网络验证防御机制（实验~17）；
+  \item 描述 KAX17 事件以及后来加强的中继监控工作；
+  \item 将 2022--2023 年拒绝服务攻击与 \cref{cap:15-dos} 介绍的防御联系起来；
+  \item 总结保护开放网络安全的一般经验。
+\end{itemize}
+\end{obiettivi}
+
+上一章从研究角度讨论攻击：模型、实验和统计比例。本章根据 Tor Project 公开发表的声明，重建真实网络上发生的三起安全事件。对于 KAX17，运营者的意图及是否开展了具体恶意活动并未得到证实。我们的重点不是操作性的攻击细节，而是这些事件能帮助我们理解哪些协议问题，以及如何管理一个开放网络。
+
+% ---------------------------------------------------------------------------
+\section{2014 年：利用 Cell 类型传递信号}\label{sec:casi-relayearly}
+
+\paragraph{发生了什么？}2014 年 7 月 4 日，Tor Project 发现并移除了一个中继群组，认为它们试图使发布洋葱服务描述符或请求其信息（当时称为\emph{隐藏服务}）的用户失去匿名性。这些中继从 1 月 30 日起加入网络：大约 115 台高速、非出口中继，分布在两个 /16 网络中，总共占入口守卫容量的约 6.4\,\%。7 月 30 日，Tor Project 发布安全公告，介绍攻击及应对措施~\cite{torblog2014relayearly}。
+
+\paragraph{攻击如何运作？}攻击将 Sybil 身份部署（\cref{sec:att-sybil}）与主动流量确认（\cref{sec:att-correlazione}）结合起来。这些中继保持足够长时间的稳定运行，从而同时获得 \texttt{HSDir} 和 \texttt{Guard} 标志。当恶意 HSDir 收到描述符请求时，会使用交替出现的 \cella{RELAY} 和 \cella{RELAY\_EARLY} 类型构成一串 cell，以此编码被请求的服务名称（\cref{fig:relayearly}）。如果同一群组中的另一台中继恰好是该客户端的入口守卫，它就可以读取这串信号，将客户端与对该服务描述符的请求关联起来，但不能据此证明客户端实际访问了该服务。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图27-relay-early}
+\caption{2014 年的历史攻击：恶意 HSDir 在外层 RELAY 和 RELAY\_EARLY cell 命令中编码所请求的服务。该命令对路径上的中继可见，但在链路上受 TLS 保护。同伙控制的恶意入口守卫能够把客户端与描述符请求关联，不能据此证明客户端实际访问了服务。图中四个 cell 仅为示意，并非完整 onion 地址编码。}
+\label{fig:relayearly}
+\end{figure}
+
+为什么偏偏使用这个字段？\cella{RELAY\_EARLY} cell 原本用于限制电路的长度：客户端必须使用它们发送扩展请求，每条电路至多允许八个（\spec{tor-spec}{Handling RELAY\_EARLY cells}）。然而，旧版检查只适用于客户端发往网络的方向。正常情况下没有人反向发送这种 cell，也没有人检查它们。与分层加密的载荷不同（\cref{cap:10-cifratura-relay}），外层 cell 命令对每台中继都可见。因此，写入该字段的信号能够在传输中保持不变。公告还指出，攻击者以可直接读懂的形式编码了服务名称，因此收到此类 cell 的中继可以理解该信号；仅持有网络抓包的外部观察者，则必须先解密中继之间的 TLS 链路，才能事后恢复该信号。
+
+\paragraph{应对措施。}随后采取了三个步骤：排除恶意中继；从 tor 0.2.4.23 和 0.2.5.6-alpha 开始，一旦收到发往客户端的 \cella{RELAY\_EARLY}，就关闭电路；并逐步推动将每位客户端的守卫数量从三台降为一台，以减少攻击者观察流量的机会。公告强调，\emph{被动}流量确认依然是尚未解决的问题。利用 cell 类型的信道使确认变得更容易，而不是第一次让流量确认成为可能。
+
+% ---------------------------------------------------------------------------
+\section{实验：验证 RELAY\_EARLY 的数量限制}\label{sec:lab-casi}
+
+\begin{laboratorio}[17]{允许八个，第九个不允许}
+\textbf{目标。}使用 \file{labs/zh-Hans/代码/torlab} 验证当前中继如何执行 \cella{RELAY\_EARLY} cell 数量限制。\\
+\textbf{前置条件。}实验~4 和实验~5；实验网络正在运行。\\
+\textbf{预计时间。}30 分钟。
+\end{laboratorio}
+
+我们的 \file{circuit.py} 已经阻止发送超过八个 \cella{RELAY\_EARLY} cell。\file{labs/zh-Hans/实验室/relay\_early.py} 脚本则有意绕过这一保护。它先与 \texttt{test004r} 建立一跳电路，发送 $n$ 个包含 \texttt{DROP} 消息的 \cella{RELAY\_EARLY} cell（中继会直接丢弃这些消息，不作回应），随后使用 \texttt{BEGIN\_DIR} 请求目录连接，以检查电路是否仍然有效：
+\begin{lstlisting}[language=bash,numbers=none]
+$ PYTHONPATH=labs/zh-Hans/代码 python3 labs/zh-Hans/实验室/relay_early.py 0 8 9
+0 RELAY_EARLY cells -> CONNECTED
+8 RELAY_EARLY cells -> CONNECTED
+9 RELAY_EARLY cells -> circuit destroyed, reason 1
+\end{lstlisting}
+第九个 cell 会导致电路关闭，中继返回原因码为 1、即 \texttt{PROTOCOL} 的 \cella{DESTROY} cell。该列表来自一次参考运行：地址、电路编号和日志内容会因运行而异。一份参考中继日志显示：
+\begin{lstlisting}[numbers=none]
+[warn] Received too many RELAY_EARLY cells on circ 4045911407 from
+       127.0.0.1:58048.  Closing circuit.
+\end{lstlisting}
+该检查位于 \file{src/core/or/command.c}，发生在 cell 解密之前。再往上几行就是 2014 年引入的检查：如果收到发往客户端的 \cella{RELAY\_EARLY}，就记录警告并关闭电路。源码注释指出，旧版 tor 曾因缺陷产生这种 cell，但受影响版本早已不再使用。如今它被视为\enquote{异常}输入，并按攻击处理。此实验也包含在 \texttt{make verifica-lab} 中。
+
+% ---------------------------------------------------------------------------
+\section{2020--2021 年：KAX17 与网络健康}\label{sec:casi-kax17}
+
+第二起事件展示了防御中不太显眼的一面：首先得发现攻击者。Tor Project 于 2022 年 4 月在介绍其网络健康团队的文章中讨论了该事件~\cite{torblog2022badrelays}。
+
+2020 年 12 月，中继统计图显示异常模式：每月第一天的午夜，数十台中继总会在同一时刻加入网络，此后逐渐消失。这看上去像休眠机制（\opt{AccountingMax}，\cref{sec:relay-config}）存在缺陷。到 2021 年 9 月，另一批似乎由同一运营者控制的中继开始出现，却没有家族声明和联系信息。目录权威节点排除了它们，但替代中继不断加入。10 月下旬，一份匿名报告帮助识别了后来称为 KAX17 的中继群组，该群组随即被移除。此后，每月的异常高峰和中继加入浪潮都停止了，Tor Project 因而认为这些现象可能来自同一运营者。运营者的身份和目标至今不明。
+
+文章坦率地反思了响应延迟的原因：多年来监控工具缺乏维护，志愿者、员工和目录权威节点之间的信任不足，组织结构也不适合开展这种工作。它还解释了治理程序：网络监测人员可以建议排除中继，但最终由目录权威节点依照多数决定，而不是由 Tor Project 员工直接决定。这正是 \cref{cap:12-directory} 中介绍的分布式信任在网络运营中的体现。
+
+\begin{approfondimento}[没有声明家族的中继]
+KAX17 事件的最初警讯不是观察到某种漏洞利用，而是违反了一条社会性规则：大量显然由同一运营者控制的中继没有声明家族（\cref{sec:relay-famiglie}）。更深层的经验在于，如果攻击者能够绕过路径选择所依赖的运营惯例，有时根本不需要攻破协议。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{2022--2023 年：拒绝服务攻击}\label{sec:casi-dos}
+
+从 2022 年夏季起，Tor 网络连续数月遭遇多种拒绝服务攻击。2023 年 2 月，Tor Project 报告称，用户有时无法加载网页或访问洋葱服务；攻击方法和目标不断变化，也无法可靠确认攻击者身份~\cite{torblog2023dos}。洋葱服务尤其容易受到攻击：请求通过匿名电路到达，因此它们无法直接封锁攻击者的 IP 地址。
+
+更长期的应对措施，是从 2023 年 8 月的 tor 0.4.8 起引入的工作量证明系统（\cref{sec:dos-onion}）~\cite{torblog2023pow}。该防御通常处于休眠状态；在服务遭到攻击时，它会要求客户端解答计算难度不断增加的问题，并优先处理投入更多工作量的请求。Tor Project 将正常用户所需的成本描述为几毫秒，而严重攻击期间可能达到约一分钟。这与实验~9 的原则相同：让攻击者原本很廉价的行为变得昂贵，同时不要求用户提供身份信息。
+
+% ---------------------------------------------------------------------------
+\section{经验总结}\label{sec:casi-lezioni}
+
+\begin{itemize}
+  \item \textbf{每个可见字段都可能成为通信信道。}2014 年的攻击没有破解密码学，而是利用中继能够读取并转发的字段。设计匿名协议时，必须针对每个未加密的比特追问：谁能写入它，谁能读取它？这也是新一代中继加密设计（\cref{sec:cgo}）的动机之一。
+  \item \textbf{Sybil 攻击可能很廉价，监控却不廉价。}添加中继的成本，相比维护检测恶意协同行为所需的工具、专业知识和信任关系，可能很低。
+  \item \textbf{防御必须考虑时间维度。}使用单个守卫、延长守卫寿命以及引入 Vanguards，都能减少攻击者随时间获得的机会（\cref{sec:att-correlazione}）。
+  \item \textbf{透明性也是一种防御。}在这三起事件中，Tor Project 都同时公布了已知与未知的信息，让用户、运营者和研究人员能够评估风险。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item 2014 年，一组同时担任入口守卫和 HSDir 的恶意中继利用 cell 类型编码客户端所请求描述符对应的洋葱服务名称。现在，tor 收到发往客户端的 \cella{RELAY\_EARLY} 时会关闭电路；守卫数量从三台减为一台，随后在 2018 年调整为两台，也减少了选中恶意守卫的机会（\cref{sec:guard}）。
+  \item 实验网络可以验证最多八个 \cella{RELAY\_EARLY} cell 的限制：第九个会导致电路销毁。
+  \item KAX17 在数月的间接线索（包括每月异常高峰与未声明家族的中继）以及一份匿名报告后被识别；排除中继的决定由目录权威节点负责。
+  \item 2022--2023 年的拒绝服务攻击推动了洋葱服务工作量证明的引入。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:27-campo}
+恶意 HSDir 如果把信号写在 cell 的加密载荷中，为什么入口守卫无法读取，而写在外层 cell 类型中却可以被读取？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:27-uno}
+解释将守卫数量从三台减少到一台，如何缓解类似 2014 年的攻击，以及这种改变带来什么缺点。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:27-verso}
+修改实验~17，证明即使一个 \cella{RELAY\_EARLY} cell 没有包含电路扩展请求，它仍会计入数量限制。然后检查 tor 源码，判断一条 \cella{RELAY\_EARLY} 在发往客户端的方向到达时会发生什么。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:27-segnali}
+利用 CollecTor 数据，哪些迹象可能暴露同一运营者控制、却未声明家族的中继？提出三个检测指标，并讨论误报。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:27-canali}
+列出中间中继能以明文看到的 cell 和 relay 消息字段（\cref{cap:08-celle}）。逐项讨论恶意中继能否利用这些字段向电路上的另一台中继发送信号，并识别已有或正在提议的防御。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item Tor Project，\titolo{Tor security advisory: \enquote{relay early} traffic confirmation attack}~\cite{torblog2014relayearly}。
+  \item Tor Project，\titolo{Malicious relays and the health of the Tor network}~\cite{torblog2022badrelays}。
+  \item Tor Project，\titolo{Introducing Proof-of-Work Defense for Onion Services}~\cite{torblog2023pow}。
+\end{itemize}

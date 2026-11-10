@@ -1,0 +1,285 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Servicios onion v3}\label{cap:14-onion-services}
+\aggiornatoal{23 de septiembre de 2026}{commit de torspec \texttt{8e1f245}; tor 0.4.9.13; rend-spec v3}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item explicar qué ofrece un servicio onion y en qué se diferencia de un sitio al que se accede mediante una salida;
+  \item derivar la clave pública de un servicio a partir de su dirección \texttt{.onion} y viceversa;
+  \item describir las claves cegadas, los períodos temporales y cómo localiza un cliente los HSDir responsables;
+  \item leer la estructura por capas de un descriptor;
+  \item seguir paso a paso el protocolo de introducción y encuentro;
+  \item descargar, verificar y descifrar el descriptor de un servicio onion de la red de laboratorio (laboratorio~8).
+\end{itemize}
+\end{obiettivi}
+
+Hasta ahora hemos utilizado Tor para ocultar \emph{quién} se conecta a un servidor. Sin embargo, el propio servidor era público: se conocía su dirección IP y la salida se conectaba directamente con él a través de la red pública, descubriendo el destino. El contenido solo era texto en claro si la aplicación no empleaba cifrado de extremo a extremo, como HTTPS. Los \textbf{servicios onion} invierten esta situación. Permiten ofrecer un servicio, por ejemplo un sitio web, sin revelar su ubicación de red. Cliente y servicio se encuentran a mitad de camino, protegidos cada uno por su propio circuito, y ninguno conoce la dirección del otro.
+
+% ---------------------------------------------------------------------------
+\section{Qué ofrece un servicio onion}\label{sec:os-proprieta}
+
+\begin{description}
+  \item[Anonimato del servicio] La dirección IP del servidor nunca se expone: el servicio solo se comunica con la red mediante circuitos Tor iniciados por él mismo.
+  \item[Direcciones autoautenticables] La dirección \texttt{.onion} \emph{codifica} la clave pública del servicio junto con una suma de comprobación y un byte de versión. Quien se conecta a ella sabe criptográficamente que se comunica con el titular de la clave privada correspondiente, sin necesitar autoridades de certificación.
+  \item[Cifrado de extremo a extremo] El tráfico entre el cliente y el servicio se cifra con claves conocidas únicamente por las dos partes; no existe una salida capaz de observar su contenido en claro.
+  \item[Accesibilidad] El servicio no necesita aceptar conexiones entrantes. Funciona detrás de NAT o de un cortafuegos que permita únicamente conexiones salientes.
+\end{description}
+
+El coste es la longitud del recorrido. En el modelo básico, el cliente alcanza un punto de encuentro mediante un circuito de tres saltos y el servicio llega al mismo punto por otro circuito de tres saltos: seis repetidores en total, frente a los tres de una conexión a un sitio convencional. Con vanguards-lite activado por defecto (\cref{sec:vanguards}), el recorrido deja de ser simétrico. El servicio añade un repetidor fijo de segunda capa y construye un circuito de encuentro de cuatro saltos (\file{S\,$\to$\,G\,$\to$\,L2\,$\to$\,M\,$\to$\,Rend}), frente a los tres del cliente.
+
+\begin{storia}[De v2 a v3]
+Los \emph{servicios ocultos} existen desde 2004. La primera versión ampliamente utilizada, v2, empleaba direcciones de 16 caracteres derivadas de una clave RSA de 1024 bits, truncando un resumen SHA-1 a 80 bits. También permitía que los HSDir recopilaran las direcciones de los servicios cuyos descriptores alojaban. La versión 3 (\proposta{224}), disponible desde tor 0.3.2.1-alpha (2017), introdujo claves Ed25519, direcciones de 56 caracteres que contienen la clave pública completa, descriptores cifrados y claves cegadas. Los servicios v2 quedaron completamente deshabilitados en octubre de 2021 con tor 0.4.5.11 y 0.4.6.8. También cambió la denominación: hoy se habla de \emph{servicios onion}.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{La dirección}\label{sec:os-indirizzo}
+
+Una dirección v3 codifica en base32 la clave pública de identidad del servicio, una suma de comprobación breve y un número de versión~\spec{rend-spec}{Encoding onion addresses}:
+\[
+\texttt{address} = \mathrm{base32}(\mathit{PUBKEY} \,\|\, \mathit{CHECKSUM} \,\|\, \mathit{VERSION}) \,\|\, \texttt{".onion"}
+\]
+Aquí $\mathit{PUBKEY}$ es la clave Ed25519 de 32 bytes, $\mathit{VERSION}$ es el byte \texttt{0x03} y $\mathit{CHECKSUM}$ son los primeros dos bytes de $\mathrm{SHA3\text{-}256}(\texttt{".onion checksum"} \,\|\, \mathit{PUBKEY} \,\|\, \mathit{VERSION})$. Los 35 bytes resultantes producen exactamente 56 caracteres base32. La suma de comprobación no protege frente a adversarios, que pueden calcularla como cualquiera, pero permite detectar errores de escritura.
+
+En una ejecución de nuestro laboratorio, el servicio onion tenía la siguiente dirección. Corresponde al ejemplo conservado en \file{labs/es/codigo/torlab/test/data/}, utilizado por las pruebas de referencia. Por tanto, todos los resultados de esta sección se refieren a ese ejemplo y pueden reproducirse sin iniciar la red. Cuando el lector cree su propia red, se generarán claves nuevas y, por tanto, otra dirección (\cref{sec:rp-file}).
+\begin{lstlisting}[numbers=none]
+wdjtp7qktdjkkgjjbbx2axvg2gri5p4tuhlc4bq23n7o3uwu4rveppqd.onion
+\end{lstlisting}
+La función \file{key\_from\_address} del laboratorio~8 extrae la clave pública y verifica la suma de comprobación.
+
+\begin{attenzione}[No es posible reconocer una dirección de memoria]
+Una dirección aleatoria de 56 caracteres no se recuerda fácilmente ni se reconoce de un vistazo. Los usuarios la copian de una fuente que consideran fiable y pueden no detectar una diferencia de unos pocos caracteres. Es el principal vector de \emph{phishing} contra servicios onion. Las \emph{direcciones personalizadas (vanity addresses)}, generadas probando millones de claves hasta conseguir que sus primeros caracteres formen una palabra, solo ayudan parcialmente: un adversario también puede generar direcciones con el mismo prefijo. Retomaremos este problema en el \cref{cap:21-onion-pratica}.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Claves cegadas}\label{sec:os-accecate}
+
+\subsection{El problema}
+
+El servicio necesita publicar en algún lugar información que permita alcanzarlo: el \emph{descriptor}. Si lo publicara directamente bajo su clave de identidad, cualquiera que administrara un HSDir vería las direcciones de todos los servicios que aloja. Podría enumerarlos o relacionar los descriptores de un mismo servicio a lo largo del tiempo. Eso era precisamente lo que sucedía con v2.
+
+\subsection{La solución}
+
+En v3, el servicio firma los descriptores utilizando una \textbf{clave cegada}, distinta para cada \emph{período temporal}~\spec{rend-spec}{Appendix A: Signature scheme with key blinding}. A partir de la clave de identidad $A=aB$, donde $B$ es el punto base Ed25519, calcula el factor
+\begin{gather*}
+h = \mathrm{SHA3\text{-}256}(\texttt{"Derive temporary signing key\textbackslash 0"} \,\|\, A \,\|\, B \,\|\, N), \\
+N = \texttt{"key-blind"} \,\|\, \mathit{period} \,\|\, \mathit{period\_length}
+\end{gather*}
+(con determinados bits forzados, como en las claves Ed25519). La clave cegada es
+\[
+A' = h \cdot A.
+\]
+
+Esta construcción tiene propiedades importantes:
+\begin{itemize}
+  \item cualquiera que conozca la dirección, y por tanto $A$, puede calcular $A'$ para cada período y sabe dónde buscar el descriptor;
+  \item quien solo conoce $A'$, como un HSDir, no puede recuperar $A$ ni determinar si dos claves cegadas de períodos diferentes pertenecen al mismo servicio;
+  \item el servicio puede firmar bajo $A'$ utilizando la clave privada $a'=h\cdot a$, y la firma se verifica bajo $A'$ como una firma Ed25519 ordinaria.
+\end{itemize}
+
+Un detalle inusual ilustra lo fiel que es la especificación al código: la cadena constante incluye un byte cero final porque \texttt{tor} calcula su longitud mediante \texttt{sizeof} y no mediante \texttt{strlen}. Un comentario del código (\file{src/feature/hs/hs\_common.c}) reconoce que era preferible documentar esa \enquote{sorpresa} en la especificación antes que cambiar el código.
+
+\subsection{Credenciales y claves fuera de línea}
+
+La clave de identidad produce una \emph{credencial}, $\mathrm{SHA3\text{-}256}(\texttt{"credential"} \,\|\, A)$. Esta genera para cada período una \emph{subcredencial}, $\mathrm{SHA3\text{-}256}(\texttt{"subcredential"} \,\|\, \mathit{credential} \,\|\, A')$. La subcredencial se emplea para cifrar el descriptor y en el intercambio de introducción: demuestra conocer la dirección, que un HSDir no posee.
+
+La jerarquía permite conservar la clave de identidad \emph{fuera de línea}. La clave cegada de cada período certifica una clave de firma de descriptores de corta duración (certificado Ed25519 de tipo 8, \cref{tab:cert-types}). En principio, el servidor puede recibir anticipadamente claves de firma y certificados de períodos futuros sin poseer nunca la clave privada asociada a su dirección. No todas las implementaciones admiten este modo.
+
+% ---------------------------------------------------------------------------
+\section{Localizar el descriptor}\label{sec:os-hsdir}
+
+\subsection{Períodos temporales}
+
+El tiempo se divide en períodos de un día en la red pública (parámetro de consenso \texttt{hsdir-interval})~\spec{rend-spec}{Dividing time into periods}. No comienzan a medianoche sino al mediodía UTC. Están desplazados doce horas respecto al protocolo de aleatoriedad compartida de las autoridades, que publica cada día a medianoche un nuevo \textbf{valor aleatorio compartido} (\emph{shared random value}, SRV). El número de período se obtiene de los minutos transcurridos desde el 1 de enero de 1970, restando el desplazamiento y dividiendo por la duración. La especificación ofrece un ejemplo: a las 11:15:01 UTC del 13 de abril de 2016, el período es 16903 y comenzó al mediodía del día anterior. El laboratorio~8 comprueba exactamente ese caso.
+
+En redes de prueba, con votaciones cada veinte segundos, esperar un día sería poco práctico. Por eso \texttt{tor} reduce el período a una ronda completa del protocolo SRV, equivalente a 24 votaciones (función \file{get\_time\_period\_length}). En el laboratorio, un período dura ocho minutos y está desplazado cuatro minutos.
+
+\subsection{El anillo HSDir}
+
+¿Qué HSDir almacena el descriptor? Cada repetidor con indicador \texttt{HSDir} ocupa una posición en un \emph{anillo} de 256 bits~\spec{rend-spec}{Where to publish a hidden service descriptor}:
+\[
+\mathit{relay\_index} = \mathrm{SHA3\text{-}256}(\texttt{"node-idx"} \,\|\, \textit{Ed25519 identity} \,\|\, \mathit{SRV} \,\|\, \mathit{period} \,\|\, \mathit{period\_length})
+\]
+Para cada una de las dos \emph{réplicas}, el servicio calcula:
+\[
+\mathit{service\_index}(r) = \mathrm{SHA3\text{-}256}(\texttt{"store-at-idx"} \,\|\, A' \,\|\, r \,\|\, \mathit{period\_length} \,\|\, \mathit{period}).
+\]
+
+El servicio carga su descriptor en los primeros cuatro HSDir situados después de cada índice del anillo (parámetro \file{hsdir\_spread\_store}); el cliente elige al azar uno de los tres primeros (\file{hsdir\_spread\_fetch}). Incluir el SRV impide que un adversario prediga con demasiada antelación qué repetidores serán responsables del servicio y coloque repetidores maliciosos en las posiciones adecuadas para censurarlo u observar solicitudes de descriptores. El servicio publica simultáneamente dos descriptores para períodos consecutivos, de modo que siga siendo accesible a clientes cuyos consensos estén ligeramente adelantados o atrasados. Los dos períodos utilizados dependen de la fase del ciclo: antes o después de la rotación del SRV, pueden ser el anterior y el actual o el actual y el siguiente~\spec{rend-spec}{Generating and publishing hidden service descriptors}.
+
+\begin{approfondimento}[¿Qué SRV debe utilizarse?]
+Como los períodos y el SRV están desplazados medio día, el cliente debe elegir cuidadosamente su valor. En la media jornada entre el comienzo del período y el siguiente SRV utiliza el actual; en la otra mitad utiliza el anterior. Si el consenso carece del SRV necesario, por ejemplo justo después de iniciar una red, \texttt{tor} calcula una alternativa denominada \emph{disaster SRV}: $\mathrm{SHA3\text{-}256}(\texttt{"shared-random-disaster"} \,\|\, \mathit{period\_length} \,\|\, \mathit{period})$. La elección se implementa en \file{hs\_get\_current\_srv} y \file{hs\_get\_previous\_srv} (\file{src/feature/hs/hs\_common.c}). Si falta el valor, \texttt{tor} utiliza discretamente la alternativa. Sucede en una red de laboratorio recién creada y dura poco: en el registro de su autoridad, el primer SRV aparece 115 segundos después de iniciarse; hasta entonces, el consenso no contiene \texttt{shared-rand-current-value}. Para observar el comportamiento alternativo, examina los primeros minutos tras crear la red. Una vez que lleva tiempo activa, como en \cref{sec:lab-onion}, se utilizan los SRV reales.
+\end{approfondimento}
+
+\subsection{Solo solicitudes anónimas}
+
+El cliente descarga un descriptor mediante una solicitud HTTP a \nolinkurl{/tor/hs/3/}, seguida de la clave cegada codificada en base64 sin los caracteres \texttt{=} finales, a través de un flujo \file{BEGIN\_DIR} hacia el HSDir. Existe una condición: la solicitud debe llegar por un circuito \textbf{anónimo}. El HSDir rechaza peticiones procedentes de un circuito abierto directamente por el cliente, es decir, de un solo salto. Lo descubrimos en el laboratorio:
+\begin{lstlisting}[numbers=none]
+HTTP/1.0 503 Rejecting single hop HS v3 descriptor request
+\end{lstlisting}
+
+La comprobación está en \file{connection\_dir\_is\_anonymous} (\nolinkurl{src/feature/dircommon/directory.c}). Impide que un HSDir relacione una solicitud de descriptor con la dirección IP del cliente que la hizo.
+
+% ---------------------------------------------------------------------------
+\section{El descriptor}\label{sec:os-descrittore}
+
+El descriptor tiene tres capas~\spec{rend-spec}{Generating and publishing hidden service descriptors}, representadas en \cref{fig:os-descrittore}.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig14-descriptor}
+\caption{Estructura del descriptor onion v3. La envoltura exterior firmada es visible para HSDir; quien conoce la identidad onion puede descifrar la primera capa. Con descubrimiento restringido, el cliente autorizado utiliza su clave X25519 para recuperar el descriptor cookie que permite descifrar la segunda.}
+\label{fig:os-descrittore}
+\end{figure}
+
+\paragraph{La capa exterior} está en claro y firmada. Contiene la versión, el período de validez (\texttt{descriptor-lifetime}, 180 minutos en el laboratorio), el certificado de la clave firmante emitido por la clave cegada, un contador de revisión, el bloque cifrado \texttt{superencrypted} y la firma. Se utiliza Ed25519 con la clave de firma del descriptor sobre texto precedido por \texttt{"Tor onion service descriptor sig v3"}. El prefijo impide reutilizar esa firma para otros fines. El contador de revisión debe aumentar con cada versión nueva, para que un HSDir no acepte descriptores anteriores a los que ya posee.
+
+\paragraph{La primera capa cifrada} utiliza una clave derivada de la clave cegada y la subcredencial. Un HSDir que desconozca la dirección no puede leerla. Contiene los campos de \emph{descubrimiento restringido} (\cref{sec:os-ristretta}) y la segunda capa. Para no revelar si el descubrimiento restringido está activado, los campos están siempre presentes y se rellenan con datos aleatorios cuando no se necesitan.
+
+\paragraph{La segunda capa} contiene lo necesario para conectarse: formatos de intercambio admitidos, parámetros de control de flujo, eventuales parámetros anti-DoS y, para cada \textbf{punto de introducción}, los especificadores de enlace para alcanzarlo (en base64), su clave ntor, una clave de autenticación certificada y una clave de cifrado. Por defecto, el servicio utiliza tres puntos de introducción.
+
+Ambas capas utilizan el mismo esquema. Una sal aleatoria de 16 bytes, datos secretos y una constante propia de la capa alimentan SHAKE-256 para derivar una clave AES-256, un vector de inicialización y una clave de autenticación. El texto se cifra en modo contador y se autentica mediante SHA3-256. El texto en claro de la primera capa se rellena hasta un múltiplo de 10\,000 bytes y las líneas \texttt{auth-client} hasta un múltiplo de 16, para revelar lo menos posible sobre el número de puntos de introducción y clientes autorizados.
+
+% ---------------------------------------------------------------------------
+\section{Introducción y encuentro}\label{sec:os-rendezvous}
+
+Con el descriptor, el cliente ya puede conectarse. El protocolo, ilustrado en \cref{fig:os-rendezvous}, implica tres repetidores \enquote{especiales}: un punto de introducción elegido por el servicio, un punto de encuentro elegido por el cliente y los HSDir.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig14-encuentro}
+\caption{Protocolo de encuentro. Cada flecha representa un circuito de varios saltos; no hay conexión directa entre cliente, servicio y puntos intermedios. Los números indican el orden de los pasos explicados en el texto.}
+\label{fig:os-rendezvous}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{El servicio prepara puntos de introducción.} Selecciona varios repetidores, construye un circuito hacia cada uno y envía \file{ESTABLISH\_INTRO} (comando relay 32) con una clave de autenticación distinta y una firma para cada punto. El repetidor responde con \file{INTRO\_ESTABLISHED} (38); a partir de ese momento reenvía al servicio las solicitudes que presentan esa clave.
+  \item \textbf{El servicio publica su descriptor} en los HSDir responsables, como se ha explicado.
+  \item \textbf{El cliente prepara el encuentro.} Selecciona al azar un repetidor como punto de encuentro, crea un circuito hasta él y envía \file{ESTABLISH\_RENDEZVOUS} (33) con una \emph{cookie} aleatoria de 20 bytes. El repetidor responde con \file{RENDEZVOUS\_ESTABLISHED} (39).
+  \item \textbf{El cliente se presenta.} Construye un circuito hacia un punto de introducción y envía \texttt{INTRODUCE1} (34). La parte en claro especifica la clave de autenticación del punto. La parte cifrada, legible únicamente por el servicio, contiene la cookie, los especificadores de enlace y la clave ntor del punto de encuentro, y la primera mitad de un intercambio. El punto de introducción envía \file{INTRODUCE\_ACK} (40) al cliente y reenvía el mensaje al servicio como \texttt{INTRODUCE2} (35).
+  \item \textbf{El servicio alcanza el punto de encuentro.} Descifra \texttt{INTRODUCE2}, comprueba que no duplica una solicitud anterior (\emph{caché antirrepetición}), crea un circuito hasta el punto indicado y envía \texttt{RENDEZVOUS1} (36) con la cookie y la segunda mitad del intercambio.
+  \item \textbf{El punto de encuentro une los circuitos.} Localiza el circuito del cliente mediante la misma cookie, reenvía la segunda mitad del intercambio en \texttt{RENDEZVOUS2} (37) y, desde ese momento, copia celdas entre ambos circuitos.
+\end{enumerate}
+
+El intercambio cliente--servicio, \emph{hs-ntor}, es una variante de ntor (\cref{sec:ntor}) que incluye la subcredencial y la clave de autenticación del punto de introducción. Solo quien conoce la dirección puede generar un \texttt{INTRODUCE1} aceptable para el servicio. Las claves derivadas añaden otra capa de cifrado, como un \emph{salto virtual} incorporado al circuito del cliente, y emplean SHA3-256 para el resumen acumulativo en lugar de SHA-1 (\cref{sec:riconoscere}). Ni el punto de introducción ni el de encuentro pueden leer el tráfico.
+
+A través del circuito unido, el cliente abre flujos mediante \texttt{BEGIN}, igual que haría con una salida (\cref{cap:11-stream}). El servicio reenvía esos flujos a los puertos locales configurados con \opt{HiddenServicePort}.
+
+\begin{approfondimento}[¿Por qué tantos repetidores?]
+El punto de introducción conoce el servicio solo como \enquote{la clave de autenticación de un circuito}: no sabe a qué dirección \texttt{.onion} corresponde. El punto de encuentro ve una cookie aleatoria y dos circuitos; no conoce qué servicio está conectando con qué cliente. Cada función ve únicamente un fragmento y ninguna conoce las direcciones IP del cliente o del servicio, que permanecen detrás de sus respectivos guardias.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Descubrimiento restringido}\label{sec:os-ristretta}
+
+Un servicio puede querer limitar su acceso a determinados clientes, por ejemplo si funciona como panel de administración. En el \textbf{descubrimiento restringido} (anteriormente \emph{autorización de clientes}), cada cliente autorizado tiene un par de claves X25519 y el servicio conoce su componente pública. El servicio cifra por separado la clave de la segunda capa del descriptor para cada cliente, mediante las líneas \texttt{auth-client} de la primera capa. Alguien que conozca la dirección, pero no posea una clave autorizada, no puede leer la lista de puntos de introducción ni siquiera intentar conectarse. En \texttt{tor} se configura añadiendo las claves públicas de los clientes al directorio \file{authorized\_clients} del servicio.
+
+% ---------------------------------------------------------------------------
+\section{Defensas}\label{sec:os-difese}
+
+Los servicios onion son objetivos naturales de ataques: no pueden bloquear sencillamente las direcciones IP de clientes hostiles, porque no las conocen. Sus principales defensas, tratadas más ampliamente en otros capítulos, son:
+\begin{itemize}
+  \item \textbf{vanguards}, que protegen el guardia del servicio frente a ataques que inducen la creación de circuitos a demanda (\cref{sec:vanguards});
+  \item la \textbf{caché antirrepetición}, que evita hacer repetir el mismo trabajo al servicio;
+  \item parámetros anti-DoS que el servicio puede establecer en los puntos de introducción mediante una extensión de \file{ESTABLISH\_INTRO}, limitando el número de mensajes \texttt{INTRODUCE2} por segundo;
+  \item la \textbf{prueba de trabajo}, mediante la que un servicio atacado pide a los clientes resolver un pequeño problema computacional antes de atenderlos (\cref{cap:15-dos}).
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: localizar y leer un descriptor}\label{sec:lab-onion}
+
+\begin{laboratorio}[8]{El descriptor del servicio onion de laboratorio}
+\textbf{Objetivo.} Implementar \file{labs/es/codigo/torlab/onion.py}: tratamiento de direcciones, clave cegada, anillo HSDir, descarga de descriptores, verificación y descifrado.\\
+\textbf{Requisitos previos.} Laboratorios~1--6; red de laboratorio en funcionamiento.\\
+\textbf{Tiempo estimado.} 4 horas.
+\end{laboratorio}
+
+\paragraph{Paso 1: la clave cegada.} Las bibliotecas criptográficas habituales permiten crear firmas Ed25519, pero no multiplicar el punto por el escalar para obtener $A'=h\cdot A$. Por ello el módulo incorpora unas treinta líneas de aritmética Ed25519 derivadas de RFC~8032, suficientes para esta finalidad, pero inadecuadas para uso general: son lentas y no tienen protección frente a ataques de tiempo.
+\begin{lstlisting}[language=Python]
+def blinding_factor(A, period, duration_minutes):
+    n = b"key-blind" + struct.pack(">QQ", period, duration_minutes)
+    h = bytearray(hashlib.sha3_256(
+        b"Derive temporary signing key\x00" + A + BASE_STR + n).digest())
+    h[0] &= 248; h[31] &= 63; h[31] |= 64
+    return int.from_bytes(h, "little")
+
+def blinded_key(A, period, duration_minutes):
+    return _encode_point(_multiply(blinding_factor(A, period, duration_minutes),
+                                   _decode_point(A)))
+\end{lstlisting}
+
+\paragraph{Paso 2: período y SRV.} La función \texttt{time\_period\_info} reproduce el cálculo de \texttt{tor} a partir de \texttt{valid-after} y del intervalo de votación del consenso, determinando si se necesita el SRV actual o el anterior. Si falta el necesario, utiliza el \emph{disaster SRV}.
+
+\paragraph{Paso 3: investigar un error.} En el primer intento, no encontramos el descriptor en ninguno de los ocho HSDir de la red. Como habíamos probado todos, la selección de HSDir no podía explicar el problema. Quedaban la clave cegada y la solicitud. Para distinguirlas, ordenamos al cliente real de la red que descargara el descriptor por el puerto de control (\texttt{HSFETCH} y luego \texttt{GETINFO hs/client/desc/id/...}). Leímos la clave cegada realmente utilizada por el servicio en el certificado obtenido: coincidía con la nuestra. El problema estaba, por tanto, en la solicitud, y el código de \texttt{tor} explicó por qué: los HSDir rechazan solicitudes de un salto. Con un circuito de tres saltos conseguimos el descriptor. Es un método general útil: cuando un experimento falla, busca un punto intermedio donde comparar tus resultados con una implementación de referencia.
+
+\paragraph{Paso 4: verificar y descifrar.} En el ejemplo, \texttt{path} representa una lista de tres objetos \texttt{RelayInfo} obtenidos de la red de laboratorio, con el HSDir como último repetidor; \texttt{A} es la clave de identidad y \texttt{Ap} su clave cegada. No se muestra cómo construir esos objetos.
+\begin{lstlisting}[language=Python]
+d = download_descriptor(Ap, path)
+desc = parse_descriptor(d, A, Ap)
+\end{lstlisting}
+
+\file{parse\_descriptor} verifica que el certificado de firma proceda de la clave cegada esperada, comprueba la firma del descriptor y descifra ambas capas. Resultado abreviado de una sesión de laboratorio anterior:
+\begin{lstlisting}[numbers=none]
+duración 180 revisión 662427 puntos de introducción 3
+create2-formats 2
+flow-control 1-2 31
+introduction-point AwAGfwAAARPyAhQXE5GoH+wp3MoxW9M1QV6XSxb0fgM...
+onion-key ntor yRURxDb2eeEmF/p5M/bmHA+giwVyxjApKYyNY1KkCDo=
+auth-key
+-----BEGIN ED25519 CERT-----
+...
+\end{lstlisting}
+La línea \texttt{flow-control 1-2 31} comunica que el servicio admite control de congestión con el mismo \file{sendme\_inc} de 31 observado en \cref{cap:11-stream}.
+
+\paragraph{Paso 5: comprobar la coherencia.} Hay ocho HSDir en el laboratorio y el servicio carga el descriptor en $2\times4=8$: todos ellos. Por tanto, encontrar el descriptor no demuestra que nuestro cálculo del anillo sea correcto. Sin embargo, el registro \file{info.log} del cliente indica qué HSDir contactó: \texttt{test002a}, a las 16:07. Es uno de los tres que nuestro código obtuvo para la réplica correspondiente en ese momento. Una observación no constituye una demostración, pero es coherente. El ejercicio~\ref{es:14-anello} propone una prueba más exigente.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item Un servicio onion ofrece un servicio sin revelar su dirección IP; su dirección \texttt{.onion} contiene y autentica la clave pública del servicio.
+  \item Los descriptores se firman con claves cegadas específicas de cada período, que solo quien conoce la dirección puede relacionar con el servicio.
+  \item Las posiciones de descriptores en el anillo HSDir dependen de la clave cegada, el período y el valor aleatorio compartido; los clientes los descargan mediante solicitudes anónimas.
+  \item El descriptor tiene una capa exterior firmada y dos cifradas; la segunda enumera puntos de introducción.
+  \item Cliente y servicio se encuentran en un punto elegido por el cliente, después de enviar una solicitud a un punto de introducción. El intercambio hs-ntor añade una capa de cifrado extremo a extremo.
+  \item El descubrimiento restringido, los vanguards, las cachés antirrepetición, los límites de frecuencia y la prueba de trabajo protegen los servicios.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:14-indirizzo}
+¿Cuántos bytes codifica una dirección v3 y por qué produce exactamente 56 caracteres base32? ¿Qué probabilidad tiene un error aleatorio de escritura de superar la comprobación de la suma de comprobación?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:14-periodo}
+Calcula el número de período de la red pública a las 09:00 UTC del 1 de enero de 2026. ¿Cuándo comenzó ese período?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:14-hsdir}
+Un adversario quiere bloquear un servicio onion asegurándose el control de sus HSDir responsables. ¿Qué debe predecir y con cuánta antelación puede hacerlo? ¿Qué papel cumple el SRV?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:14-ruoli}
+Enumera qué saben el punto de introducción, el punto de encuentro y el HSDir sobre cliente y servicio. ¿Qué función sería más interesante para un adversario que quisiera estimar la popularidad de un servicio?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:14-anonimo}
+¿Por qué rechaza el HSDir las solicitudes de descriptor que llegan por circuitos de un salto? ¿Qué podría conocer en caso contrario?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:14-anello}
+Comprueba el cálculo del anillo con mayor rigor. Añade repetidores a la red de laboratorio (ejercicio~\ref{es:19-rete}) hasta tener más de ocho HSDir y verifica que el descriptor esté disponible \emph{únicamente} en aquellos elegidos por el código.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:14-ipt}
+Descodifica los especificadores de enlace de un punto de introducción a partir del descriptor de laboratorio (valor base64 de una línea \texttt{introduction-point}). ¿De qué repetidor de laboratorio se trata? ¿Qué contiene el certificado de la línea \texttt{auth-key}?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item \titolo{Tor Rendezvous Specification - Version 3} (rend-spec)~\cite{torspec}: direcciones, claves cegadas, descriptores, introducción y encuentro, incluidos vectores de prueba de hs-ntor.
+  \item Propuesta 224: diseño de los servicios v3.
+  \item Especificación de aleatoriedad compartida (srv-spec): cómo producen las autoridades el SRV.
+\end{itemize}

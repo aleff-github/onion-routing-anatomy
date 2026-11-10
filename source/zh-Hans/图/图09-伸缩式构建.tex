@@ -1,0 +1,34 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 替代文本。
+\altfig{Tor 三跳电路的伸缩式构建图：四列分别为客户端、R1 守卫、R2 中间中继和 R3 出口中继。客户端先与 R1 交换 CREATE2/CREATED2，派生 K1；随后通过现有电路发送 EXTEND2，R1 处理请求并向 R2 发送 CREATE2，回复 CREATED2/EXTENDED2 使客户端派生 K2。第三跳的 EXTEND2 经过守卫抵达 R2，由 R2 处理并向 R3 发送 CREATE2，客户端根据回复派生 K3。每次握手都在客户端和目标中继间建立独立密钥；此前的中继处理自身的洋葱加密层后，转发前往后续跳点的消息。虚线表示经过中间中继的逻辑路径，而非客户端直接连接远端中继。每对相邻节点之间都有单独的 TLS 通道。}
+% 伸缩式电路构建
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  msg/.style={font=\ttfamily\scriptsize,fill=white,inner sep=1pt},
+  indietro/.style={-{Stealth[length=2.5mm]},thick,torverde!60!black},
+  circav/.style={cellaf,dashed},
+  circind/.style={indietro,dashed}]
+  \foreach \n/\x/\t in {c/0/客户端,r1/3.4/$R_1$ 守卫,r2/6.8/$R_2$ 中间中继,r3/10.2/$R_3$ 出口}
+    \node[font=\sffamily\small] (\n) at (\x,0) {\t};
+  \foreach \x in {0,3.4,6.8,10.2} \draw[torgrigio] (\x,-0.3) -- (\x,-5.5);
+  % 第一跳
+  \draw[cellaf] (0,-0.9) -- node[msg,above]{CREATE2} (3.4,-0.9);
+  \draw[indietro] (3.4,-1.5) -- node[msg,above]{CREATED2} (0,-1.5);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-1.2) {密钥 $K_1$};
+  % 第二跳
+  \draw[circav] (0,-2.5) -- node[msg,above]{EXTEND2} (3.4,-2.5);
+  \draw[cellaf] (3.4,-2.5) -- node[msg,above]{CREATE2} (6.8,-2.5);
+  \draw[indietro] (6.8,-3.1) -- node[msg,above]{CREATED2} (3.4,-3.1);
+  \draw[circind] (3.4,-3.1) -- node[msg,above]{EXTENDED2} (0,-3.1);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-2.8) {密钥 $K_2$};
+  % 第三跳
+  \draw[circav] (0,-4.2) -- node[msg,above]{EXTEND2} (6.8,-4.2);
+  \draw[cellaf] (6.8,-4.2) -- node[msg,above]{CREATE2} (10.2,-4.2);
+  \draw[indietro] (10.2,-4.8) -- node[msg,above]{CREATED2} (6.8,-4.8);
+  \draw[circind] (6.8,-4.8) -- node[msg,above]{EXTENDED2} (0,-4.8);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-4.5) {密钥 $K_3$};
+  % 相邻节点的 TLS 通道
+  \foreach \a/\b/\y in {0/3.4/-5.8,3.4/6.8/-5.8,6.8/10.2/-5.8}
+    \draw[thick,torgrigio!60,{Bar}-{Bar}] (\a,\y) -- node[below,font=\scriptsize]{TLS 通道} (\b,\y);
+  \node[font=\scriptsize,text=torgrigio,align=center] at (5.1,-6.6) {每次握手只发生在客户端与一个中继之间};
+\end{tikzpicture}

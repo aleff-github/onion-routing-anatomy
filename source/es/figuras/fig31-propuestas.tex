@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible utilizada en EPUB.
+\altfig{Esquema didáctico no exhaustivo de los estados de las propuestas Tor según la propuesta 001. Una ruta posible, no obligatoria, es Draft, Open, Accepted, Finished (implementada) y Closed (incorporada a las especificaciones). También aparecen Needs-Revision (requiere cambios), Needs-Research (investigación pendiente), Dead (inactiva pero recuperable), Rejected (rechazada tal como se formuló) e Informational (documento informativo final que no constituye por sí mismo una especificación normativa). Se omiten otros estados como Meta, Reserve y Obsolete. Los nombres ingleses son los identificadores oficiales.}
+% Ciclo de vida de las propuestas Tor (001-process)
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.55cm,
+  st/.style={draw=torviola,fill=torviola!8,rounded corners=2pt,minimum width=1.6cm,minimum height=0.6cm},
+  lat/.style={draw=torgrigio,fill=torgrigio!8,rounded corners=2pt,minimum width=1.6cm,minimum height=0.55cm}]
+  \node[st] (d) {Draft};
+  \node[st,right=of d] (o) {Open};
+  \node[st,right=of o] (a) {Accepted};
+  \node[st,right=of a] (f) {Finished};
+  \node[st,right=of f] (c) {Closed};
+  \node[above=0.25cm of a,text=torgrigio] {ruta posible, no obligatoria};
+  \draw[->] (d) -- (o); \draw[->] (o) -- (a); \draw[->] (a) -- (f); \draw[->] (f) -- node[above] {en la especificación } (c);
+  \node[lat,below=0.8cm of o,xshift=-1.2cm] (nr) {Needs-Revision};
+  \node[lat,right=0.3cm of nr] (ns) {Needs-Research};
+  \node[lat,right=0.3cm of ns] (dead) {Dead};
+  \node[lat,right=0.3cm of dead] (rej) {Rejected};
+  \node[below=0.22cm of ns,text=torgrigio,align=center] {otros estados, no una secuencia};
+  \node[lat,below=0.85cm of nr] (inf) {Informational};
+  \node[below=0.1cm of inf,text=torgrigio,align=center] {documento informativo\\no texto normativo};
+\end{tikzpicture}

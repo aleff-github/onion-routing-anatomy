@@ -1,0 +1,121 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Anonimato, sorveglianza e metadati}\label{cap:01-anonimato}
+\aggiornatoal{23 settembre 2026}{dati di Tor Metrics fino al 20/09/2026}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item distinguere riservatezza, anonimato, pseudonimia, non collegabilità e non osservabilità;
+  \item spiegare perché i metadati di una comunicazione rivelano quanto, e talvolta più, del contenuto;
+  \item descrivere che cos'è l'analisi del traffico e perché la cifratura da sola non la impedisce;
+  \item riconoscere chi usa Tor e perché la diversità degli utenti è essa stessa una protezione.
+\end{itemize}
+\end{obiettivi}
+
+Questo libro parla di un sistema costruito per proteggere un'informazione particolare: non \emph{che cosa} diciamo in rete, ma \emph{con chi} comunichiamo. Prima di vedere come funziona, conviene chiarire il problema che risolve, e perché è diverso da quello, più familiare, della cifratura.
+
+% ---------------------------------------------------------------------------
+\section{Contenuto e metadati}\label{sec:anon-metadati}
+
+Quando due computer comunicano su Internet, ogni pacchetto porta con sé due tipi di informazione. Il \textbf{contenuto} è ciò che le applicazioni si scambiano: il testo di un messaggio, la pagina di un sito. I \textbf{metadati} sono le informazioni \emph{sulla} comunicazione: chi la invia, a chi, quando, quanto spesso, quanti dati. Una parte dei metadati è indispensabile al funzionamento della rete, perché i router devono sapere dove recapitare i pacchetti: l'indirizzo IP del destinatario, e quello del mittente per la risposta, viaggiano in chiaro in ogni pacchetto.
+
+La cifratura, oggi diffusissima grazie a HTTPS, protegge il contenuto, ma lascia visibili i metadati. Chi osserva la rete, dal fornitore di connettività di un utente fino a chi controlla un grande nodo di interscambio, vede ancora che quell'utente si collega a un certo sito, a che ora, per quanto tempo e con quanto traffico.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig01-metadati}
+\caption{Che cosa vede chi osserva una connessione HTTPS. Il contenuto è cifrato, ma i metadati restano in chiaro: sono proprio questi che Tor cerca di proteggere.}
+\label{fig:metadati}
+\end{figure}
+
+\subsection{Che cosa rivelano i metadati}
+
+Si tende a considerare i metadati innocui: \enquote{sanno solo con chi parlo, non che cosa dico}. È un'impressione ingannevole. Qualche esempio basta a mostrarlo:
+\begin{itemize}
+  \item una persona che visita alle due di notte il sito di un centro antiviolenza, poi quello di un avvocato divorzista;
+  \item un giornalista che, nei giorni precedenti la pubblicazione di un'inchiesta, scambia messaggi con un dipendente del ministero di cui scrive;
+  \item un dipendente che si collega ogni settimana al sito di un sindacato, o di un'associazione di pazienti di una certa malattia.
+\end{itemize}
+In nessuno di questi casi serve leggere il contenuto per capire moltissimo. E i metadati hanno un vantaggio, per chi li raccoglie: sono strutturati, facili da conservare e da analizzare in massa, e si possono incrociare tra loro. Un ex direttore dell'NSA e della CIA statunitensi, il generale Michael Hayden, lo ha riassunto in una frase diventata celebre durante un dibattito alla Johns Hopkins University il 1º aprile 2014: \enquote{uccidiamo persone sulla base dei metadati} (trad. nostra), subito precisando però \enquote{ma non è questo che facciamo con questi metadati}~\cite{hayden2014metadata}. La precisazione non toglie nulla al punto: chi raccoglie metadati li considera sufficienti per decisioni di quel peso.
+
+% ---------------------------------------------------------------------------
+\section{L'analisi del traffico}\label{sec:anon-traffico}
+
+L'\textbf{analisi del traffico} è lo studio dei metadati di una comunicazione per ricavarne informazioni, senza bisogno di leggerne il contenuto. È antica quanto le telecomunicazioni: già nelle guerre del Novecento, osservare quante trasmissioni partivano da una stazione radio nemica, verso chi e con quale ritmo, permetteva di ricostruire l'organizzazione di un esercito anche senza decifrarne i messaggi.
+
+Su Internet l'analisi del traffico ha due forme principali:
+\begin{description}
+  \item[Analisi degli indirizzi] Chi osserva un collegamento vede gli indirizzi IP di mittente e destinatario. È la forma più semplice, e quella che Tor contrasta in modo diretto: nessun punto della rete vede entrambi.
+  \item[Analisi dei volumi e dei tempi] Anche senza vedere gli indirizzi completi, chi osserva i flussi di traffico può confrontarne le dimensioni e i tempi. Se un utente scarica 3\,MB alle 10:15:02 e, in un altro punto della rete, un server invia 3\,MB alle 10:15:02, è probabile che si tratti della stessa comunicazione. Questa \textbf{correlazione del traffico} è il limite principale di Tor, e la ritroveremo spesso (\cref{cap:04-modello-minaccia,cap:26-attacchi}).
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{Un vocabolario preciso}\label{sec:anon-termini}
+
+La parola \enquote{anonimato} viene usata con significati diversi, e le confusioni hanno portato, nella storia di questi sistemi, a errori di progettazione. La letteratura scientifica, in particolare il vocabolario proposto da Pfitzmann e Hansen~\cite{pfitzmann2010terminology}, distingue alcune nozioni:
+\begin{description}
+  \item[Riservatezza] Chi non è autorizzato non può leggere il contenuto. È ciò che offre la cifratura.
+  \item[Anonimato] Un soggetto non è identificabile all'interno di un insieme di soggetti, il suo \textbf{insieme di anonimato}. Non si è anonimi in assoluto, ma \enquote{tra} altri: più grande e più vario è l'insieme, maggiore è la protezione.
+  \item[Pseudonimia] Si agisce sotto un identificatore diverso dal proprio nome, che può essere stabile nel tempo. Un account con un nome di fantasia è uno pseudonimo, non una forma di anonimato: tutte le sue azioni sono collegabili tra loro.
+  \item[Non collegabilità] Un osservatore non riesce a stabilire se due elementi di interesse (due messaggi, un utente e un sito, due visite) sono legati tra loro. È la proprietà che Tor cerca di garantire tra un utente e le sue destinazioni.
+  \item[Non osservabilità] Un osservatore non riesce nemmeno a stabilire \emph{se} una comunicazione sta avvenendo. È una proprietà molto più forte, che Tor non offre: chi osserva l'utente vede che usa Tor, a meno di usare un pluggable transport (\cref{cap:16-censura}).
+\end{description}
+
+\begin{storia}[Separare l'identificazione dall'instradamento]
+I tre ricercatori del Naval Research Laboratory che inventarono l'onion routing nel 1995, David Goldschlag, Michael Reed e Paul Syverson, preferivano non parlare di anonimato. Il loro obiettivo, scrivevano già in un articolo del 1996 che Syverson riprende ricordando quegli anni, era \enquote{separare l'identificazione dall'instradamento}~\cite{syverson2011peel}: un utente può voler dimostrare la propria identità al sistema con cui parla, per esempio il computer del proprio ufficio, senza che tutti i punti intermedi della rete sappiano che qualcuno, da quel luogo, si sta collegando a quell'ufficio.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{Chi ha bisogno di anonimato}\label{sec:anon-utenti}
+
+Secondo le stime di Tor Metrics, nell'agosto e nel settembre 2026 si sono collegati ogni giorno alla rete Tor, senza usare bridge, tra 2,8 e 3,5 milioni di utenti, con una media di circa 3,2 milioni; dall'Italia, tra \num{44000} e \num{83000}, con una media di circa \num{60000} (stime con un ampio margine di incertezza, perché la rete non conta gli utenti, li stima; \cref{cap:24-metrics}). Chi sono? Le categorie sono molto diverse:
+\begin{itemize}
+  \item persone comuni che non vogliono essere tracciate da inserzionisti, fornitori di connettività o chi controlla la rete in cui si trovano;
+  \item giornalisti e le loro fonti, attivisti, difensori dei diritti umani, soprattutto in paesi con governi autoritari;
+  \item persone che vivono sotto censura e usano Tor per raggiungere siti bloccati (\cref{cap:16-censura});
+  \item vittime di violenza o di persecuzione che devono nascondere la propria posizione;
+  \item aziende che non vogliono rivelare ai concorrenti quali ricerche stanno facendo;
+  \item forze dell'ordine e militari, che devono poter visitare siti o raccogliere informazioni senza rivelare chi sono: l'onion routing è nato in un laboratorio della marina statunitense proprio per questo.
+\end{itemize}
+Una piccola parte degli utenti usa Tor per attività illegali, come accade per qualsiasi strumento di comunicazione. Il dibattito pubblico tende a concentrarsi su questa parte; noi lo affronteremo con i dati e con i casi concreti nella Parte~IV e nel \cref{cap:25-legale}.
+
+\subsection{L'anonimato ama la compagnia}
+
+C'è una ragione più profonda per cui la varietà degli utenti conta. Un sistema di anonimato usato solo da una categoria di persone, per esempio solo dai militari, non proteggerebbe nessuno: chi osserva un utente collegarsi alla rete saprebbe subito che è un militare, e chi osserva il traffico in uscita saprebbe che proviene dai militari. Syverson lo osserva per la rete che la marina statunitense avrebbe potuto costruire per sé: tutto ciò che ne usciva sarebbe stato riconoscibile come traffico della marina~\cite{syverson2011peel}. L'anonimato di ciascuno dipende da quanti e quanto diversi sono gli altri utenti: la frase che riassume questa idea, titolo di un articolo di Dingledine e Mathewson, è \enquote{l'anonimato ama la compagnia}~\cite{dingledine2006company}. Per questo Tor è progettato per essere usabile da chiunque, gratuito e aperto: più persone lo usano, meglio protegge tutti.
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item La cifratura protegge il contenuto; i metadati (chi, con chi, quando, quanto) restano visibili e rivelano moltissimo.
+  \item L'analisi del traffico ricava informazioni dagli indirizzi, dai volumi e dai tempi delle comunicazioni.
+  \item Anonimato significa non essere identificabili in un insieme; va distinto da pseudonimia, non collegabilità e non osservabilità.
+  \item Tor serve a milioni di utenti molto diversi, e la loro diversità è parte della protezione.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:01-metadati}
+Elenca i metadati che un fornitore di connettività può osservare quando un suo cliente legge un articolo su un sito di notizie in HTTPS. Quali restano visibili se il cliente usa una VPN? E se usa Tor?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:01-termini}
+Classifica come anonimato, pseudonimia o nessuno dei due: un account social con un nome di fantasia; un messaggio lasciato in una bacheca pubblica senza firma; una lettera firmata con le iniziali; una donazione in contanti in una cassetta.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:01-insieme}
+Un sito vede arrivare, in un'ora, visite da 50 utenti Tor diversi. Uno di essi scrive un commento con un errore di ortografia tipico di chi parla italiano, e il commento è pubblicato alle 3:00 ora italiana. Come cambia l'insieme di anonimato di quell'utente? Che cosa insegna l'esempio sul ruolo del comportamento dell'utente?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:01-vpn}
+Confronta una VPN commerciale e Tor rispetto a chi può collegare l'utente alle sue destinazioni. Dove si concentra la fiducia in ciascun caso?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item A.~Pfitzmann, M.~Hansen, \titolo{A terminology for talking about privacy by data minimization}~\cite{pfitzmann2010terminology}: il vocabolario di riferimento.
+  \item P.~Syverson, \titolo{A Peel of Onion}~\cite{syverson2011peel}: la storia dell'onion routing raccontata da uno dei suoi inventori.
+  \item Tor Metrics, \url{https://metrics.torproject.org/}: le stime degli utenti per paese.
+\end{itemize}

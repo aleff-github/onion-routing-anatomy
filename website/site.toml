@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Alessandro Greco
+#
+# Configurazione del sito (scripts/build_site.py). Le pagine si generano in build/site/.
+
+# Indirizzo previsto del sito su GitHub Pages (sito di progetto). NON e' ancora attivo:
+# canonical, hreflang, Open Graph e sitemap lo usano, quindi va verificato con
+# `make site-check-online` subito dopo l'attivazione. Con un dominio personalizzato,
+# cambiare base_url (e base_path = "/") e rigenerare il sito.
+base_url  = "https://aleff-github.github.io/onion-routing-anatomy/"
+base_path = "/onion-routing-anatomy/"
+
+repo   = "https://github.com/aleff-github/onion-routing-anatomy"
+branch = "main"
+
+# Lingue del sito, nell'ordine del selettore. La prima e' quella di riserva (x-default
+# delle pagine interne); la radice del sito e' una pagina di scelta della lingua.
+languages = ["en", "it", "es", "ru", "zh-Hans"]
+
+[edition]
+version  = "1.0.0"
+language = "it"
+tor      = "0.4.9.13"
+arti     = "2.6.0"
+pages_a4 = 298
+pages_7x10 = 342
+
+[release]
+tag = "v1.0.0-it"
+# false: collegamenti diretti ai file della repository, senza dichiarazioni pubbliche
+# sullo stato della release. true: collegamenti a una release GitHub esistente.
+# Il cambio di questo flag non pubblica ne' il repository ne' il sito.
+published = false
+pdf  = "anatomia-di-tor_it_A4.pdf"
+epub = "anatomia-di-tor_it.epub"
+print = "anatomia-di-tor_it_7x10.pdf"

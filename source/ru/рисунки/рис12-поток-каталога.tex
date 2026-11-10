@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Упрощённая схема каталогов Tor: ретрансляторы загружают дескрипторы известным центрам каталога; обновление обычно происходит примерно через 18 часов либо раньше при существенных изменениях. Стрелка к одному центру условна. Три значка обозначают центры каталога: они обмениваются голосами, вычисляют консенсус на основе доступных голосов и обмениваются подписями; при недостающих или разных голосах результаты могут расходиться. Каталожные кеши отдают консенсус микродескрипторов и сами микродескрипторы. Клиент проверяет подписи более половины доверенных центров и запрашивает недостающие микродескрипторы по хешу. Обычно новый консенсус публикуется каждый час.}
+% Поток документов каталога.
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  aut/.style={relay,fill=torviola!15,draw=torviola,minimum size=1cm,font=\sffamily\scriptsize},
+  doc/.style={font=\sffamily\scriptsize,fill=white,inner sep=1pt,align=center}]
+  \node[aut] (a1) at (0,2.2) {центр 1};
+  \node[aut] (a2) at (1.8,3.2) {центр 2};
+  \node[aut] (a3) at (3.6,2.2) {центр 3};
+  \draw[<->,thick,torviola!70] (a1) -- (a2); \draw[<->,thick,torviola!70] (a2) -- (a3); \draw[<->,thick,torviola!70] (a1) -- (a3);
+  \node[doc,text=torviola] at (1.8,1.75) {голоса и подписи};
+  \node[relay] (r) at (-3.2,2.2) {ретранслятор};
+  \draw[cellaf] (r) -- node[doc,above]{дескриптор\\(обычно 18 ч)} (a1);
+  \node[relay,fill=torgrigio!10,draw=torgrigio] (c) at (1.8,-0.4) {\scriptsize кеш};
+  \draw[risposta] (a1) -- node[doc,left=2pt]{консенсус,\\микродескрипторы} (c);
+  \draw[risposta] (a3) -- (c);
+  \node[client] (cl) at (6.2,-0.4) {Клиент};
+  \draw[risposta] (c) -- node[doc,above]{консенсус microdesc\\(примерно раз в час)} (cl);
+  \draw[risposta] (c) to[bend right=25] node[doc,below]{недостающие микродескрипторы, по хешу} (cl);
+  \node[font=\sffamily\scriptsize,text=torgrigio,align=center] at (6.2,2.6) {проверка: подписи\\более половины доверенных центров};
+  \draw[dotted,torgrigio] (6.2,2.2) -- (cl);
+\end{tikzpicture}

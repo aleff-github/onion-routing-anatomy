@@ -1,0 +1,101 @@
+# --- Build LaTeX (i file pubblicati sono in book/<lingua>/) ---------------------
+source/*/*.aux
+source/*/**/*.aux
+source/*/*.log
+source/*/*.fls
+source/*/*.fdb_latexmk
+source/*/*.bbl
+source/*/*.bcf
+source/*/*.blg
+source/*/*.run.xml
+source/*/*.toc
+source/*/*.out
+source/*/*.idx
+source/*/*.ilg
+source/*/*.ind
+source/*/*.xmpi
+source/*/*-SAVE-ERROR
+source/*/*.pdf
+source/*/*.png
+source/*/*.jpg
+source/*/*.svg
+source/*/*.dvi
+source/*/solo.tex
+source/*/main.txt
+# EPUB (generati da tex4ebook; sorgenti: source/<lingua>/epub.tex ed epub.mk4)
+source/*/epub*.html
+source/*/epub*.xhtml
+source/*/epub*.css
+source/*/epub*.epub
+source/*/epub*.4ct
+source/*/epub*.4tc
+source/*/epub*.idv
+source/*/epub*.lg
+source/*/epub*.tmp
+source/*/epub*.xref
+source/*/epub*.dvi
+source/*/epub*.ncx
+source/*/content.opf
+source/*/epub-epub/
+source/*/epub-epub3/
+
+# --- Sito generato (make site) ----------------------------------------------------
+build/
+
+# --- Pacchetti di release (si rigenerano con make release-package) -------------
+dist/
+
+# --- Laboratori -----------------------------------------------------------------
+# Snapshot pubblici CollecTor scaricati su richiesta
+labs/*/data/collector/
+labs/*/dati/collector/
+labs/*/datos/collector/
+labs/*/данные/collector/
+labs/*/数据/collector/
+# Sorgenti di terze parti scaricati per i laboratori (es. Arti)
+labs/*/vendor/
+# Le reti Chutney generano certificati, chiavi e identità private dei nodi:
+# non vanno MAI in git.
+# Regola generale per la cartella del laboratorio di ogni edizione, qualunque nome abbia:
+labs/*/*/net/
+labs/*/*/net-*/
+labs/*/lab/net/
+labs/*/laboratorio/net/
+labs/*/лаборатория/net/
+labs/*/实验室/net/
+labs/*/lab/net-*/
+labs/*/laboratorio/net-*/
+labs/*/лаборатория/net-*/
+labs/*/实验室/net-*/
+labs/*/lab/esito-bridge
+labs/*/laboratorio/esito-bridge
+labs/*/лаборатория/esito-bridge
+labs/*/实验室/esito-bridge
+labs/*/lab/esito-bridge/
+labs/*/laboratorio/esito-bridge/
+labs/*/лаборатория/esito-bridge/
+labs/*/实验室/esito-bridge/
+labs/*/lab/verifica-bridge.stato
+labs/*/laboratorio/verifica-bridge.stato
+labs/*/лаборатория/verifica-bridge.stato
+labs/*/实验室/verifica-bridge.stato
+labs/*/lab/verifica-bridge.stato.tmp
+labs/*/laboratorio/verifica-bridge.stato.tmp
+labs/*/лаборатория/verifica-bridge.stato.tmp
+labs/*/实验室/verifica-bridge.stato.tmp
+# Catture di traffico del Laboratorio 10: da rivedere prima di qualunque pubblicazione
+labs/*/lab/catture/
+labs/*/laboratorio/catture/
+labs/*/лаборатория/catture/
+labs/*/实验室/catture/
+*.pcap
+*.pcapng
+
+# --- Ambienti locali --------------------------------------------------------------
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+.env
+# Sorgenti esterni facoltativi per make fonti / make originalita (torspec, tor, Arti)
+fonti/

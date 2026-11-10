@@ -1,0 +1,37 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Confronto fra tre architetture. (a) Tor Browser instrada attraverso il proprio processo tor solo il traffico del browser: le altre applicazioni del sistema non sono automaticamente protette e possono connettersi direttamente. Il riquadro tratteggiato comprende soltanto Tor Browser e tor. (b) Tails è un sistema live da USB, normalmente in RAM, con regole firewall che bloccano le connessioni applicative dirette e impongono il passaggio per tor; esistono eccezioni intenzionali, come Unsafe Browser per autenticarsi a captive portal, che non usa Tor. (c) Whonix separa una Workstation con le applicazioni da una Gateway con tor mediante una rete virtuale interna isolata. La separazione non rende sicuro un host o hypervisor compromesso.}
+% Confronto schematico: browser, sistema live con firewall, due VM
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  box/.style={draw,rounded corners=2pt,align=center,minimum width=2.2cm,minimum height=0.7cm},
+  conf/.style={draw=torviola,dashed,rounded corners=4pt,inner sep=5pt}]
+  % Tor Browser
+  \node[box] (tb) at (0,1.6) {Tor Browser};
+  \node[box,fill=torviola!15] (t1) at (0,0.4) {tor};
+  \node[box,fill=torgrigio!15] (a1) at (0,-0.8) {altre applicazioni};
+  \draw[->] (tb) -- node[right] {SOCKS} (t1);
+  \draw[->,avviso] (a1.east) -- ++(0.7,0) node[right,align=left] {rete\\diretta possibile};
+  \node[conf,fit=(tb)(t1)] (s1) {};
+  \node[above=2pt of s1] {\small (a) solo traffico del browser};
+  % Tails
+  \begin{scope}[xshift=4.4cm]
+  \node[box] (tb2) at (0,1.6) {applicazioni};
+  \node[box,fill=torviola!15] (t2) at (0,-0.8) {tor};
+  \node[box,fill=avviso!10] (fw) at (0,0.4) {firewall: blocca bypass};
+  \draw[->] (tb2) -- (fw);
+  \draw[->] (fw) -- (t2);
+  \node[conf,fit=(tb2)(fw)] (s2) {};
+  \node[above=2pt of s2] {\small (b) Tails: USB live, RAM};
+  \end{scope}
+  % Whonix
+  \begin{scope}[xshift=8.8cm]
+  \node[box] (ws) at (0,1.6) {Workstation\\(applicazioni)};
+  \node[box,fill=torviola!15] (gw) at (0,-0.8) {Gateway\\(tor)};
+  \draw[->] (ws) -- node[right,align=left] {rete virtuale\\interna isolata} (gw);
+  \node[conf,fit=(ws)] {};
+  \node[conf,fit=(gw)] {};
+  \node[above=12pt of ws] {\small (c) Whonix: due VM};
+  \end{scope}
+  \foreach \n in {t1,t2,gw} \draw[->,thick,torverde!60!black] (\n.south) -- ++(0,-0.5) node[below] {rete Tor};
+\end{tikzpicture}

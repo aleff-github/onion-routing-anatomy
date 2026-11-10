@@ -1,0 +1,103 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Capítulo \ref{cap:28-opsec}: errores de seguridad operativa}
+
+\begin{soluzione}{es:28-livello}
+El tráfico que elude Tor, los documentos abiertos mientras hay conexión y las filtraciones DNS pertenecen a la capa de aplicación; entre las defensas figuran Tor Browser, Tails o Whonix, \opt{SafeSocks} y abrir archivos sin conexión. Los metadatos, el inicio de sesión en cuentas y la mezcla de identidades pertenecen a la capa de contenido: utiliza herramientas de eliminación de metadatos y sesiones separadas. El estilo de escritura, las horas de publicación y el uso de Tor en un conjunto de anonimato pequeño pertenecen a la capa de comportamiento: presta atención a los hábitos, los puentes y cuándo publicar.
+\end{soluzione}
+
+\begin{soluzione}{es:28-dns}
+Una solicitud DNS local viaja desde el equipo del usuario hasta el resolvedor del sistema, normalmente administrado por el proveedor de conectividad, e incluye el dominio del sitio web. Ese proveedor y cualquiera que observe la ruta al resolvedor pueden conocer qué sitio pretende visitar el usuario, aunque la conexión posterior utilice Tor.
+\end{soluzione}
+
+\begin{soluzione}{es:28-evento}
+Suscríbete a \texttt{EventType.STATUS\_CLIENT} mediante Stem. Una solicitud que solo contenga una IP genera un evento de gravedad \texttt{WARN}, con acción \texttt{DANGEROUS\_SOCKS} y argumentos \texttt{PROTOCOL} y \texttt{ADDRESS}. Una interfaz gráfica podría identificar la aplicación y el destino en una advertencia y explicar que es necesario corregir la configuración SOCKS de la aplicación.
+\end{soluzione}
+
+\begin{soluzione}{es:28-insieme}
+Con obfs4, un observador local vería una conexión cifrada aparentemente sin estructura a una dirección de apariencia ordinaria y no podría establecer con certeza que era tráfico Tor. Persisten otros indicios: volumen de la conexión, momentos, duración inusual, conexiones semejantes y contenido de los mensajes o posibles motivos, que podrían reducir el conjunto de candidatos a las personas que se esperaba que hicieran aquel examen.
+\end{soluzione}
+
+\begin{soluzione}{es:28-modello}
+Es un ejercicio abierto. Una buena respuesta sigue la estructura de \cref{cap:04-modello-minaccia}: adversarios y capacidades, qué puede observar cada uno en las capas de \cref{fig:livelli}, protecciones elegidas y su justificación y lista explícita de riesgos residuales, como correlación por un adversario que observe ambos extremos o incautación de los dispositivos del usuario.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:29-ricerca}: investigación académica sobre Tor}
+
+\begin{soluzione}{es:29-entropia}
+$H=\tfrac12\cdot1+\tfrac14\cdot2+2\cdot\tfrac18\cdot3=1{,}75$ bits. $H_M=\log_2 4=2$ bits, así que $d=0{,}875$. El número equivalente de usuarios equiprobables es $2^{1{,}75}\approx3{,}4$.
+\end{soluzione}
+
+\begin{soluzione}{es:29-metodo}
+(a) Simular una red con Shadow o emularla a escala pequeña mediante Chutney: se necesita el comportamiento real de tor, pero no implicar a usuarios reales. (b) Medir la red real mediante datos agregados públicos, como hace Tor Metrics (\cref{sec:metrics-utenti}). (c) Emplear una simulación de comportamiento como TorPS con consensos reales que abarquen un período largo, posiblemente acompañada de análisis teórico.
+\end{soluzione}
+
+\begin{soluzione}{es:29-durata}
+Con \texttt{guard\_lifetime} de 30 días, que produce una duración efectiva de 18--30 días tras retrotraer la fecha, un cliente elige guardias unas siete u ocho veces en 180 días y la simulación produce un 32,1\% de compromiso. Con los 60 días predeterminados, una duración efectiva de 48--60 días produce unas tres selecciones y el 18,4\%. Con 180 días de duración, una o dos selecciones producen el 8,6\%. Aproximadamente, con $k$ selecciones independientes de guardia la proporción comprometida se acerca a $1-(1-q)^k$, donde $q=5\%$; $k\approx7{,}5$ da alrededor del 31\%, coherente con la simulación de 30 días. Duraciones mayores implican menos selecciones y exponen a menos clientes nuevos, pero quienes seleccionaron un guardia malicioso siguen expuestos durante más tiempo.
+\end{soluzione}
+
+\begin{soluzione}{es:29-asimmetria}
+Ninguno de los dos adversarios compromete clientes según el criterio del laboratorio, que exige observar ambos extremos. No obstante, sus observaciones son distintas: una salida maliciosa ve los destinos y cualquier tráfico de aplicación que permanezca sin cifrar, pero no las identidades de los clientes. Un guardia malicioso ve las IP de los clientes que lo seleccionaron, pero no sus destinos, y podría intentar identificar sitios web mediante sus patrones de tráfico (\cref{sec:att-wf}).
+\end{soluzione}
+
+\begin{soluzione}{es:29-torps}
+Es un ejercicio de investigación. Reutilizar circuitos disminuye la cantidad diaria de nuevas selecciones y ralentiza la curva de compromiso sin guardias persistentes. La restricción /16 influye poco salvo que los repetidores adversarios estén concentrados en una misma red. Un adversario que controle un sistema autónomo cambia el modelo de manera más fundamental porque observa tráfico sin administrar repetidores, lo que requiere datos de topología de Internet como los de \cite{johnson2013users}.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:30-arti}: Arti}
+
+\begin{soluzione}{es:30-crate}
+Capítulo~5: \texttt{tor-llcrypto}. Capítulo~7: \texttt{tor-proto} para canales y \texttt{tor-chanmgr}. Capítulo~8: \texttt{tor-cell}. Capítulos~9--11: \texttt{tor-proto} para circuitos, cifrado, flujos y control de flujo. Capítulo~12: \texttt{tor-netdoc}, \texttt{tor-dirmgr} y \texttt{tor-dirclient}. Capítulo~13: \texttt{tor-circmgr}, \texttt{tor-guardmgr} y \texttt{tor-relay-selection}. Capítulo~14: \texttt{tor-hsclient}, \texttt{tor-hsservice} y \texttt{tor-hscrypto}. Capítulo~15: \texttt{equix} y \texttt{hashx} para pruebas de trabajo. Capítulo~16: \texttt{tor-ptmgr}.
+\end{soluzione}
+
+\begin{soluzione}{es:30-obsoleto}
+Ventajas: menos código, menor superficie de ataque, ausencia de casos especiales como CircID de dos bytes y ninguna criptografía débil obsoleta que mantener. Inconvenientes: Arti no puede comunicarse con repetidores muy antiguos. No obstante, la red pública Tor ya excluye versiones no recomendadas, por lo que el efecto práctico concierne sobre todo a redes privadas e instalaciones desactualizadas.
+\end{soluzione}
+
+\begin{soluzione}{es:30-cella}
+\texttt{decode\_cell} lee el comando del quinto byte y lo utiliza para determinar si la celda tiene longitud variable. En ese caso, los dos bytes siguientes indican la longitud y el tamaño total es $7+$ el valor declarado; de lo contrario, el tamaño es 514 bytes. Si todavía no han llegado suficientes datos, devuelve \texttt{Ok(None)} en vez de considerar la celda incompleta un error. El llamante vuelve a intentarlo cuando dispone de más bytes. Es el mismo comportamiento necesario para un decodificador de flujos como el del laboratorio~2.
+\end{soluzione}
+
+\begin{soluzione}{es:30-isolamento}
+Sí. El proxy SOCKS de Arti aísla por defecto los flujos con credenciales SOCKS diferentes y separa también los distintos puertos de escucha. Observa los circuitos desde el lado de los repetidores, por ejemplo mediante el ControlPort de una salida, o en los registros debug de Arti. Si se utiliza Arti como biblioteca, se ofrece aislamiento explícito mediante \texttt{TorClient::isolated\_client} o tokens de aislamiento de \texttt{StreamPrefs}. En Arti 2.6.0, \file{cfg.rs} todavía documenta como trabajo futuro la configuración equivalente por puerto.
+\end{soluzione}
+
+\begin{soluzione}{es:30-libreria}
+Es un ejercicio de programación. Carga el archivo TOML del laboratorio en un \texttt{TorClientConfig}, inicia el cliente con \texttt{TorClient::create\_bootstrapped} y abre un flujo con \texttt{connect(("127.0.0.1", 8080))}. Envía una solicitud HTTP por ese flujo. La configuración debe permitir direcciones locales, como el archivo generado por el laboratorio~20.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:31-futuro}: problemas abiertos}
+
+\begin{soluzione}{es:31-stato}
+Ejemplos en la fecha de referencia del capítulo: \proposta{332}, sobre ntor-v3, está \emph{Closed}, es decir, implementada e incorporada a las especificaciones. \proposta{324}, sobre control de congestión, está \emph{Finished}, implementada pero pendiente de integrar completamente su texto en las especificaciones. \proposta{359}, sobre CGO, está \emph{Open}: ya presente en el código, pero su propuesta continúa en discusión. Comprueba las cabeceras de cada propuesta y el índice de estados del repositorio para obtener actualizaciones.
+\end{soluzione}
+
+\begin{soluzione}{es:31-celle}
+Con el formato tradicional, el cálculo sencillo de tamaños requiere $\lceil1184/498\rceil=3$ celdas para la clave pública ML-KEM-768 de 1184 bytes y $\lceil1088/498\rceil=3$ más para el texto cifrado de 1088 bytes: seis en total. No obstante, el protocolo actual ni siquiera permite fragmentar de esa forma un mensaje relay individual. \proposta{340} proporciona el encuadre necesario, permitiendo que un mensaje abarque varias celdas y que varios mensajes compartan una celda. Su cuerpo propuesto de celda relay es de 493 bytes, no 498, porque el formato nuevo reserva 16 bytes para autenticación, $509-16=493$, como explicamos en \cref{cap:08-celle}. El primer fragmento de un mensaje transporta como máximo 490 bytes útiles porque incluye una cabecera de encuadre. La propuesta mantiene actualmente un límite de 493 bytes para cuerpos ordinarios, así que transportar un \texttt{EXTEND2} poscuántico mayor exigirá además una versión nueva del subprotocolo \texttt{Relay} que amplíe ese límite. Incluso con esa extensión, la clave pública sigue ocupando tres celdas y el texto cifrado otras tres. Como viajan en \emph{direcciones opuestas}, del cliente al repetidor y de vuelta, no pueden empaquetarse juntos. El total sigue siendo seis celdas.
+\end{soluzione}
+
+\begin{soluzione}{es:31-epistemico}
+Si cada cliente descargara un subconjunto distinto de repetidores, un adversario que conociera o influyera en el conjunto de cierto cliente podría reconocer sus circuitos. Utilizar repetidores disponibles solo para ese cliente revelaría quién construyó el circuito. Incluso sin conocer previamente el subconjunto, observar los repetidores que utiliza a lo largo del tiempo puede reducir progresivamente el número de clientes posibles.
+\end{soluzione}
+
+\begin{soluzione}{es:31-conflux}
+Filtra circuitos con propósito \texttt{CONFLUX\_LINKED} y agrúpalos por \texttt{CONFLUX\_ID} (\cref{cap:18-stem}); compara después las rutas de cada pareja. Ambas ramas terminan siempre en la misma salida, como cabía esperar. En la red de laboratorio suelen compartir también otros repetidores. Por ejemplo, \texttt{[test007e, test003r, test006e]} y \texttt{[test003r, test007e, test006e]} utilizan exactamente los mismos nodos en otro orden. No es un defecto de tor. La red privada tiene pocos repetidores elegibles y \proposta{329} formula su recomendación como \texttt{SHOULD NOT}, no una prohibición absoluta. Compartir así los nodos es mucho menos frecuente en la red pública con miles de repetidores.
+\end{soluzione}
+
+\begin{soluzione}{es:31-proposta}
+Es un ejercicio abierto. El formato de referencia está en \proposta{001}: una cabecera con número, título, autor, fecha y estado, seguida de motivación, diseño, análisis de seguridad y compatibilidad, plan de implementación y plan de despliegue.
+\end{soluzione}
+
+\section*{Apéndice \ref{cap:B-crittografia}: criptografía complementaria}
+
+\begin{soluzione}{es:B-bit}
+De los 256 bits, cinco tienen valor fijo: los tres inferiores, el más alto y el inmediatamente inferior. Quedan $2^{251}$ valores diferentes frente a $2^{256}$ antes del ajuste. Esto no debilita el esquema: el nivel de seguridad de la curva es aproximadamente de 128 bits en cualquier caso.
+\end{soluzione}
+
+\begin{soluzione}{es:B-inversa}
+De $y=(u-1)/(u+1)$ se deduce $u=(1+y)/(1-y)\bmod p$. En Python, lee $y$ de los 32 bytes little-endian después de borrar el bit de signo, calcula \texttt{(1 + y) * pow(1 - y, P - 2, P) \% P} y codifica el resultado en 32 bytes little-endian. Aplicar \texttt{montgomery\_to\_edwards} con el bit de signo original de $x$ recupera la clave Edwards inicial (para $y \neq 1$).
+\end{soluzione}
+
+\begin{soluzione}{es:B-digest}
+Una celda modificada aleatoriamente supera ambas comprobaciones con probabilidad aproximada $2^{-16}\cdot2^{-32}=2^{-48}$: dos bytes de \texttt{recognized} a cero y cuatro bytes correctos de resumen. Pero el ataque de marcado no exige que la celda alterada sea \emph{aceptada}. Un cómplice adversario que la observe, o el extremo que la rechaza, puede reconocer la modificación por sus efectos, como el cierre del circuito o contenidos predecibles. Esa observación puede bastar para vincular dos puntos del circuito.
+\end{soluzione}

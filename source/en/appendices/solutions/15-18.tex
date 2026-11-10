@@ -1,0 +1,89 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Chapter \ref{cap:15-dos}: Defenses Against DoS}
+
+\begin{soluzione}{es:15-bucket}
+During the first minute, the full bucket provides 60 tokens and refilling adds $2 \times 60 = 120$, giving approximately 180 circuits, perhaps slightly fewer because the client is marked as soon as its bucket reaches zero. Over an hour, at the sustained rate, the total is approximately $60 + 2 \times 3600 = 7260$. A normal client creates only a few dozen circuits.
+\end{soluzione}
+
+\begin{soluzione}{es:15-guard}
+Only the first relay knows the client's real IP address. At later hops, the channel's apparent \enquote{address} belongs to the preceding relay. A middle relay limiting circuits per address would actually limit all circuits from a particular guard, which may carry traffic for thousands of users. It would harm everyone rather than specifically restricting the attacker. That is why per-address limits apply only to unauthenticated client connections.
+\end{soluzione}
+
+\begin{soluzione}{es:15-amplificazione}
+The client sends an \texttt{INTRODUCE1} message over a circuit that it can reuse. The service must decrypt the request, perform an hs-ntor handshake, and establish a fresh circuit of at least three hops to the rendezvous point. That involves multiple ntor handshakes with relays plus the cells required to create and extend each hop. One client cell can therefore trigger several public-key operations and dozens of network cells: amplification by one or two orders of magnitude.
+\end{soluzione}
+
+\begin{soluzione}{es:15-bit}
+Requiring $k$ leading zero bits permits only effort levels that are powers of two: 1, 2, 4, and so on. Each additional bit doubles the expected computational cost. The linear test instead permits any integer effort $E$. A feedback controller adjusting effort in small increments needs this finer scale. With doubling steps, it would tend to oscillate between an effort that is too low and one that is too high.
+\end{soluzione}
+
+\begin{soluzione}{es:15-sforzo}
+No. Effort $E$ is part of the challenge used to compute both the Equi-X solution and hash $R$. Changing the claimed value to $E = 5000$ changes the challenge, invalidating the solution found for $E = 50$. The client would have needed to select $E = 5000$ before starting its search.
+\end{soluzione}
+
+\begin{soluzione}{es:15-oom}
+This is a laboratory exercise. Cells accumulate in the middle relay's circuit queue until their total memory use exceeds \opt{MaxMemInQueues}. The memory manager then closes the circuits with the oldest queued data, including ours, and records the quantity of memory freed in the relay's log.
+\end{soluzione}
+
+\begin{soluzione}{es:15-coda}
+This is a programming exercise. Requests offering greater effort are expected to have short, stable waiting times. Zero-effort requests should be served mainly when the queue is almost empty or be discarded when the queue is trimmed. This is the intended behavior: protecting users willing to pay a modest computational cost.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:16-censura}: Censorship, Bridges, and Pluggable Transports}
+
+\begin{soluzione}{es:16-guard}
+A bridge serves the same role as a guard, the first hop of a circuit, but it is absent from the public consensus. A client learns its address from a privately obtained bridge line. With \opt{UseBridges}, clients use bridges \emph{instead of} public guards. Adding a public guard would require connecting directly to a published address, exactly what a censor blocks or monitors.
+\end{soluzione}
+
+\begin{soluzione}{es:16-strategie}
+\enquote{Look like nothing recognizable}: obfs4, whose suppression would require blocking traffic that cannot be identified as a permitted protocol. \enquote{Look like something permitted}: meek, requiring blocking a major content-distribution provider; Snowflake, requiring interference with WebRTC, its broker, and many volunteer proxies; WebTunnel, requiring blocking HTTPS to unfamiliar sites or the sites hosting the bridges; and Conjure, requiring blocking broad address ranges of cooperating connectivity providers.
+\end{soluzione}
+
+\begin{soluzione}{es:16-sondaggio}
+A censor could examine long-lived connections to addresses without associated hostnames, unusually high-entropy bytes from the first packet, recognizable size and timing distributions such as bursts associated with Tor cells, and upload/download ratios resembling web browsing. \texttt{iat-mode} introduces randomized delays and fragmentation to make timing and size signatures harder to recognize, at a performance cost.
+\end{soluzione}
+
+\begin{soluzione}{es:16-lox}
+A censor that blocks every bridge it receives cannot gain reputation: blocked bridges prevent its credentials from advancing to higher levels or gaining invitation privileges. It could instead leave bridges unblocked until accumulating enough high-level credentials and then block them together. That strategy requires maintaining many patient identities for months, while the discovered bridges continue helping legitimate users. Each high-level credential also grants access to only a limited number of bridges.
+\end{soluzione}
+
+\begin{soluzione}{es:16-entropia}
+Both captures should have entropy close to eight bits per byte: after its handshake, TLS also carries encrypted data. The difference lies in a few recognizable bytes, such as TLS record headers (\texttt{16 03 01}, \texttt{17 03 03}, followed by the length) and the initial unencrypted handshake. Deep-packet inspection can recognize these without needing statistical entropy tests.
+\end{soluzione}
+
+\begin{soluzione}{es:16-sondaggio-lab}
+Laboratory~1 times out (\texttt{TimeoutError}) because the bridge does not reply. Using an incorrect \texttt{cert} parameter makes client-side \cmd{obfs4proxy} fail the handshake. The bridge cannot recognize the client's authentication mark, so it does not answer and closes the connection after a delay. Depending on logging verbosity, its logs may contain only a failed-handshake message, or nothing relevant.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:17-torrc}: Installation and torrc}
+
+\begin{soluzione}{es:17-verifica}
+tor reports the unrecognized option using a message such as \texttt{Unknown option '...'. Failing.} and exits without starting. Running \texttt{--dump-config short} on the client's \file{torrc} shows only values differing from defaults, including laboratory-specific settings such as \opt{TestingTorNetwork}, the \opt{DirAuthority} entries, and listening ports.
+\end{soluzione}
+
+\begin{soluzione}{es:17-isolamento}
+If email and forum traffic share a circuit, the exit sees connections to the user's email provider, potentially identifying them, and the pseudonymous forum from the same circuit around the same time. It may link the pseudonym to the person. Solutions include two separate SOCKS ports, one per application, which are isolated by default unless assigned the same \opt{SessionGroup}; different SOCKS credentials with \texttt{IsolateSOCKSAuth}; or \texttt{IsolateDestAddr} on their shared port.
+\end{soluzione}
+
+\begin{soluzione}{es:17-exitnodes}
+An adversary monitoring Italian networks could see both the user entering Tor and an Italian exit connecting to the Italian destination. Both ends would be in the same jurisdiction or observable network region, enabling the type of correlation excluded from Tor's threat model. Italian exits are also relatively few, and restricting selection makes the user more distinguishable and easier to target with malicious relays.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:18-stem}: Control Port and Stem}
+
+\begin{soluzione}{es:18-codici}
+\texttt{552} is a permanent error in response to a command: the key \texttt{pippo} does not exist. By contrast, a \texttt{650} message is not a command response but an asynchronous event sent because a client subscribed with \texttt{SETEVENTS}. It may arrive at any time, including while another command's response is pending.
+\end{soluzione}
+
+\begin{soluzione}{es:18-onion}
+Outline: call the controller's \file{create\_ephemeral\_hidden\_service}, mapping virtual port 80 to local port 8080 and supplying \file{await\_publication}. The method returns the onion address. Access it using \texttt{curl --socks5-hostname 127.0.0.1:9008 http://<address>.onion/}. tor retains an ephemeral service's keys in memory and returns them to the controller, which may save them to recreate the same address later. By default, the service disappears when the control connection closes unless detached.
+\end{soluzione}
+
+\begin{soluzione}{es:18-banda}
+Outline: register a handler for \texttt{EventType.BW}. It receives the numbers of bytes read and written each second as \texttt{event.read} and \texttt{event.written}. Print those values while downloading a large file. The incoming rate rises toward the limit imposed by congestion control and the available system resources.
+\end{soluzione}
+
+\begin{soluzione}{es:18-percorso}
+With \file{\_\_LeaveStreamsUnattached}, tor does not automatically attach streams to circuits. The command \texttt{EXTENDCIRCUIT 0 test004r,test005r,test006e} builds a circuit and returns its identifier. When a \texttt{STREAM} event arrives with status \texttt{NEW}, call \texttt{ATTACHSTREAM}. Manual path selection is dangerous because it bypasses weighted selection and guard policies: the unusual path may distinguish the user, or malicious software could deliberately route traffic through adversary-controlled relays.
+\end{soluzione}

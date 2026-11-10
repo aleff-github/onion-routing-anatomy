@@ -1,0 +1,139 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Errori operativi e deanonimizzazione: lezioni}\label{cap:28-opsec}
+\aggiornatoal{23 settembre 2026}{supporto del Tor Project; avvertenze di Tails; tor 0.4.9.13; rete di laboratorio}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item distinguere i livelli a cui un'identità può trapelare, e chi protegge ciascuno;
+  \item riconoscere gli errori operativi più comuni, dalla fuga DNS all'insieme di anonimato troppo piccolo;
+  \item verificare con tor stesso se un'applicazione gli affida la risoluzione dei nomi (Laboratorio~18);
+  \item ragionare su un caso reale nei termini del modello di minaccia.
+\end{itemize}
+\end{obiettivi}
+
+Il \cref{cap:26-attacchi} si chiudeva con un'osservazione scomoda: gli attacchi al protocollo sono costosi e richiedono posizioni privilegiate. In molti casi documentati, la perdita di anonimato dipende anche da errori nell'uso degli strumenti, che il solo protocollo di rete non può prevenire. Questo capitolo è dedicato a quegli errori: non per raccontare come scoprire qualcuno, ma per capire dove finisce ciò che Tor protegge e dove inizia ciò che resta a carico di chi lo usa.
+
+\begin{attenzione}[Taglio del capitolo]
+Parliamo di errori e di difese dal punto di vista di chi vuole proteggersi. Non descriviamo tecniche per identificare persone, e i casi citati sono pubblici e ricostruiti sulle fonti indicate.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Quattro livelli}\label{sec:opsec-livelli}
+
+Un'identità può trapelare a quattro livelli (\cref{fig:livelli}). Il primo, la rete, è quello che tor aiuta a proteggere: in una connessione ordinaria attraverso Tor il destinatario non vede l'IP originario del client e un singolo relay del circuito non dispone normalmente della vista completa di entrambi gli estremi. Questa separazione non elimina attacchi di correlazione o altri rischi. Il secondo, l'applicazione, è compito di Tor Browser, Tails e Whonix (\cref{cap:23-browser}). Gli ultimi due, il contenuto e il comportamento, non sono protetti automaticamente da tor: strumenti dedicati possono ridurre alcuni rischi, ma contano anche ciò che l'utente scrive, carica e fa.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig28-livelli}
+\caption{Schema didattico dei quattro livelli a cui un'identità può essere esposta. Tor attenua alcuni rischi di rete; le protezioni applicative e gli strumenti per il contenuto aiutano, ma le informazioni condivise e le abitudini restano importanti a ogni livello. Nessuna fascia garantisce da sola l'anonimato.}
+\label{fig:livelli}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{Errori dell'applicazione}\label{sec:opsec-applicazione}
+
+\paragraph{Traffico fuori da Tor.} tor protegge solo le applicazioni configurate per usarlo~\cite{torsafety}. Un programma che apre connessioni dirette, anche solo per un aggiornamento o un'anteprima, rivela l'indirizzo reale. Il supporto del Tor Project cita due casi tipici. Il primo sono i programmi di condivisione di file BitTorrent, che possono ignorare le impostazioni del proxy e che comunque comunicano ai tracker il proprio indirizzo. Il secondo sono i documenti scaricati e aperti mentre si è in rete: un file DOC o PDF può contenere risorse che il programma che lo apre scarica fuori da Tor.
+
+\paragraph{La fuga DNS.} Un caso più sottile riguarda il protocollo SOCKS. Un'applicazione può passare a tor il \emph{nome} della destinazione, e lasciare che la risoluzione avvenga all'exit (\cref{sec:stream-dns}); oppure può risolvere il nome da sola, con il DNS del sistema, e passare a tor soltanto l'indirizzo IP. Nel secondo caso la connessione può comunque passare per Tor, ma la risoluzione precedente può aver rivelato il dominio a un resolver esterno al circuito, associandolo alla connessione o all'identità di rete del client. Non è però automatico che sia partita una query DNS in chiaro: il nome potrebbe essere in cache, in un file locale oppure risolto con DNS cifrato. tor non può accertare una fuga già avvenuta, ma può segnalare che la richiesta SOCKS contiene soltanto un IP, come mostra il laboratorio.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: tor riconosce la fuga DNS}\label{sec:lab-opsec}
+
+\begin{laboratorio}[18]{SOCKS con e senza nome}
+\textbf{Obiettivo.} Osservare come tor distingue un'applicazione che gli affida la risoluzione dei nomi da una che la fa da sola, e come può rifiutare la seconda.\\
+\textbf{Prerequisiti.} Laboratorio~11; la rete di laboratorio avviata.\\
+\textbf{Tempo stimato.} 30 minuti.
+\end{laboratorio}
+
+Il comando \cmd{curl} offre entrambe le varianti: con \texttt{-{}-socks5} risolve il nome in locale e passa a tor l'indirizzo; con \texttt{-{}-socks5-hostname} passa il nome. Lo script \file{labs/it/laboratorio/fuga\_dns.py} si collega alla ControlPort del client \texttt{008c} e attiva l'opzione \opt{TestSocks}, che fa annotare a tor il tipo di ogni richiesta SOCKS. Poi ascolta i messaggi di log e prova le due varianti verso \texttt{http://localhost:8080/}. Il laboratorio mostra il \emph{meccanismo}, non una fuga osservata sul filo: \texttt{localhost} viene risolto localmente senza interrogare alcun resolver, quindi qui nessuna query lascia la macchina — ciò che tor rileva è di aver ricevuto un indirizzo IP invece di un nome, un possibile indizio di risoluzione precedente, non una prova di fuga DNS (il programma potrebbe usare direttamente un IP). Con un dominio reale al posto di \texttt{localhost}, la risoluzione locale potrebbe produrre una query esterna, eventualmente in chiaro secondo la configurazione DNS: è il rischio che qui evitiamo di provocare deliberatamente, restando sulla rete privata. Lo script usa anche \texttt{-{}-noproxy} con argomento vuoto per evitare che le variabili \texttt{NO\_PROXY} saltino il SOCKS per \texttt{localhost}. Infine attiva \opt{SafeSocks}, che rifiuta le richieste con il solo indirizzo, anche quando non vi è stata alcuna fuga DNS:
+\begin{lstlisting}[numbers=none]
+--socks5           HTTP 200  tor: Your application (using socks5 to port
+                   8080) is giving Tor only an IP address. Applications
+                   that do DNS resolves themselves may leak information...
+--socks5-hostname  HTTP 200  tor: Your application (using socks5 to port
+                   8080) instructed Tor to take care of the DNS resolution
+                   itself if necessary. This is good.
+--socks5 SafeSocks HTTP 000
+\end{lstlisting}
+Nell'esempio illustrativo entrambe le prime richieste riescono, ma solo la seconda delega la risoluzione a tor; la prima non dimostra una fuga DNS, dato che usa \texttt{localhost}. Nel codice di tor (\file{src/core/proto/proto\_socks.c}) il primo avviso è un messaggio di livello \texttt{warn}, limitato nel tempo per non riempire il log, accompagnato da un evento \texttt{STATUS\_CLIENT} con azione \texttt{DANGEROUS\_SOCKS} sulla ControlPort: un'applicazione di controllo può quindi segnalarlo all'utente. Con \opt{SafeSocks} attivo, la stessa richiesta viene rifiutata e \cmd{curl} non ottiene risposta. Attenzione: il fatto che un'applicazione passi correttamente il nome a Tor non dimostra, da solo, che non faccia anche altre risoluzioni DNS fuori dal proxy, per esempio tramite componenti o estensioni. \opt{TestSocks} osserva le richieste inviate alla SocksPort e \opt{SafeSocks} può rifiutare quelle classificate come insicure, ma nessuna delle due opzioni intercetta eventuali interrogazioni DNS separate: il test qui verifica il comportamento SOCKS, non l'assenza di qualsiasi fuga DNS~\cite{torsocksleaks}. Il laboratorio fa parte di \texttt{make verifica-lab}.
+
+% ---------------------------------------------------------------------------
+\section{Errori del contenuto}\label{sec:opsec-contenuto}
+
+\paragraph{Metadati.} Molti file portano con sé informazioni che l'autore non vede: le fotografie la posizione e il modello della macchina, i documenti l'autore e le date di creazione. Tails include uno strumento per rimuoverli, e le sue avvertenze ricordano casi in cui i metadati di una fotografia hanno rivelato dove si trovava chi l'aveva scattata~\cite{tailswarnings}.
+
+\paragraph{Account e identità.} Se si accede a un account personale, il sito sa chi siamo, qualunque sia l'indirizzo da cui ci colleghiamo~\cite{torsafety}. E se nella stessa sessione si usano due identità diverse sullo stesso sito, il sito può collegarle attraverso cookie, sessione, identificatori applicativi e altri indizi: non può però osservare direttamente l'identificatore del circuito Tor. Le avvertenze di Tails consigliano di riavviare il sistema tra attività che non devono essere collegate~\cite{tailswarnings}. È il requisito di non collegabilità di Tor Browser (\cref{sec:browser-tb}), che però vale tra siti diversi, non tra identità diverse sullo stesso sito.
+
+\paragraph{Lo stile.} Anche senza metadati, il modo di scrivere, gli argomenti, gli errori ricorrenti e gli orari di pubblicazione possono collegare un testo anonimo a uno firmato. Nessuno strumento automatico protegge da questo.
+
+% ---------------------------------------------------------------------------
+\section{Errori di comportamento: l'insieme troppo piccolo}\label{sec:opsec-insieme}
+
+Il \cref{cap:01-anonimato} ha definito l'anonimato come l'essere indistinguibili all'interno di un insieme. tor può ridurre diversi elementi di distinguibilità a livello di rete, ma non può garantire un insieme di anonimato numeroso: se in un certo luogo e in un certo momento gli utenti di Tor sono pochissimi, basta sapere \emph{chi usava Tor} per restringere la ricerca.
+
+\paragraph{Un caso.} Nel dicembre 2013 un'università statunitense ricevette per posta elettronica false minacce di bomba, poco prima di un esame. Il mittente aveva usato un servizio di posta temporanea e Tor. Secondo la dichiarazione giurata allegata alla denuncia dell'FBI, riportata concordemente dalla stampa, l'università fu in grado di stabilire chi si fosse collegato a Tor attraverso la propria rete senza fili nelle ore precedenti l'arrivo dei messaggi~\cite{wbur2013harvard,sandvik2013harvard}. Lo studente, interrogato, ammise. Non risultò necessario violare la cifratura di Tor per restringere i sospetti: l'osservatore locale poteva conoscere l'uso di Tor, senza che ciò implicasse la conoscenza dei contenuti o delle destinazioni. Ma l'osservatore della rete locale vedeva che \emph{lui} usava Tor, in quell'intervallo, e l'insieme dei sospetti si riduceva a pochi nomi.
+
+Il caso illustra tre principi del modello di minaccia (\cref{cap:04-modello-minaccia}):
+\begin{itemize}
+  \item Tor, senza bridge, non nasconde di essere usato: chi osserva la rete locale lo vede~\cite{tailswarnings}. Un bridge con un pluggable transport (\cref{cap:16-censura}) attenua il problema.
+  \item La correlazione non richiede un avversario globale se l'insieme è piccolo e l'evento è preciso nel tempo: è una forma elementare di attacco di intersezione.
+  \item L'anonimato ama la compagnia~\cite{dingledine2006company}: più utenti con motivazioni diverse usano Tor nello stesso luogo, meno la sola presenza è un indizio. Il supporto del Tor Project lo dice in modo diretto: convincete altri a usare Tor~\cite{torsafety}.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{Una lista di controllo}\label{sec:opsec-lista}
+
+Senza pretesa di completezza, e in ordine di livello:
+\begin{enumerate}
+  \item usare Tor Browser o un sistema come Tails o Whonix, non un browser qualsiasi con un proxy;
+  \item non installare estensioni né cambiare impostazioni che rendano il browser diverso dagli altri;
+  \item per altre applicazioni, verificare che passino i nomi a tor (\opt{SafeSocks}, \opt{TestSocks});
+  \item non aprire documenti scaricati mentre si è collegati, o aprirli in un ambiente isolato;
+  \item preferire HTTPS e gli onion service, perché l'exit vede ciò che non è cifrato;
+  \item togliere i metadati dai file prima di condividerli;
+  \item non mescolare nella stessa sessione identità che non devono essere collegate;
+  \item se anche solo l'uso di Tor è rischioso, valutare un bridge con trasporto adatto, tenendo presente che non garantisce invisibilità;
+  \item ricordare che orari, abitudini e stile di scrittura sono informazioni.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item L'identità può trapelare dalla rete, dall'applicazione, dal contenuto e dal comportamento; tor protegge soltanto il primo livello.
+  \item Applicazioni che escono da Tor, documenti aperti in rete e fughe DNS sono errori dell'applicazione; tor segnala e può rifiutare le richieste SOCKS con il solo indirizzo, ma queste opzioni non escludono risoluzioni DNS compiute separatamente.
+  \item Metadati, account e stile collegano il contenuto a una persona.
+  \item Se l'insieme degli utenti di Tor è piccolo, sapere chi usa Tor e quando può restringere i sospetti: bridge e un'ampia comunità di utenti possono attenuare, non cancellare, questo rischio.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:28-livello}
+Per ciascuno degli errori elencati nel capitolo, indica il livello della \cref{fig:livelli} e lo strumento o l'abitudine che lo previene.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:28-dns}
+Spiega perché una fuga DNS rivela informazioni anche se la connessione successiva passa per Tor. Chi le vede?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:28-evento}
+Nel Laboratorio~18, iscriviti con Stem agli eventi \texttt{STATUS\_CLIENT} e mostra l'azione \texttt{DANGEROUS\_SOCKS} generato dalla richiesta con il solo indirizzo. Come potrebbe usarlo un'interfaccia grafica?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:28-insieme}
+Rileggi il caso del 2013 immaginando che lo studente avesse usato un bridge obfs4 dalla stessa rete. Che cosa avrebbe visto l'osservatore della rete locale, e quali altre informazioni avrebbero potuto restringere comunque l'insieme?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:28-modello}
+Scegli una persona reale o immaginaria con esigenze di anonimato (una fonte giornalistica, un'attivista, un ricercatore) e scrivi il suo piano operativo: minacce, livelli coinvolti, strumenti e abitudini, e i rischi che restano scoperti.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item Il supporto del Tor Project sull'anonimato~\cite{torsafety}.
+  \item Le avvertenze di Tails, \titolo{Tails is safe but not magic}~\cite{tailswarnings}.
+  \item R.~Dingledine, N.~Mathewson, \titolo{Anonymity Loves Company}~\cite{dingledine2006company}.
+\end{itemize}

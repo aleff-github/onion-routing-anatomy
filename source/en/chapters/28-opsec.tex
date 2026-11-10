@@ -1,0 +1,143 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Operational Security Mistakes and Deanonymization: Lessons}\label{cap:28-opsec}
+% Shorter running head: the full title does not fit next to the page number.
+\chaptermark{Operational Security Mistakes and Deanonymization}
+\aggiornatoal{23 September 2026}{Tor Project support; Tails warnings; tor 0.4.9.13; laboratory network}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item distinguish the layers at which identity can leak and identify which tools protect each;
+  \item recognize common operational mistakes, from DNS leaks to an anonymity set that is too small;
+  \item use tor itself to check whether an application delegates name resolution to it (Laboratory~18);
+  \item analyze a real incident in terms of a threat model.
+\end{itemize}
+\end{obiettivi}
+
+\Cref{cap:26-attacchi} ended with an uncomfortable observation: protocol attacks can be expensive and require privileged observation points. In many documented cases, anonymity has also been lost through mistakes in how tools were used, which a network protocol alone cannot prevent. This chapter examines those mistakes, not to explain how to identify people but to clarify where Tor's protections end and users' own responsibilities begin.
+
+\begin{attenzione}[Scope of This Chapter]
+We discuss mistakes and defensive practices from the perspective of people seeking to protect themselves. We do not provide procedures for identifying people. The incidents mentioned are public and reconstructed from the cited sources.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Four Layers}\label{sec:opsec-livelli}
+
+Identity can leak at four layers (\cref{fig:livelli}). The first, the network, is the layer tor protects: for an ordinary Tor connection, the destination does not see the originating client's IP address, and an individual circuit relay normally lacks a complete view of both ends. This separation does not eliminate correlation attacks or other risks. The second, the application, is addressed by Tor Browser, Tails, and Whonix (\cref{cap:23-browser}). The last two, content and behavior, are not automatically protected by tor. Specialized tools can reduce some risks, but what users write, upload, and do also matters.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig28-exposure-levels}
+\caption{Teaching diagram of four layers at which identity may be exposed. Tor mitigates some network risks; application protections and content tools help, while what users disclose and how they behave matters at every layer. No single layer guarantees anonymity.}
+\label{fig:livelli}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{Application Mistakes}\label{sec:opsec-applicazione}
+
+\paragraph{Traffic outside Tor.} tor only protects applications configured to use it~\cite{torsafety}. Software making direct connections, even for updates or previews, can disclose a real IP address. Tor Project support highlights two familiar cases. BitTorrent applications may ignore proxy settings and may disclose their addresses to trackers anyway. Downloaded documents opened while online present another risk: DOC or PDF files may contain remote resources fetched by applications that do not use Tor.
+
+\paragraph{DNS leaks.} A subtler case involves SOCKS. An application can pass the destination \emph{name} to tor, letting the exit resolve it (\cref{sec:stream-dns}), or resolve the name itself using the system DNS service and pass tor only an IP address. In the second case, the subsequent connection still uses Tor, but name resolution might already have disclosed the domain to a resolver outside the Tor circuit, potentially linking it to the client's network connection. A plaintext DNS query is not inevitable: an answer might come from a local file or cache, or from encrypted DNS. tor cannot establish that a leak already happened, but it can detect the warning sign of an IP-only SOCKS request, as the laboratory demonstrates.
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: tor Detects a DNS-Leak Warning Sign}\label{sec:lab-opsec}
+
+\begin{laboratorio}[18]{SOCKS With and Without a Hostname}
+\textbf{Objective.} Observe how tor distinguishes an application that delegates name resolution from one that performs resolution itself, and how tor can reject the latter.\\
+\textbf{Prerequisites.} Laboratory~11; the laboratory network running.\\
+\textbf{Estimated time.} 30 minutes.
+\end{laboratorio}
+
+\cmd{curl} supports both behaviors. With \texttt{-{}-socks5}, it resolves the name locally and passes tor an IP address; with \texttt{-{}-socks5-hostname}, it passes the name. The \file{labs/en/lab/dns\_leak.py} script connects to client \texttt{008c}'s ControlPort and enables \opt{TestSocks}, which makes tor log the type of each SOCKS request. The script listens for log messages and tests both forms against \texttt{http://localhost:8080/}.
+
+This laboratory demonstrates the \emph{mechanism}, not an actual DNS leak observed on the wire. \texttt{localhost} resolves locally without contacting a resolver, so no query leaves the computer. tor sees an IP address instead of a hostname: a possible sign of earlier local resolution, not proof of a DNS leak (the application might have used an IP literal). With an ordinary domain instead of \texttt{localhost}, similar local resolution could generate an external query that might be plaintext, depending on DNS configuration. We deliberately avoid generating such traffic and remain on the private network. The script also forces use of SOCKS for \texttt{localhost}, overriding any \texttt{NO\_PROXY} bypass. Finally, it enables \opt{SafeSocks}, which rejects IP-only requests even when no DNS leak occurred:
+\begin{lstlisting}[numbers=none]
+--socks5           HTTP 200  tor: Your application (using socks5 to port
+                   8080) is giving Tor only an IP address. Applications
+                   that do DNS resolves themselves may leak information...
+--socks5-hostname  HTTP 200  tor: Your application (using socks5 to port
+                   8080) instructed Tor to take care of the DNS resolution
+                   itself if necessary. This is good.
+--socks5 SafeSocks HTTP 000
+\end{lstlisting}
+In the illustrative output, both initial requests work, but only the second delegates name resolution to tor; the first does not establish that DNS leaked because the target is \texttt{localhost}. In tor's code (\file{src/core/proto/proto\_socks.c}), the first warning is logged at \texttt{warn} level, rate-limited to avoid flooding logs, and accompanied by a \texttt{STATUS\_CLIENT} event with action \texttt{DANGEROUS\_SOCKS} on the ControlPort. A controller can therefore warn the user. With \opt{SafeSocks} enabled, the same request is rejected and \cmd{curl} receives no response. This laboratory is included in \texttt{make verifica-lab}.
+
+% ---------------------------------------------------------------------------
+\section{Content Mistakes}\label{sec:opsec-contenuto}
+
+\paragraph{Metadata.} Many files contain information their authors never notice: photographs may reveal location or camera model; documents may reveal authors and creation dates. Tails includes a tool to remove metadata, and its warnings mention cases in which photo metadata disclosed where the photographer had been~\cite{tailswarnings}.
+
+\paragraph{Accounts and identity.} Signing in to a personal account tells a website who you are regardless of the connection's apparent IP address~\cite{torsafety}. Using two identities on the same website in one session may also link them through cookies, session data, application identifiers, or other clues. A website cannot directly inspect the Tor circuit identifier. Tails recommends restarting between activities that must remain separate~\cite{tailswarnings}. Tor Browser's unlinkability requirement (\cref{sec:browser-tb}) applies between different websites, not between different identities used on one website.
+
+\paragraph{Writing style.} Even without metadata, writing habits, subjects, recurring mistakes, and publication times may link anonymous text to signed writing. No automatic tool can eliminate every such clue.
+
+% ---------------------------------------------------------------------------
+\section{Behavioral Mistakes: An Anonymity Set That Is Too Small}\label{sec:opsec-insieme}
+
+\Cref{cap:01-anonimato} defined anonymity in terms of being indistinguishable within a set. Tor can reduce some distinguishing information at the network layer, but cannot guarantee that enough people are using Tor at a specific place and time. If very few do, knowing \emph{who used Tor} can substantially narrow the possibilities.
+
+\paragraph{An incident.} In December 2013, a US university received emailed false bomb threats shortly before an examination. The sender had used a temporary email service and Tor. According to the FBI affidavit accompanying the complaint, as reported by multiple news outlets, the university identified who had used Tor on its wireless network in the hours before the messages arrived~\cite{wbur2013harvard,sandvik2013harvard}. The student later admitted sending the messages during questioning. Breaking Tor's encryption was not necessary to narrow the suspect pool: local observers could see Tor usage, without that implying access to connection contents or destinations. They could, however, see \emph{who} was using Tor during that interval, reducing the suspect pool to a few names.
+
+The incident illustrates three principles from the threat model (\cref{cap:04-modello-minaccia}):
+\begin{itemize}
+  \item Tor without a bridge does not hide the fact that it is being used: local network observers may recognize it~\cite{tailswarnings}. Bridges with pluggable transports (\cref{cap:16-censura}) can reduce this exposure.
+  \item Correlation need not involve a global adversary when the candidate set is small and the event occurs in a narrow time window. This is a basic intersection problem.
+  \item Anonymity loves company~\cite{dingledine2006company}. The more people with different reasons to use Tor do so in the same environment, the less informative any one person's use becomes. Tor Project support explicitly encourages wider Tor adoption~\cite{torsafety}.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{A Checklist}\label{sec:opsec-lista}
+
+This is not exhaustive, but it covers the layers in order:
+\begin{enumerate}
+  \item Use Tor Browser or a system such as Tails or Whonix, not an ordinary browser with a manually configured proxy.
+  \item Avoid installing extensions or altering settings that make your browser stand out.
+  \item For other applications, verify that they pass hostnames to tor (\opt{SafeSocks}, \opt{TestSocks}).
+  \item Do not open downloaded documents while online, or use an isolated environment for them.
+  \item Prefer HTTPS and onion services, because an exit can see unencrypted content.
+  \item Remove metadata from files before sharing them.
+  \item Do not combine identities that must remain separate in one session.
+  \item If merely being seen using Tor is risky, consider a suitable obfuscated bridge; it does not guarantee invisibility.
+  \item Remember that schedules, habits, and writing styles also convey information.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item Identity can leak at the network, application, content, and behavioral layers. tor directly protects only the first.
+  \item Applications bypassing Tor, downloaded documents opened online, and DNS leaks are application-level mistakes. tor can warn about and reject SOCKS requests containing only IP addresses.
+  \item Metadata, accounts, and writing style can link content to people.
+  \item When the set of Tor users is small, knowing who used Tor and when may be enough to narrow identification. Bridges and a broad community of users help reduce this risk.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:28-livello}
+For each mistake discussed here, identify its layer in \cref{fig:livelli} and the tool or habit that helps prevent it.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:28-dns}
+Explain why a DNS leak discloses information even when the subsequent connection travels through Tor. Who sees that information?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:28-evento}
+In Laboratory~18, subscribe to \texttt{STATUS\_CLIENT} events through Stem and display the \texttt{DANGEROUS\_SOCKS} action generated by an IP-only request. How could a graphical interface use it?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:28-insieme}
+Revisit the 2013 incident assuming the student had used an obfs4 bridge from the same network. What might local network observers have seen, and what other information could still have narrowed the candidate set?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:28-modello}
+Choose a real or fictional person with a legitimate need for anonymity, such as a journalistic source, activist, or researcher, and write an operational plan covering threats, relevant layers, tools and habits, and residual risks.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item Tor Project support guidance on anonymity~\cite{torsafety}.
+  \item Tails warnings, \titolo{Tails is safe but not magic}~\cite{tailswarnings}.
+  \item R.~Dingledine and N.~Mathewson, \titolo{Anonymity Loves Company}~\cite{dingledine2006company}.
+\end{itemize}

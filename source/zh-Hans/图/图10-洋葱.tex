@@ -1,0 +1,37 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 替代文本。
+\altfig{Tor1 RELAY 信元前向加密：客户端依次使用 Kf3、Kf2、Kf1，守卫、中间中继和出口依次移除一层。内部方框仍代表密文，而非之前中继可读的明文。出口仅在 Recognized 为零、运行摘要匹配时识别 RELAY 消息。应用数据仍可能受到 HTTPS 加密保护。此图不表示链路头部或流量元数据。}
+% 前向分层加密
+\begin{tikzpicture}[font=\sffamily\small,
+  s1/.style={draw=torgrigio,fill=torgrigio!15,rounded corners=3pt},
+  s2/.style={draw=torviola!70,fill=torviola!18,rounded corners=3pt},
+  s3/.style={draw=torverde!60!black,fill=torverde!28,rounded corners=3pt},
+  msg/.style={font=\ttfamily\tiny,fill=white,draw,inner sep=2pt}]
+  % 分层信元
+  \newcommand{\pacchetto}[2]{%
+    \ifnum#2>2 \draw[s1] (#1-1.05,-0.5) rectangle (#1+1.05,0.5);\fi
+    \ifnum#2>1 \draw[s2] (#1-0.85,-0.37) rectangle (#1+0.85,0.37);\fi
+    \ifnum#2>0 \draw[s3] (#1-0.65,-0.25) rectangle (#1+0.65,0.25);\fi
+    \ifnum#2=0 \node[msg] at (#1,0) {消息};\else \node[msg] at (#1,0) {密文};\fi}
+  \pacchetto{0}{3}
+  \node[relay] (g) at (2.45,0) {守卫};
+  \pacchetto{4.35}{2}
+  \node[relay] (mi) at (6.2,0) {中间中继};
+  \pacchetto{7.9}{1}
+  \node[relay,fill=torverde!30] (e) at (9.6,0) {出口};
+  \draw[cellaf] (1.05,0) -- (g); \draw[cellaf] (g) -- (3.5,0);
+  \draw[cellaf] (5.2,0) -- (mi); \draw[cellaf] (mi) -- (7.25,0);
+  \draw[cellaf] (8.55,0) -- (e);
+  % 出口处理后
+  \begin{scope}[yshift=-1.6cm]\pacchetto{9.6}{0}\end{scope}
+  \draw[cellaf] (e) -- (9.6,-1.4);
+  \node[font=\scriptsize,align=center] at (0,-0.95) {客户端：依次使用\\Kf$_3$、Kf$_2$、Kf$_1$ 加密};
+  \node[font=\scriptsize] at (2.45,-0.85) {去掉 Kf$_1$};
+  \node[font=\scriptsize] at (6.2,-0.85) {去掉 Kf$_2$};
+  \node[font=\scriptsize,align=right,anchor=east] at (8.8,-1.6) {去掉 Kf$_3$：Recognized = 0\\且 digest 匹配};
+  % 图例
+  \draw[s1] (1.2,1.0) rectangle ++(0.3,0.2); \node[font=\scriptsize,anchor=west] at (1.55,1.1) {守卫层};
+  \draw[s2] (3.9,1.0) rectangle ++(0.3,0.2); \node[font=\scriptsize,anchor=west] at (4.25,1.1) {中间中继层};
+  \draw[s3] (6.0,1.0) rectangle ++(0.3,0.2); \node[font=\scriptsize,anchor=west] at (6.35,1.1) {出口层};
+\end{tikzpicture}

@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 使用的无障碍替代文本。
+\altfig{Tor v3 洋葱服务描述符有三层：HSDir 可读的已签名外层包含版本、有效期、类型 8 证书、修订值、superencrypted 和 Ed25519 签名。第一层使用由盲化公钥与子凭据派生的密钥，包含 desc-auth-type、desc-auth-ephemeral-key、auth-client 和 encrypted；即使没有受限发现，也存在伪造的 auth-client 项。第二层包括握手、流控和引介点密钥。受限发现时，授权客户端的 X25519 私钥先从 auth-client 恢复 descriptor cookie，再用此 cookie 解密第二层。数值仅作示例。}
+% 描述符分层
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  strato/.style={draw,rounded corners=3pt,align=left,inner sep=5pt,text width=#1},
+  lab/.style={font=\sffamily\scriptsize\bfseries,anchor=north west}]
+  \node[strato=10.5cm,fill=torgrigio!8,draw=torgrigio,minimum height=6.3cm] (e) at (0,0) {};
+  \node[lab] at ([shift={(0.15,-0.1)}]e.north west) {外层（明文，带签名）};
+  \node[anchor=north west,align=left,font=\ttfamily\scriptsize] at ([shift={(0.3,-0.5)}]e.north west)
+    {hs-descriptor 3\\descriptor-lifetime 180\\descriptor-signing-key-cert \normalfont\sffamily（类型 8，由盲化密钥签发）\\\ttfamily revision-counter 662427\\superencrypted};
+  \node[strato=9.6cm,fill=torviola!10,draw=torviola,minimum height=3.35cm] (s) at (0.35,-0.85) {};
+  \node[lab] at ([shift={(0.15,-0.1)}]s.north west) {第一层：盲化密钥 + 子凭据};
+  \node[anchor=north west,align=left,font=\ttfamily\scriptsize] at ([shift={(0.3,-0.5)}]s.north west)
+    {desc-auth-type, desc-auth-ephemeral-key, auth-client \ldots\\encrypted};
+  \node[strato=8.7cm,fill=torverde!15,draw=torverde!60!black,minimum height=1.75cm] (i) at (0.7,-1.35) {};
+  \node[lab] at ([shift={(0.15,-0.1)}]i.north west) {第二层（受限时须解出 cookie）};
+  \node[anchor=north west,align=left,font=\ttfamily\scriptsize] at ([shift={(0.3,-0.5)}]i.north west)
+    {create2-formats 2 \quad flow-control 1-2 31\\introduction-point \ldots\ onion-key ntor \ldots\ auth-key \ldots\ enc-key \ldots};
+  \node[anchor=south west,font=\ttfamily\scriptsize] at ([shift={(0.3,0.15)}]e.south west) {signature \normalfont\sffamily（Ed25519，前缀 \texttt{"Tor onion service descriptor sig v3"}）};
+\end{tikzpicture}

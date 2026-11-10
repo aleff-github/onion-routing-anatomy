@@ -1,0 +1,353 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Il sistema delle directory}\label{cap:12-directory}
+\aggiornatoal{23 settembre 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; consensus method 36}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item spiegare perché Tor ha bisogno di un sistema di directory e quali rischi deve evitare;
+  \item distinguere i documenti del sistema: descrittori, microdescrittori, voti, consenso, certificati delle autorità;
+  \item descrivere come le directory authority votano ogni ora e come combinano i voti;
+  \item conoscere i criteri con cui vengono assegnati i flag;
+  \item leggere un consenso riga per riga e verificarne le firme;
+  \item scaricare e verificare il consenso della rete di laboratorio con il tuo codice (Laboratorio~6).
+\end{itemize}
+\end{obiettivi}
+
+Nei laboratori precedenti abbiamo sempre saputo in anticipo a quali relay collegarci, con quali chiavi e su quali porte: le leggevamo dai file della rete di laboratorio. Un client vero non ha questo lusso. Deve scoprire da solo quali relay esistono, dove si trovano, quali chiavi usano e quanto sono affidabili. È il compito del \textbf{sistema delle directory}, l'argomento di questo capitolo.
+
+% ---------------------------------------------------------------------------
+\section{Il problema}\label{sec:dir-problema}
+
+Un sistema di directory per Tor deve rispondere a esigenze in parte contrastanti:
+\begin{description}
+  \item[Correttezza] Le informazioni sui relay (indirizzi, chiavi) devono essere autentiche. Un avversario che riuscisse a far credere a un client che un certo relay ha una chiave diversa potrebbe intercettarne il traffico.
+  \item[Visione comune] Tutti i client devono vedere \emph{la stessa} lista di relay. Se un avversario potesse dare a ciascun client una lista diversa, per esempio con pochi relay scelti da lui, potrebbe riconoscere i client dai relay che usano: è l'attacco di \emph{partizionamento}, o \emph{epistemico}.
+  \item[Resistenza agli abusi] Chiunque può aggiungere relay alla rete. Il sistema deve limitare l'influenza di chi ne aggiunge molti (attacco \emph{Sybil}) e poter escludere quelli che si comportano male.
+  \item[Scalabilità] Milioni di client scaricano le informazioni più volte al giorno: il sistema deve essere economico da distribuire.
+\end{description}
+
+La soluzione di Tor, evoluta attraverso tre versioni del protocollo di directory, è un piccolo insieme di server fidati, le \textbf{directory authority}, che ogni ora votano e firmano insieme un unico documento: il \textbf{consenso}~\spec{dir-spec}{Outline}.
+
+\begin{storia}[Tre generazioni]
+Nella prima versione del protocollo ogni autorità pubblicava da sola l'elenco dei relay, e un'autorità disonesta poteva ingannare i client. Nella seconda i client scaricavano l'elenco di ciascuna autorità e ne combinavano le opinioni da sé, con costi di banda moltiplicati. La terza, in uso da oltre quindici anni, affida la combinazione alle autorità stesse: un solo documento, firmato da tutte, che i client devono solo verificare. Con essa le autorità hanno anche smesso di firmare con la stessa chiave che usano come relay, che dovevano tenere in memoria in chiaro.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{Gli attori}\label{sec:dir-attori}
+
+\begin{description}
+  \item[Directory authority] Server gestiti da persone di fiducia della comunità Tor. La rete pubblica ne ha nove, più un'autorità dedicata ai bridge (\cref{cap:16-censura}); l'elenco è compilato nel codice di tor (\file{src/app/config/auth\_dirs.inc}), così che ogni client parta dalla stessa lista. Ogni autorità ha una chiave di \emph{identità} a lungo termine, tenuta offline, con cui certifica una chiave di \emph{firma} valida da 3 a 12 mesi; è quest'ultima a firmare voti e consensi.
+  \item[Directory cache] Relay che scaricano consenso e descrittori dalle autorità e li ridistribuiscono ai client, alleggerendo le autorità. Hanno il flag \texttt{V2Dir} e rispondono agli stream \file{BEGIN\_DIR} (\cref{cap:11-stream}).
+  \item[Fallback directory] Un elenco di circa duecento relay stabili, anch'esso compilato nel codice (\file{fallback\_dirs.inc}, 200 voci in tor 0.4.9.13), a cui un client appena installato chiede il primo consenso senza sovraccaricare le autorità.
+  \item[Relay] Pubblicano periodicamente il proprio descrittore presso le autorità.
+  \item[Client] Scaricano il consenso e i microdescrittori, li verificano e li usano per scegliere i percorsi (\cref{cap:13-percorso}).
+\end{description}
+
+La \cref{fig:dir-flusso} mostra come circolano i documenti.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig12-flusso}
+\caption{Il flusso dei documenti di directory. I relay pubblicano i descrittori presso le autorità; le autorità si scambiano i voti, calcolano il consenso in base ai voti disponibili e si scambiano le firme; le directory cache scaricano consenso e microdescrittori e li servono ai client.}
+\label{fig:dir-flusso}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{I documenti}\label{sec:dir-documenti}
+
+Tutti i documenti di directory sono testo, nel formato che la specifica chiama \emph{netdoc}: una sequenza di righe (\emph{item}), ciascuna con una parola chiave e degli argomenti, eventualmente seguite da un oggetto codificato in base64 tra righe \texttt{-----BEGIN ...-----} e \texttt{-----END ...-----}. È un formato semplice da leggere per le persone e da analizzare per i programmi, come vedremo nel laboratorio.
+
+\begin{description}
+  \item[Descrittore del relay] (\emph{server descriptor}) Scritto e firmato dal relay: indirizzi e porte, chiavi (identità, chiave onion ntor, certificati Ed25519), banda dichiarata, exit policy completa, famiglia, piattaforma e versione. Viene ripubblicato almeno ogni 18 ore (\file{FORCE\_REGENERATE\_DESCRIPTOR\_INTERVAL} nel codice di tor), o prima se cambia qualcosa di importante.
+  \item[Documento extra-info] Statistiche non necessarie al funzionamento del protocollo (per esempio il traffico per paese dei bridge), pubblicate a parte per non appesantire i descrittori. Alimentano Tor Metrics (\cref{cap:24-metrics}).
+  \item[Microdescrittore] Il sottoinsieme del descrittore che serve davvero a un client e che cambia raramente: la chiave onion ntor, la famiglia, un riassunto della exit policy, l'identità Ed25519. Lo calcolano le autorità, e ciascuno è identificato dall'impronta SHA-256 del proprio testo.
+  \item[Voto] Il parere di un'autorità sullo stato della rete: per ogni relay, i flag, la banda, la versione.
+  \item[Consenso] Il risultato della combinazione dei voti, firmato dalle autorità. Esiste in due \emph{varianti} (\emph{flavor}): \texttt{ns}, che per ogni relay contiene l'impronta del descrittore completo, e \texttt{microdesc}, che contiene l'impronta del microdescrittore. I client moderni usano solo la seconda, più compatta.
+  \item[Certificato di chiave dell'autorità] Lega la chiave di firma di un'autorità alla sua identità.
+\end{description}
+
+\begin{approfondimento}[Perché i microdescrittori]
+Un descrittore completo è lungo alcuni kilobyte e cambia spesso, per esempio a ogni variazione della banda dichiarata. Scaricarli tutti, per migliaia di relay, più volte al giorno, costerebbe molto ai client, soprattutto su reti mobili. Il microdescrittore contiene solo ciò che non cambia quasi mai; ciò che cambia spesso, come la banda e i flag, sta nel consenso, che il client scarica comunque. Poiché il client chiede i microdescrittori per impronta, e non per identità del relay, una directory cache non può dare a un client un microdescrittore diverso da quello che tutti gli altri ricevono.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Il voto}\label{sec:dir-voto}
+
+\subsection{Il calendario}
+
+Ogni consenso ha tre istanti~\spec{dir-spec}{Voting timeline}:
+\begin{description}
+  \item[\texttt{valid-after}] da quando è valido;
+  \item[\texttt{fresh-until}] fino a quando è il consenso più recente; di norma coincide con il \texttt{valid-after} del successivo;
+  \item[\texttt{valid-until}] fino a quando un client può ancora usarlo.
+\end{description}
+Nella rete pubblica l'intervallo di voto è di un'ora e un consenso resta valido per tre intervalli (opzioni \opt{V3AuthVotingInterval} e \opt{V3AuthNIntervalsValid}), così che in ogni momento esistano più consensi validi e un ritardo delle autorità non blocchi i client. Prima dell'inizio di ogni intervallo le autorità hanno 5 minuti per scambiarsi i voti e 5 minuti per scambiarsi le firme (\opt{V3AuthVoteDelay} e \opt{V3AuthDistDelay}). Nella rete di laboratorio tutto è accelerato: un voto ogni 20 secondi, con 4 secondi per fase (\cref{sec:rp-opzioni}).
+
+\subsection{Come si combinano i voti}
+
+Ogni autorità raccoglie i voti delle altre e calcola il consenso con un algoritmo deterministico, così che tutte ottengano lo stesso documento e possano firmarlo~\spec{dir-spec}{Computing a consensus from a set of votes}. Le regole principali:
+\begin{itemize}
+  \item un relay compare nel consenso solo se abbastanza autorità lo conoscono e, con i consensus method correnti (dal 24 in poi; il laboratorio usa il 36), solo se ha sia il flag \texttt{Running} sia \texttt{Valid};
+  \item un relay ha un flag se più della metà delle autorità che si esprimono su quel flag glielo assegnano;
+  \item la banda (\texttt{w}) è la mediana inferiore delle bande nei voti, ma se almeno tre autorità ne hanno \emph{misurato} la banda si usa la mediana delle misure;
+  \item i parametri di rete (\texttt{params}) sono inclusi se li vota una maggioranza delle autorità totali oppure almeno tre autorità (nel codice \texttt{i > total\_authorities/2 || i >= 3}), e il valore scelto è la mediana inferiore;
+  \item i tempi sono le mediane dei tempi proposti.
+\end{itemize}
+Poiché le autorità possono eseguire versioni diverse di tor, il documento dichiara il \emph{consensus method} usato: un numero che identifica l'insieme esatto di regole, scelto come il più alto supportato da abbastanza autorità. Il consenso della rete di laboratorio usa il metodo 36.
+
+\subsection{I flag}\label{sec:dir-flag}
+
+I flag riassumono il giudizio delle autorità su ciascun relay~\spec{dir-spec}{Assigning flags in a vote}. La specifica avverte che i criteri esatti possono cambiare e che i client non devono dipenderne; quelli in uso sono riassunti nella \cref{tab:flag}.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+Flag & Criterio (in sintesi) \\
+\midrule
+\texttt{Running} & l'autorità ha raggiunto il relay su tutte le sue ORPort negli ultimi 45 minuti \\
+\texttt{Valid} & versione di tor non nota come difettosa, relay non escluso dalle autorità \\
+\texttt{Fast} & banda tra i 7/8 più veloci, o almeno 100\,KB/s \\
+\texttt{Stable} & tempo medio tra i guasti (pesato nel tempo) almeno pari alla mediana, o almeno 7 giorni \\
+\texttt{Guard} & \texttt{Fast}, \texttt{Stable}, \emph{familiare} (in rete da alcune settimane), buona disponibilità, banda sufficiente, \texttt{V2Dir} \\
+\texttt{Exit} & permette l'uscita verso almeno un blocco /8 sia sulla porta 80 sia sulla 443 \\
+\texttt{HSDir} & \texttt{Stable} e \texttt{Fast}, attivo da almeno 96 ore: può conservare descrittori di onion service \\
+\texttt{V2Dir} & serve informazioni di directory (directory cache) \\
+\texttt{Authority} & è una directory authority \\
+\texttt{BadExit} & exit da non usare come tale (per esempio perché altera il traffico) \\
+\texttt{MiddleOnly} & da usare solo come relay intermedio (introdotto in 0.4.7.2-alpha) \\
+\texttt{StaleDesc} & descrittore pubblicato più di 18 ore fa \\
+\texttt{Sybil} & nei voti: relay eccedenti il limite per indirizzo IP (normalmente 2); generalmente esclusi dal consenso \\
+\bottomrule
+\end{tabularx}
+\caption{I flag usati dalle autorità nei voti e, quando applicabile, nel consenso; \texttt{Sybil} è principalmente un flag dei voti.}
+\label{tab:flag}
+\end{table}
+
+\texttt{BadExit} e \texttt{MiddleOnly} sono gli strumenti con cui le autorità reagiscono a relay sospetti senza rimuoverli del tutto. \texttt{Sybil} ha una funzione diversa: compare nei \emph{voti} per segnalare i relay che eccedono il limite per indirizzo, ai quali le autorità non assegnano \texttt{Running} o \texttt{Valid}; con i metodi di consenso attuali, senza questi flag il relay \textbf{non compare nella lista} del consenso. La presenza di \texttt{Sybil} nell'elenco globale \texttt{known-flags} non implica quindi che esistano voci di relay con quel flag nella sezione \texttt{s}~\spec{dir-spec}{Assigning flags in a vote}. Nella rete di laboratorio, dove tutti i relay stanno su 127.0.0.1, il limite è disattivato dal parametro \texttt{AuthDirMaxServersPerAddr=0}, che il laboratorio ci mostrerà nella riga \texttt{params}.
+
+\subsection{La banda}
+
+Quanto è veloce un relay? Il valore dichiarato dal relay nel descrittore non è affidabile: un relay malevolo potrebbe dichiarare una banda enorme per essere scelto più spesso. Per questo alcune autorità, dette \emph{bandwidth authority}, misurano la banda dei relay facendo passare traffico attraverso di essi con uno strumento dedicato (oggi \emph{sbws}, \cref{cap:24-metrics}) e la riportano nei voti come \texttt{Measured}. Se almeno tre misure sono disponibili, il consenso usa la loro mediana; altrimenti la riga \texttt{w} riporta \texttt{Unmeasured=1} e un valore limitato. La banda nel consenso non è una velocità in senso stretto, ma un \emph{peso}: è ciò che determina con quale probabilità un relay viene scelto (\cref{cap:13-percorso}).
+
+% ---------------------------------------------------------------------------
+\section{Anatomia di un consenso}\label{sec:dir-anatomia}
+
+Ecco, abbreviato, il consenso microdesc della rete di laboratorio scaricato nel Laboratorio~6. Gli estratti di questa sezione vengono da una copia conservata nel repository (\file{labs/it/codice/torlab/test/dati/consenso-microdesc.txt}), su cui girano i test del laboratorio: si possono quindi rileggere riga per riga anche senza avviare la rete. È stata catturata il 23 settembre 2026, quando i relay del laboratorio eseguivano ancora tor 0.4.9.12: è la versione che si legge nella riga \texttt{v} della voce di relay, non quella di riferimento del libro, che la rete esegue oggi.
+
+\paragraph{Intestazione.}
+\begin{lstlisting}[numbers=none]
+network-status-version 3 microdesc
+vote-status consensus
+consensus-method 36
+valid-after 2026-09-23 15:37:20
+fresh-until 2026-09-23 15:37:40
+valid-until 2026-09-23 15:38:00
+voting-delay 4 4
+known-flags Authority Exit Fast Guard HSDir ... Running Stable ... Valid
+params AuthDirMaxServersPerAddr=0 cc_alg=2
+\end{lstlisting}
+La riga \texttt{params} contiene i \emph{parametri di consenso}, con cui le autorità regolano il comportamento di tutta la rete senza bisogno di aggiornare il software: qui, oltre al limite per indirizzo, l'algoritmo di controllo della congestione (\file{cc\_alg=2}, Vegas, \cref{sec:cc}). Nella rete pubblica i parametri sono decine.
+
+\paragraph{Una voce per relay.}
+\begin{lstlisting}[numbers=none]
+r test006e ml1aPg9UFy4VCx85YcpsRs/9shc 2038-01-01 00:00:00 127.0.0.1 5106 0
+m FfrgO+s4VYS6WKBq3pjfMDs+uZ2uVsvgG88JilbhIOo
+s Exit Fast Guard HSDir Running Stable V2Dir Valid
+v Tor 0.4.9.12
+pr Conflux=1 Cons=1-2 Desc=1-4 ... Link=3-5 ... Relay=2-6
+w Bandwidth=4096
+\end{lstlisting}
+\begin{description}
+  \item[\texttt{r}] nome, impronta RSA dell'identità (in base64), un campo di data ormai non significativo nel consenso, indirizzo IPv4, ORPort e DirPort;
+  \item[\texttt{m}] impronta del microdescrittore da scaricare;
+  \item[\texttt{s}] i flag;
+  \item[\texttt{v}, \texttt{pr}] versione di tor e \emph{sottoprotocolli} supportati: è qui che un client scopre, per esempio, che il relay supporta CGO (\texttt{Relay=6}) o i link protocol 3--5;
+  \item[\texttt{w}] il peso di banda, in kilobyte al secondo.
+\end{description}
+Nella variante \texttt{ns} ogni voce ha anche una riga \texttt{p} con il riassunto della exit policy per porte; nella variante microdesc questo riassunto si trova invece nel microdescrittore, e il consenso non lo ripete.
+
+\paragraph{Piè di pagina e firme.}
+\begin{lstlisting}[numbers=none]
+directory-footer
+bandwidth-weights Wbd=821 Wbe=0 Wbg=5000 Wbm=10000 Wdb=10000 ...
+directory-signature sha256 3776EF73A9214587AEFB3D732FA4A443CFF491BA
+                           79E102D226590BC5D1D1EBBAD8A16122EC0F9801
+-----BEGIN SIGNATURE-----
+...
+-----END SIGNATURE-----
+\end{lstlisting}
+I \texttt{bandwidth-weights} sono i coefficienti con cui i client bilanciano l'uso dei relay nelle diverse posizioni del circuito (\cref{cap:13-percorso}). Seguono le firme, una per autorità: algoritmo di hash, impronta dell'identità dell'autorità, impronta della sua chiave di firma, e la firma.
+
+% ---------------------------------------------------------------------------
+\section{Verificare un consenso}\label{sec:dir-firme}
+
+Un client accetta un consenso solo se porta le firme valide di \textbf{più della metà} delle autorità che conosce. Nel codice di tor la soglia è \file{n\_v3\_authorities/2 + 1} (\file{src/feature/nodelist/networkstatus.c}): 5 firme su 9 nella rete pubblica, 2 su 3 nel laboratorio. Per verificare una firma servono:
+\begin{enumerate}
+  \item il \textbf{certificato} dell'autorità, che il client scarica (\nolinkurl{/tor/keys/all}) e verifica con l'identità dell'autorità nota a priori;
+  \item il \textbf{testo firmato}: tutto il documento dall'inizio fino allo spazio che segue la prima parola chiave \texttt{directory-signature};
+  \item lo schema di firma: RSA con padding PKCS\#1 v1.5 applicato direttamente al digest (SHA-1 o SHA-256), \emph{senza} l'identificativo dell'algoritmo che PKCS\#1 prevederebbe~\spec{dir-spec}{Signing documents}.
+\end{enumerate}
+
+\begin{attenzione}[Una firma corretta non basta a fidarsi del consenso]
+C'è una differenza fondamentale tra \emph{verificare una firma} e
+\emph{autenticare il documento}. La firma può essere matematicamente valida
+rispetto a una chiave pubblica ricevuta insieme al documento, senza che
+quella chiave appartenga a un'autorità fidata. Un client Tor reale deve
+controllare anche l'identità dell'autorità rispetto alla propria lista
+predefinita, la firma \texttt{dir-key-certification} apposta al certificato
+dalla chiave di identità, la \emph{cross-certificate} della chiave di firma
+e la validità temporale del certificato~\spec{dir-spec}{Directory authority key certificates}.
+Il verificatore del Laboratorio~6, per semplicità, \textbf{non compie
+questi controlli}: conta solo le firme matematicamente valide rispetto alle
+chiavi estratte dai certificati forniti in input. La soglia che calcola
+non dimostra quindi, da sola, che una maggioranza delle \emph{autorità
+fidate} abbia approvato il consenso. Non va usato per stabilire
+l'affidabilità di un consenso sulla rete pubblica.
+\end{attenzione}
+
+\begin{approfondimento}[Fino allo spazio o fino a capo?]
+La parte generale della specifica sui documenti firmati dice che la firma copre il testo fino al \emph{ritorno a capo} dopo la riga della firma; la parte sul consenso precisa invece che si arriva allo \emph{spazio} dopo \texttt{directory-signature}, così che tutte le autorità firmino esattamente gli stessi byte, anche se le loro righe di firma sono diverse. Nel Laboratorio~6 abbiamo provato entrambe le letture sul consenso reale della rete di laboratorio: con la regola dello spazio tutte e tre le firme sono valide, con quella del ritorno a capo nessuna. In caso di dubbio, la verifica sperimentale contro un'implementazione indipendente resta il giudice finale.
+\end{approfondimento}
+
+\begin{attenzione}[La lista delle autorità è un punto di fiducia]
+Tutto il sistema poggia sull'elenco delle autorità compilato nel software. Un utente può cambiarlo, ma la specifica lo sconsiglia: un client con autorità diverse vedrebbe un consenso diverso da tutti gli altri, e sarebbe riconoscibile. Le autorità stesse sono un bersaglio: se la maggioranza fosse compromessa, potrebbe firmare un consenso con relay malevoli. Per questo sono gestite da persone diverse, in paesi diversi, e le chiavi di identità restano offline.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Come un client resta aggiornato}\label{sec:dir-client}
+
+Un client non scarica un nuovo consenso allo scoccare di ogni ora: se tutti lo facessero insieme, le directory cache verrebbero sommerse. Sceglie invece un istante a caso tra i tre quarti del primo intervallo dopo che il consenso ha smesso di essere fresco e i sette ottavi del tempo restante prima che scada~\spec{dir-spec}{Client operation}. La specifica fa un esempio: con un consenso valido dalle 1:00, fresco fino alle 2:00 e valido fino alle 4:00, il client ne cercherà uno nuovo in un momento a caso tra le 2:45 e le 3:50.
+
+Per risparmiare banda, un client può chiedere solo le \emph{differenze} rispetto al consenso che ha già (\emph{consensus diff}), identificato dalla sua impronta SHA3-256, e scarica solo i microdescrittori che non ha, chiedendoli per impronta (\nolinkurl{/tor/micro/d/} seguito dalle impronte separate da \texttt{-}).
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: scaricare e verificare il consenso}\label{sec:lab-directory}
+
+\begin{laboratorio}[6]{Il consenso della rete di laboratorio}
+\textbf{Obiettivo.} Scrivere \file{labs/it/codice/torlab/directory.py}: scaricare consenso, certificati e microdescrittori da un'autorità attraverso un circuito, analizzarli e verificare le firme.\\
+\textbf{Prerequisiti.} Laboratori~1--5; la rete di laboratorio avviata.\\
+\textbf{Tempo stimato.} 3 ore.
+\end{laboratorio}
+
+\paragraph{Passo 1: scaricare con BEGIN\_DIR.} Come fa tor, usiamo un circuito di un solo salto verso una directory, senza controllo della congestione, e apriamo stream \file{BEGIN\_DIR}. Sopra lo stream parliamo HTTP/1.0:
+\begin{lstlisting}[language=Python]
+def scarica(circ, percorso, stream_id):
+    s = Stream(circ, stream_id)
+    circ.invia(MessaggioRelay(ComandoRelay.BEGIN_DIR, stream_id, b""))
+    _, msg = s._prossimo()
+    if msg.comando != ComandoRelay.CONNECTED:
+        raise ErroreCircuito("BEGIN_DIR rifiutato")
+    s.aperto = True                            # ora Stream.invia è consentito
+    s.invia(f"GET {percorso} HTTP/1.0\r\n\r\n".encode())
+    intestazione, separatore, corpo = s.ricevi_tutto().partition(b"\r\n\r\n")
+    if not separatore:
+        raise ErroreCircuito("risposta HTTP incompleta")
+    return corpo
+
+circ = costruisci([relay("000a")], cc=False)
+testo = scarica(circ, "/tor/status-vote/current/consensus-microdesc", 1)
+\end{lstlisting}
+Il listato mostra il percorso minimo: dopo aver ricevuto \texttt{CONNECTED}
+occorre aggiornare lo stato locale dello stream, altrimenti \texttt{Stream.invia}
+rifiuta il \texttt{GET}. La funzione completa in \file{directory.py} controlla
+anche il codice HTTP (deve essere \texttt{200}), i caratteri del percorso e
+la presenza del separatore fra intestazioni e corpo.
+
+\paragraph{Passo 2: il formato netdoc.} Una funzione di una ventina di righe, \texttt{items}, divide un documento in item, raccogliendo gli oggetti \texttt{-----BEGIN}/\texttt{-----END}. Su di essa si costruiscono \file{analizza\_consenso}, che produce una voce per relay con flag, banda, policy e impronta del microdescrittore, e \file{analizza\_certificati}, che \emph{estrae} le chiavi dai certificati senza verificarne la catena di fiducia.
+
+\paragraph{Passo 3: verificare le firme.}
+\begin{lstlisting}[language=Python]
+def testo_firmato(testo):
+    inizio = testo.index("network-status-version ")
+    pos = testo.index("\ndirectory-signature ") + len("\ndirectory-signature ")
+    return testo[inizio:pos].encode()
+
+def verifica_firma(consenso, firma, cert):
+    h = hashlib.sha256 if firma.algoritmo == "sha256" else hashlib.sha1
+    atteso = h(testo_firmato(consenso.testo)).digest()
+    ricavato = cert.chiave_firma.recover_data_from_signature(
+        firma.firma, padding.PKCS1v15(), None)
+    return ricavato == atteso
+\end{lstlisting}
+Il metodo \file{recover\_data\_from\_signature}, con algoritmo \texttt{None}, restituisce il digest contenuto nella firma senza aspettarsi l'identificativo dell'algoritmo: esattamente lo schema di Tor.
+
+\paragraph{Passo 4: i risultati.} In una nostra esecuzione sulla rete di laboratorio (date, nomi e conteggi dipendono dall'istanza della rete):
+\begin{lstlisting}[numbers=none]
+consenso: 6035 byte; 2026-09-23 15:37:20 -> 2026-09-23 15:38:00
+metodo 36; firme 3; certificati 3
+params: {'AuthDirMaxServersPerAddr': 0, 'cc_alg': 2}
+  test006e 127.0.0.1:5106 w=4096 flag=['Exit', 'Fast', 'Guard', ...]
+  test000a 127.0.0.1:5100 w=20   flag=['Authority', 'Fast', 'Guard', ...]
+  ...
+firme valide: 3 (richieste: 2)
+microdescrittori: 8; corrispondono agli m del consenso: True
+\end{lstlisting}
+Il consenso copre 40 secondi (due intervalli di 20). Le tre firme superano la verifica \emph{matematica} con le chiavi estratte dai certificati dell'istanza di laboratorio, e l'impronta SHA-256 di ciascun microdescrittore scaricato coincide con la riga \texttt{m} del consenso. Questo esercizio mostra il legame \emph{crittografico} fra firme del consenso, impronte dei microdescrittori e chiavi ntor; la \textbf{catena di fiducia completa} esige anche l'autenticazione dei certificati delle autorità, che il nostro verificatore non implementa.
+
+\paragraph{Passo 5: i controlli negativi.} Una verifica che non fallisce mai non verifica nulla. Cambiando una sola cifra del consenso (\texttt{Bandwidth=4096} in \texttt{4097}) le firme valide scendono a zero; con una sola autorità nota, a una. I file \file{test/test\_directory.py} ripetono questi controlli su una copia del consenso salvata nel repository, così che si possano eseguire anche senza la rete.
+
+\paragraph{Passo 6: il consenso vero.} Lo stesso codice funziona sulla rete pubblica. Da CollecTor si scaricano un consenso e i certificati delle autorità dello stesso periodo, e si verifica:
+\begin{lstlisting}[language=Python,numbers=none]
+c = analizza_consenso(open("consensus-microdesc-2026-09-23-15").read())
+cert = analizza_certificati(open("certs").read())
+valide, richieste, _ = verifica_consenso(c, cert, 9)
+print(valide, richieste)          # 9 5
+\end{lstlisting}
+Tutte e nove le firme risultano matematicamente valide con le chiavi del file \file{certs}, ben oltre le cinque richieste nel semplice conteggio del laboratorio. Questo \textbf{non} è sufficiente per accettare il documento come farebbe un client Tor: qui non sono state verificate le identità fidate, le firme di certificazione e le scadenze dei certificati. Un dettaglio fa inciampare al primo tentativo: i file di CollecTor iniziano con una riga di annotazione \texttt{@type network-status-microdesc-consensus-3 1.0}, che non fa parte del documento firmato. Includendola, il digest cambia e \emph{tutte} le firme risultano non valide, con un errore che sembra crittografico ma è di formato. La funzione \texttt{testo\_firmato} parte perciò da \texttt{network-status-version}, e un test lo verifica.
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item Il sistema delle directory deve dare a tutti i client la stessa visione autentica della rete, resistere ai Sybil e scalare a milioni di utenti.
+  \item Nove directory authority (più una per i bridge), elencate nel codice, votano ogni ora e firmano un unico consenso, valido per tre ore.
+  \item I relay pubblicano descrittori; i client usano il consenso microdesc e i microdescrittori, scaricati per impronta.
+  \item Un flag è assegnato se lo vota più della metà delle autorità che se ne occupano; la banda misurata da almeno tre autorità prevale su quella dichiarata.
+  \item Un client accetta un consenso con le firme valide di più della metà delle \emph{autorità fidate}: prima deve autenticare i certificati delle loro chiavi di firma. Il Laboratorio~6 verifica le firme, \emph{non} l'intera catena di fiducia. La firma copre il testo fino allo spazio dopo \texttt{directory-signature}.
+  \item I parametri di consenso regolano il comportamento di tutta la rete senza aggiornare il software.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:12-validita}
+Un consenso ha \texttt{valid-after} alle 10:00, \texttt{fresh-until} alle 11:00 e \texttt{valid-until} alle 13:00. In quale intervallo il client cercherà il successivo? Che cosa succede se fino alle 13:00 non ne trova uno nuovo?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:12-flag}
+Un relay con 500\,KB/s di banda, in rete da due giorni e con la exit policy \texttt{accept *:443, reject *:*}, quali flag può ottenere? Perché non \texttt{Exit}?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-partizione}
+Descrivi un attacco di partizionamento in cui una directory cache malevola invia a un client specifico un consenso vecchio ma ancora valido. Che cosa limita l'attacco? Perché chiedere i microdescrittori per impronta aiuta?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-mediana}
+Tre autorità misurano la banda di un relay: 5000, 5200 e 90000. Quale valore finisce nel consenso? E se la terza autorità, complice del relay, fosse l'unica a misurarla?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-voti}
+Nella directory di un'autorità della rete di laboratorio si trova il file \file{v3-status-votes}. Confronta il voto di un'autorità con il consenso: quali righe differiscono, e perché?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:12-md}
+Scegli un relay dal consenso scaricato nel laboratorio, calcola a mano (con \cmd{sha256sum}) l'impronta del suo microdescrittore e confrontala con la riga \texttt{m}. Da quale riga inizia e dove finisce il testo su cui si calcola?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:12-autorita}
+Ferma una delle tre autorità della rete di laboratorio e scarica di nuovo il consenso dopo un minuto. Quante firme contiene? Il tuo verificatore lo accetta? Ripeti fermandone due, e spiega che cosa osservi alla scadenza del consenso.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:12-ns}
+Scarica anche il consenso di variante \texttt{ns} (\nolinkurl{/tor/status-vote/current/consensus}) e verificane le firme. Quali algoritmi di hash usano? Che cosa contiene la riga \texttt{r} in più rispetto alla variante microdesc?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item \titolo{Tor directory protocol, version 3} (dir-spec)~\cite{torspec}: formati, voto, assegnazione dei flag, operazioni di client e cache.
+  \item Il documento sul protocollo di casualità condivisa (srv-spec), usato dalle autorità per produrre ogni giorno un valore casuale comune, di cui avremo bisogno per gli onion service (\cref{cap:14-onion-services}).
+  \item Tor Metrics e CollecTor, \url{https://metrics.torproject.org/}: archivi storici di consensi, voti e descrittori.
+\end{itemize}

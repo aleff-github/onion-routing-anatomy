@@ -1,0 +1,122 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Legal and Ethical Aspects in Italy and the EU}\label{cap:25-legale}
+\aggiornatoal{23 September 2026}{Regulation (EU) 2022/2065; Legislative Decree 196/2003 (consolidated text published by the Italian Data Protection Authority); Tor Research Safety Board guidelines}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item distinguish the legality of a tool from the legality of how it is used;
+  \item interpret the European \enquote{mere conduit} rule in light of how a Tor exit operates;
+  \item identify unresolved questions facing relay operators in Italy, including liability, data retention, and seizures;
+  \item apply the Tor Research Safety Board's safety principles to research on Tor.
+\end{itemize}
+\end{obiettivi}
+
+\begin{attenzione}[This Chapter Is Not Legal Advice]
+Law changes, depends on the facts of each case, and has produced relatively few decisions specifically concerning Tor. This chapter frames relevant issues and identifies legislation examined in its official text, while making uncertainty explicit. Anyone making an operational decision, such as running an exit, should seek advice from a lawyer specializing in technology law.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{A Tool and Its Uses}\label{sec:legale-strumento}
+
+In Italy, as elsewhere in the European Union, no law generally prohibits using Tor or other tools that protect the confidentiality of communications. On the contrary, confidentiality of correspondence and other communications (Article~15 of the Italian Constitution) and freedom of expression (Article~21) are fundamental rights, as are respect for private life and protection of personal data under Articles~7 and~8 of the EU Charter of Fundamental Rights.
+
+What people do through Tor remains subject to the same laws that apply without Tor. Unauthorized access to a computer system (Article~615-\emph{ter} of the Italian Criminal Code) does not become lawful because it passes through three relays. The distinction between a tool and its use is central to this chapter and also matters for those who provide the infrastructure: relay operators provide transmission capacity, like connectivity providers, rather than selecting the content being transmitted.
+
+% ---------------------------------------------------------------------------
+\section{Relay Operators}\label{sec:legale-relay}
+
+\subsection{Mere Conduit}
+
+The European \emph{Digital Services Act} (DSA), applicable from 17 February 2024, replaced the intermediary-liability rules originally established by the 2000 E-Commerce Directive, which Italy implemented through Legislative Decree 70/2003~\cite{dsa2022}. Article~4 addresses \textbf{mere conduit}: a service transmitting information provided by others is exempt from liability for that information if it does not initiate the transmission, select its recipient, or select or modify the transmitted information. \Cref{fig:conduit} compares those conditions with the behavior of a Tor exit at the cell-protocol level.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig25-mere-conduit}
+\caption{Technical comparison, not an automatic legal conclusion, of Article~4's \emph{mere conduit} criteria under Regulation (EU) 2022/2065 and Tor exit behavior. The client specifies the destination using \texttt{RELAY\_BEGIN}; the exit opens a TCP connection and may reject it under its exit policy. Application bytes carried by \texttt{RELAY\_DATA} are transferred to the TCP stream, not forwarded as intact Tor cells. Any exemption depends on the actual service and all applicable legal requirements.}
+\label{fig:conduit}
+\end{figure}
+
+Two further provisions matter. Article~8 rules out a \emph{general} obligation to monitor transmitted information or actively seek evidence of unlawful activity: an operator is not generally required to inspect traffic indiscriminately; a middle relay cannot read the encrypted application payload in plaintext. Article~4(3), however, preserves the power of judicial or administrative authorities to order service providers to prevent or terminate infringements.
+
+\paragraph{The open question.} The regulation applies to \enquote{information society services}, which EU law defines as services \emph{normally provided for remuneration}. Does a freely operated volunteer relay fall within that definition? There are arguments for a broad interpretation, and the exemption reflects a principle that a court could consider: someone who merely carries information should not be liable for its content. However, the Italian legal position concerning volunteer Tor relays has not been established here through a directly applicable judicial ruling. This uncertainty helps explain why some exits are run by associations or organizations that already provide network services.
+
+\subsection{Civil Liability and Criminal Investigations}
+
+The exemption concerns liability for transmitted information. It does not prevent a criminal investigation from beginning with an exit IP address. From a victim's perspective, an offense committed through Tor appears to originate from the exit. Investigators may initially search or seize an operator's computers. The Electronic Frontier Foundation's legal FAQ for relay operators, written under US law but useful as a record of experience, says it knows of no operator convicted solely for running a relay but describes investigations and seizures based on misunderstandings of Tor~\cite{efflegalfaq}. Several precautions may reduce practical risk:
+\begin{itemize}
+  \item Run the exit on a dedicated server in a data center, not at home or on a personal work computer.
+  \item Make clear that the IP address belongs to an exit, for example through descriptive reverse DNS and an information page that tor can serve on its DirPort using \opt{DirPortFrontPage}.
+  \item Inform the connectivity provider in advance and agree on how abuse reports will be handled.
+  \item Explain Tor in responses to reports and retain correspondence.
+\end{itemize}
+
+\subsection{Data Retention}
+
+Article~132 of Italy's Personal Data Protection Code requires covered \emph{providers} to retain telematic traffic data for twelve months for criminal investigation and prosecution~\cite{codiceprivacy}, versus twenty-four months for telephone traffic. Paragraph~5-\emph{bis} preserves a special rule: Article~24 of Law No.~167 of 20 November 2017 extends the period to \textbf{seventy-two months} for investigations concerning offenses identified in Articles~51(3-\emph{quater}) and 407(2)(a) of the Code of Criminal Procedure, including terrorism and other serious crimes~\cite{legge167}. The relevant part of the Data Protection Code applies to electronic communication services \emph{available to the public over public communications networks} (Article~121).
+
+Whether a volunteer relay operator qualifies as such a provider is another unresolved question, also depending on how the service is offered. Operators, especially organizations that already provide communications services, should have a lawyer assess it before running an exit. Technically, under recommended logging settings tor does not ordinarily keep a history of users' destinations. An exit can see the destinations to which it forwards connections, but not the originating client's IP address. The data actually available depend on the relay's role and configuration: an exit should not be assumed capable of identifying individual Tor users.
+
+\subsection{Logs Are Personal Data}
+
+IP addresses are personal data. The General Data Protection Regulation (GDPR) requires processing only data that are necessary and retaining them only as long as necessary (Article~5, the data-minimization principle). For a relay, the security-aligned choice is to log only at \texttt{notice} level, keep \opt{SafeLogging} enabled, and avoid packet captures (\cref{sec:traffico-log}).
+
+% ---------------------------------------------------------------------------
+\section{Researchers}\label{sec:legale-ricerca}
+
+Research on Tor has a history of ethically questionable experiments, some discussed in \cref{cap:27-casi-rete}. Researchers have operated relays that monitored or manipulated real users' traffic to demonstrate attacks. Beyond ethical concerns, such experiments may engage Italian criminal law, including provisions on unlawful interception of computer communications (Article~617-\emph{quater} of the Criminal Code), and data-protection rules.
+
+The \textbf{Tor Research Safety Board} is a group of researchers who advise on experiment safety and have developed guidelines~\cite{trsb}:
+\begin{itemize}
+  \item Use a test network wherever possible, and attack only your own traffic.
+  \item Collect only the data needed and only data that would be safe to publish.
+  \item Protect collected data and experimental tools.
+  \item Reduce data precision with rounding or noise.
+  \item Consider third-party datasets that could expose information when combined with your own.
+  \item Ask whether users expected the relevant data to remain private.
+  \item Ensure that anticipated benefits justify the risks.
+\end{itemize}
+The Board asks researchers to explain what they want to learn, how they intend to do it, what risks the experiment introduces, and why its benefits justify those risks. This book follows the same discipline: laboratories generating active Tor traffic use a private network (\cref{sec:rp-perche}), while public-document analyses such as those in \cref{cap:24-metrics} run offline on publicly available aggregate data.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item Using Tor is lawful in itself; activity carried out through Tor remains governed by ordinary law.
+  \item Article~4 of the DSA exempts qualifying services that merely transmit others' information if certain conditions are met. The way an exit works is relevant to those conditions, but whether a volunteer relay qualifies for the regulation remains an open legal question.
+  \item The exemption does not prevent investigations or seizures. Dedicated servers, clear exit identification, and arrangements with connectivity providers can reduce practical problems.
+  \item Data-retention requirements apply to covered publicly available communications providers; whether and how they apply to volunteer relays requires case-specific legal assessment.
+  \item Research on Tor should avoid experiments involving real users wherever possible: use test networks, minimize data, publish only safe aggregates, and assess benefits against risks.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:25-condizioni}
+For each of the three conditions in DSA Article~4, describe a change in exit behavior that would breach it.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:25-strumento}
+Use an example to explain the distinction between the legality of a tool and the legality of its uses, applying it to both a Tor user and a relay operator.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:25-segnalazione}
+Draft a response to an abuse report received from an exit's connectivity provider after a website complains of repeated access attempts from your IP address. What can you explain, and what practical steps can you take?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:25-esperimento}
+A researcher proposes counting domain names seen at an exit to estimate how many Tor users visit Italian news websites. Evaluate the proposal using the Tor Research Safety Board guidelines and suggest a safer alternative.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:25-ricerca}
+Research judicial decisions involving Tor relay operators from courts in Italy and other European countries. Summarize the legal question and outcome for each, citing primary sources.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item Regulation (EU) 2022/2065, particularly Articles~4, 8, and~9~\cite{dsa2022}.
+  \item Legislative Decree 196/2003, Articles~121 and~132, in the consolidated text published by the Italian Data Protection Authority~\cite{codiceprivacy}.
+  \item Electronic Frontier Foundation, \titolo{Legal FAQ for Tor Relay Operators}~\cite{efflegalfaq}.
+  \item The Tor Research Safety Board website~\cite{trsb}.
+\end{itemize}

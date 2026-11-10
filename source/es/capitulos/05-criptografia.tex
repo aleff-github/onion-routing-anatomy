@@ -1,0 +1,160 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Criptografía esencial para Tor}\label{cap:05-crittografia}
+\aggiornatoal{23 de septiembre de 2026}{tor 0.4.9.13; commit de torspec \texttt{8e1f245}}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item identificar las primitivas criptográficas que emplea Tor y la función de cada una;
+  \item distinguir entre cifrado, integridad, derivación de claves, intercambio de claves y firmas digitales;
+  \item comprender por qué Tor utiliza distintas familias de funciones hash (SHA-1, SHA-2, SHA-3 y Blake2b) y en qué se diferencian;
+  \item interpretar con seguridad las fórmulas de los capítulos siguientes.
+\end{itemize}
+\end{obiettivi}
+
+Este capítulo es una caja de herramientas, no un curso de criptografía. Presenta únicamente la teoría indispensable de las técnicas que encontraremos en la parte~II, e indica dónde se utiliza cada una. El apéndice~B contiene explicaciones más detalladas para quienes deseen profundizar. Todos los ejemplos pueden probarse en Python mediante el módulo estándar \texttt{hashlib} y la biblioteca \texttt{cryptography}, las mismas herramientas utilizadas en los laboratorios.
+
+% ---------------------------------------------------------------------------
+\section{Cinco funciones}\label{sec:cripto-compiti}
+
+En un protocolo como Tor, la criptografía cumple cinco funciones distintas:
+\begin{description}
+  \item[Confidencialidad] Nadie salvo los destinatarios previstos debe poder leer los datos: \emph{cifradores}.
+  \item[Integridad] Nadie debe poder modificar los datos sin que se detecte: \emph{funciones hash} y \emph{códigos de autenticación de mensajes} (MAC).
+  \item[Acuerdo de claves] Dos partes que no comparten ningún secreto deben establecer uno mientras se comunican por un canal público: intercambio de claves \emph{Diffie--Hellman}.
+  \item[Autenticación] Una parte debe demostrar que posee una identidad determinada: \emph{firmas digitales}.
+  \item[Derivación] Deben obtenerse varias claves independientes a partir de un secreto compartido: \emph{funciones de derivación de claves} (KDF).
+\end{description}
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig05-tareas}
+\caption{Las cinco funciones criptográficas en Tor, las primitivas que las realizan y los capítulos en los que veremos su utilización.}
+\label{fig:compiti}
+\end{figure}
+
+Una buena regla de diseño, que Tor aplica con un rigor cada vez mayor, consiste en no reutilizar nunca la misma clave para tareas o contextos diferentes.
+
+% ---------------------------------------------------------------------------
+\section{Cifradores}\label{sec:cripto-cifrari}
+
+\subsection{AES en modo contador}
+
+Tor cifra casi todo mediante \textbf{AES}, el cifrador de bloques estándar, que trabaja con bloques de 16 bytes y claves de 128 o 256 bits. Un cifrador de bloques, por sí solo, cifra un bloque cada vez. Para cifrar flujos de longitud arbitraria, Tor emplea el \textbf{modo contador} (CTR): AES cifra un contador que aumenta en una unidad por cada bloque y el flujo de clave resultante (\emph{keystream}) se combina con los datos mediante XOR:
+\[ C = P \oplus \operatorname{Trunc}_{|P|}\bigl(\mathrm{AES}_K(\mathit{IV}) \,\|\, \mathrm{AES}_K(\mathit{IV}+1) \,\|\, \cdots\bigr) \]
+El descifrado es la misma operación. Hay dos propiedades del modo contador que nunca deben olvidarse:
+\begin{itemize}
+  \item el mismo par clave--contador \textbf{no puede reutilizarse jamás}: dos mensajes cifrados con el mismo flujo de clave revelan el XOR de sus textos en claro;
+  \item el modo contador es \textbf{maleable}: al modificar un bit del texto cifrado, cambia el bit correspondiente del texto en claro sin necesidad de conocer la clave.
+\end{itemize}
+
+AES-128-CTR cifra las celdas relay en el esquema tradicional (\cref{sec:tor1}); su maleabilidad permite los ataques de marcado (\emph{tagging}). AES-256-CTR cifra los mensajes ntor-v3 (\cref{sec:ntor3}) y los descriptores de servicios onion (\cref{sec:os-descrittore}). AES-128 es uno de los componentes básicos de CGO (\cref{sec:cgo}).
+
+\subsection{TLS}
+
+El canal entre dos nodos está protegido por TLS (\cref{cap:07-canali}), que negocia de forma independiente algoritmos de cifrado autenticado, como AES-GCM o ChaCha20-Poly1305. No obstante, Tor no confía en TLS para identificar al repetidor: los repetidores demuestran su identidad mediante los certificados propios del protocolo Tor.
+
+% ---------------------------------------------------------------------------
+\section{Funciones hash}\label{sec:cripto-hash}
+
+Una función hash criptográfica transforma una entrada de longitud arbitraria en una huella de longitud fija. Está diseñada para hacer computacionalmente inviable encontrar dos entradas con la misma huella (\emph{resistencia a colisiones}) o una entrada que corresponda a una huella determinada. Tor utiliza cuatro familias que reflejan su evolución histórica:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l c >{\raggedright\arraybackslash}X@{}}
+\toprule
+Función & Salida & Dónde aparece \\
+\midrule
+SHA-1 & 20 bytes & Huellas RSA de repetidores, resumen acumulativo de celdas relay (tor1), KDF-TOR. Se considera débil frente a colisiones, pero permanece donde esa propiedad no es necesaria \\
+SHA-256 & 32 bytes & ntor y su KDF, certificados Ed25519 y TLS, firmas del consenso y huellas de microdescriptores \\
+SHA3-256, SHAKE-256 & 32 bytes / variable & ntor-v3, servicios onion v3 (direcciones, claves cegadas, anillo HSDir, descriptores), resúmenes de circuitos de encuentro \\
+Blake2b & variable & Prueba de trabajo de servicios onion (\cref{cap:15-dos}) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+SHA-3 no es una versión mejorada de SHA-2, sino una construcción completamente distinta, denominada \emph{esponja} (\emph{sponge}). SHAKE-256 pertenece a la misma familia y es una función de salida extensible: produce tantos bytes como se necesiten, por lo que resulta conveniente para derivar claves. En los protocolos más recientes de Tor, cada uso de SHA-3 incorpora una etiqueta de dominio como prefijo (por ejemplo, \file{"ntor3-curve25519-sha3\_256-1:kdf\_phase1"}). Así se evita que un hash calculado para un propósito coincida con otro calculado para una finalidad distinta.
+
+\begin{approfondimento}[Resúmenes acumulativos]
+Muchas bibliotecas permiten añadir datos de forma incremental a una función hash y consultar su resumen en cualquier momento sin volver a comenzar. Tor aprovecha esta posibilidad para calcular el \emph{resumen acumulativo} de las celdas relay (\cref{sec:riconoscere}), que resume las celdas intercambiadas con un salto concreto. En Python, \texttt{hashlib.sha1()} permite hacerlo mediante los métodos \texttt{update}, \texttt{digest} y \texttt{copy}.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{MAC y derivación de claves}\label{sec:cripto-mac}
+
+\subsection{HMAC}
+
+Un MAC es una huella que depende también de una clave: solo quien conoce esa clave puede calcularla o verificarla. \textbf{HMAC} construye un MAC a partir de una función hash. Tor utiliza HMAC-SHA256 en el intercambio ntor (\cref{sec:ntor}) y en su función de derivación de claves. En los protocolos basados en SHA-3 puede obtenerse un MAC de forma más sencilla calculando el hash de la clave, precedida por su longitud, seguida del mensaje. La longitud permite determinar de forma inequívoca dónde termina la clave y dónde comienza el mensaje~\spec{rend-spec}{Cryptographic building blocks}. En ntor-v3 también se antepone la longitud de la etiqueta de dominio (\cref{sec:ntor3}).
+
+Un detalle práctico: el MAC debe compararse siempre en \emph{tiempo constante}, mediante \file{hmac.compare\_digest} en Python. De otro modo, las diferencias de tiempo en la comparación podrían revelar cuántos bytes son correctos.
+
+\subsection{Funciones de derivación de claves}
+
+Un secreto compartido debe producir varias claves: una para el cifrado en sentido de ida, otra para el cifrado de vuelta y dos para la integridad (\cref{sec:circ-chiavi}). Una KDF expande el secreto hasta obtener un flujo de la longitud necesaria, del que se extraen las claves individuales. Tor utiliza tres:
+\begin{description}
+  \item[KDF-TOR] $\mathrm{SHA1}(K_0 \| 0) \,\|\, \mathrm{SHA1}(K_0 \| 1) \,\|\, \ldots$, construcción histórica que aún utiliza \cella{CREATE\_FAST};
+  \item[HKDF-SHA256] construcción estándar definida en RFC~5869, utilizada por ntor;
+  \item[SHAKE-256] función empleada directamente como KDF en ntor-v3 y los servicios onion.
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{Intercambio de claves: X25519}\label{sec:cripto-dh}
+
+El intercambio de claves Diffie--Hellman permite a dos partes establecer un secreto compartido intercambiando únicamente valores públicos. La versión de curva elíptica utilizada por Tor es \textbf{X25519}, que realiza el intercambio sobre \emph{Curve25519}. Cada parte posee una clave privada de 32 bytes $x$ y una clave pública $X = x \cdot G$, donde $G$ es un punto fijo de la curva y el producto representa la multiplicación de un punto por un entero. Con las claves $x, X$ e $y, Y$, ambas partes calculan el mismo valor:
+\[ x \cdot Y = y \cdot X = xy \cdot G, \]
+que un observador que solo conozca $X$ e $Y$ no puede obtener. Las claves tienen 32 bytes y el intercambio es muy rápido. Estas dos ventajas llevaron a Tor a abandonar el Diffie--Hellman modular de 1024 bits utilizado por el intercambio TAP (\cref{sec:tap}).
+
+Una clave empleada para un único intercambio y eliminada después se denomina \textbf{efímera}. La combinación de claves efímeras y a largo plazo permite que los intercambios de Tor proporcionen a la vez autenticación y \emph{secreto hacia adelante} (\cref{sec:circ-requisiti}).
+
+% ---------------------------------------------------------------------------
+\section{Firmas: Ed25519 y RSA}\label{sec:cripto-firme}
+
+Una firma digital se genera con una clave privada y se verifica mediante su clave pública correspondiente. Tor utiliza principalmente \textbf{Ed25519}, un esquema de firmas sobre una curva equivalente a Curve25519, con claves públicas de 32 bytes y firmas de 64 bytes: aparece en las identidades de los repetidores, los certificados de Tor (\cref{sec:canale-certs}) y los descriptores de servicios onion. Ed25519 tiene una propiedad que Tor aprovecha de manera particular: multiplicar una clave pública $A$ por un factor $h$ genera otra clave pública válida, $A' = h \cdot A$, cuya clave privada correspondiente puede calcular quien posea la clave privada original. Esta es la base de las claves cegadas de los servicios onion (\cref{sec:os-accecate}).
+
+\textbf{RSA}, con claves de 1024 bits, es una herencia de los primeros años de Tor: las identidades antiguas de los repetidores y las claves con las que las autoridades de directorio firman el consenso. Las claves de las autoridades son más largas, y los dos tipos tienen requisitos diferentes: la especificación exige al menos \textbf{3072} bits para la clave de identidad (\file{KP\_auth\_id\_rsa}) y al menos 2048 para la clave de firma (\file{KP\_auth\_sign\_rsa})~\spec{dir-spec}{Directory authority operation and formats}. Tor está abandonando gradualmente RSA.
+
+% ---------------------------------------------------------------------------
+\section{Criptografía reciente}\label{sec:cripto-recente}
+
+En los desarrollos recientes aparecen otras dos construcciones especializadas:
+\begin{itemize}
+  \item \textbf{POLYVAL}, una función hash universal que también se utiliza en AES-GCM-SIV, constituye junto con AES una de las bases de CGO, el nuevo esquema de cifrado de celdas relay (\cref{sec:cgo});
+  \item \textbf{Elligator2} codifica un punto de Curve25519 de modo que resulte indistinguible de una cadena aleatoria; obfs4 lo emplea para ocultar las claves públicas del intercambio de claves (\cref{sec:cens-strategie}).
+\end{itemize}
+La criptografía \emph{poscuántica}, que deberá sustituir a X25519 cuando los ordenadores cuánticos se conviertan en una amenaza práctica, constituye un área activa de investigación para Tor y se estudia en el \cref{cap:31-futuro}.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item AES en modo contador cifra los datos; un flujo de clave no debe reutilizarse nunca y el modo contador es maleable.
+  \item SHA-1, SHA-256, SHA3-256/SHAKE-256 y Blake2b coexisten en Tor: la elección depende de cuándo se diseñó el protocolo y de la finalidad del hash.
+  \item HMAC autentica los mensajes, mientras que las KDF (KDF-TOR, HKDF y SHAKE) derivan claves; los MAC deben compararse en tiempo constante.
+  \item X25519 se utiliza para el intercambio de claves en todos los protocolos modernos; Ed25519 firma identidades, certificados y descriptores; RSA se está retirando.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:05-xor}
+Con AES-CTR, un adversario conoce el texto en claro $P_1$ de un mensaje e intercepta su texto cifrado $C_1$ y el texto cifrado $C_2$ de otro mensaje, que por error se cifró con el mismo flujo de clave. ¿Cómo puede recuperar $P_2$?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:05-shake}
+En Python, calcula \file{hashlib.shake\_256(b"Tor").hexdigest(16)} y \texttt{hexdigest(32)}. ¿Qué relación existe entre las dos salidas? ¿Qué implica esto para el uso de SHAKE como KDF?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:05-dh}
+Utilizando la biblioteca \texttt{cryptography}, genera dos pares de claves X25519 y comprueba que producen secretos compartidos idénticos. ¿Qué sucede si una de las partes utiliza 32 bytes de valor cero como clave pública de la otra? Relaciona el resultado con la comprobación del \enquote{punto en el infinito} de ntor.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:05-etichette}
+¿Por qué los protocolos de Tor basados en SHA-3 incluyen una etiqueta de dominio al principio de cada entrada? Describe un posible ataque si dos usos diferentes de la misma función no se separaran.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item J.-P.~Aumasson, \titolo{Serious Cryptography} (No Starch Press): introducción práctica y moderna a todas las primitivas de este capítulo.
+  \item D.~J.~Bernstein y otros, trabajos originales sobre Curve25519 y Ed25519 y RFC~7748 (X25519) y 8032 (Ed25519).
+  \item Sección \enquote{Preliminaries} de la especificación de Tor~\cite{torspec}, con convenciones sobre cifradores y funciones hash.
+\end{itemize}

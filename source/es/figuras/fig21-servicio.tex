@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{Configuración de un servicio onion público versión 3: HiddenServiceDir /var/lib/tor/my\_service/ y HiddenServicePort 80 127.0.0.1:8080. Tor genera en el directorio hostname, hs\_ed25519\_public\_key y hs\_ed25519\_secret\_key. Hay que proteger la clave privada porque quien la obtenga podrá suplantar el servicio. La dirección v3 consta de 56 caracteres base32 que codifican la clave pública Ed25519, una suma de verificación y el byte de versión; [v3].onion es solo un marcador de posición. Las conexiones al puerto virtual 80 pasan por Tor y se redirigen al servidor web que escucha únicamente en 127.0.0.1:8080. El servicio público de este ejemplo no necesita alice.auth; la autorización de clientes se configura por separado.}
+% Servicio onion v3 público: configuración, identidad y redirección local
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  file/.style={draw,rounded corners=1pt,fill=torgrigio!8,minimum height=0.55cm,minimum width=3.4cm,font=\ttfamily\scriptsize},
+  box/.style={draw,rounded corners=2pt,align=center,minimum height=0.8cm}]
+  \node[box,fill=torviola!10,text width=4.6cm,align=left,font=\ttfamily\scriptsize] (conf) at (0,1.6)
+    {HiddenServiceDir /var/lib/tor/my\_service/\\HiddenServicePort 80 127.0.0.1:8080};
+  \node[font=\sffamily\tiny,text=torgrigio,above=1pt of conf] {torrc};
+  \node[file] (h) at (0,0.1) {hostname};
+  \node[file] (pk) at (0,-0.6) {hs\_ed25519\_public\_key};
+  \node[file] (sk) at (0,-1.3) {hs\_ed25519\_secret\_key};
+  \node[font=\sffamily\tiny,text=torgrigio,align=center] at (0,-1.95) {restringe acceso al directorio y a la clave};
+  \draw[->] (conf) -- (h);
+  \node[box,fill=torverde!12,minimum width=2.4cm] (srv) at (6.4,-0.6) {servidor web\\127.0.0.1:8080};
+  \node[box,fill=torviola!15,minimum width=2.4cm] (onion) at (6.4,1.2) {\texttt{[v3].onion}\\puerto 80};
+  \draw[->,torviola] (onion) -- node[right,font=\sffamily\tiny,align=left] {reenvío\\local} (srv);
+  \node[font=\sffamily\tiny,text=torgrigio] at (6.4,2.2) {v3: 56 base32};
+  \draw[dashed,torgrigio,->] (pk.east) to[bend left=12] (onion.west);
+  \node[anchor=west,font=\sffamily\tiny,text=avviso,align=left] at (4.4,-1.9) {robar la clave privada permite\\suplantar el servicio};
+  \draw[avviso,->] (sk.east) to[bend right=10] (4.3,-1.9);
+\end{tikzpicture}

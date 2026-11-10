@@ -1,0 +1,194 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Control Port 与 Stem}\label{cap:18-stem}
+\aggiornatoal{2026 年 9 月 23 日}{tor 0.4.9.13；control-spec；Stem 1.8.2}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 通过控制端口与 tor 通信，包括手动发送命令；
+  \item 使用主要命令：\texttt{GETINFO}、\texttt{SETCONF}、\texttt{SIGNAL}、\file{ADD\_ONION} 以及事件订阅；
+  \item 使用 Stem 库编写 Python 程序；
+  \item 在运行中的系统上观察流隔离和切换身份的影响（实验~11）。
+\end{itemize}
+\end{obiettivi}
+
+Tor Browser 可以显示当前网页使用的电路；Nyx 等工具能够显示中继的带宽与连接；网络测量系统则会按需创建电路。这些应用使用的都是同一个接口：通过 \opt{ControlPort}（\cref{sec:torrc-controllo}）访问 tor 的\textbf{控制协议}。
+
+% ---------------------------------------------------------------------------
+\section{控制协议}\label{sec:stem-protocollo}
+
+这是一种基于文本的协议，与电子邮件协议有些相似~\spec{control-spec}{Message format}。客户端每行发送一条命令，tor 则用以三位数字代码开头的行回应。代码 \texttt{250} 表示成功；代码后的连字符（\texttt{250-}）表示回应尚未结束，空格（\texttt{250 }）表示这是最后一行；\texttt{+} 则引出一个多行文本块，该文本块由只包含一个句点的行结束。代码 \texttt{5xx} 表示错误，而 \texttt{650} 表示异步事件。
+
+我们可以通过一个简单的 TCP 连接访问实验网络客户端的 8008 端口：
+\begin{lstlisting}[numbers=none]
+> PROTOCOLINFO 1
+250-PROTOCOLINFO 1
+250-AUTH METHODS=COOKIE,SAFECOOKIE COOKIEFILE="/lab/net/.../008c/control_auth_cookie"
+250-VERSION Tor="0.4.9.13"
+250 OK
+> AUTHENTICATE 52977550adebb73908610d7fa3355aba3fbdbdaef01d5ef86523d3232b87e5fa
+250 OK
+> GETINFO status/bootstrap-phase
+250-status/bootstrap-phase=NOTICE BOOTSTRAP PROGRESS=100 TAG=done SUMMARY="Done"
+250 OK
+\end{lstlisting}
+这是此前一次示例运行的记录：目录、版本及认证 cookie 均取决于具体实例。\textbf{切勿公开真正的控制端口 cookie}，因为持有它便可能通过控制端口认证。
+\texttt{PROTOCOLINFO} 是认证前允许使用的少数命令之一（其他几个是 \texttt{AUTHCHALLENGE}、\texttt{AUTHENTICATE} 和 \texttt{QUIT}）。它会报告支持的认证方法以及 cookie 文件的路径。采用 \texttt{COOKIE} 认证时，客户端以十六进制形式发送该文件内容。\texttt{SAFECOOKIE} 则避免直接传输 cookie：客户端与 tor 交换随机值，并通过 HMAC 证明自己知道 cookie，从而防止假冒 tor 的程序窃取该凭据。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图18-控制}
+\caption{简化的控制协议会话：COOKIE 认证（图中使用占位符）后，GETINFO circuit-status 可返回多行数据，随后由单独一行的句点和 250 OK 结束。SETEVENTS 以 250 OK 确认订阅；异步的 650 事件可能与其他命令的回应交错。编号和数据仅为示例。}
+\label{fig:controllo}
+\end{figure}
+
+\subsection{从 tor 的视角观察电路}
+
+\texttt{GETINFO circuit-status} 列出客户端当前的电路。下面是一条缩写记录：
+\begin{lstlisting}[numbers=none]
+3 BUILT $50160F8F...~test004r,$12415FEB...~test005r,$9449F36E...~test007e
+  BUILD_FLAGS=NEED_CAPACITY,NEED_UPTIME PURPOSE=CONFLUX_LINKED
+  CONFLUX_ID=DE224696F58F72950D70DDA2D7981726 CONFLUX_RTT=42538
+\end{lstlisting}
+每个中继都由 RSA 身份指纹和昵称表示。Conflux 电路成对出现，具有相同的 \file{CONFLUX\_ID}，两个\enquote{分支}从不同入口守卫出发。tor 测量它们的往返时延（\file{CONFLUX\_RTT}，单位为微秒），决定由哪个分支传输数据（\cref{cap:31-futuro}）。tor 的源码 \file{src/feature/control/control\_fmt.c} 中有一个值得注意的细节：\file{CONFLUX\_ID} 只暴露这对电路秘密标识符的\emph{一半}。知道完整标识符的人，可能从出口端向该电路对添加分支并注入数据。
+
+\subsection{主要命令}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+命令 & 用途 \\
+\midrule
+\texttt{GETINFO} & 读取版本、引导状态、电路、流、共识、描述符等信息 \\
+\texttt{GETCONF}、\texttt{SETCONF} & 读取和修改运行中的配置 \\
+\texttt{SIGNAL} & 发送信号：\texttt{NEWNYM}（新身份）、\texttt{RELOAD}、\texttt{SHUTDOWN} 等 \\
+\texttt{SETEVENTS} & 订阅事件：\texttt{CIRC}、\texttt{STREAM}、\texttt{BW}、\file{HS\_DESC} 等 \\
+\texttt{EXTENDCIRCUIT} & 沿控制程序指定的路径建立电路 \\
+\texttt{ATTACHSTREAM} & 将流附加到电路（可配合 \opt{\_\_LeaveStreamsUnattached} 使用） \\
+\file{ADD\_ONION}、\file{DEL\_ONION} & 无须编辑 \file{torrc}，动态创建和移除洋葱服务 \\
+\texttt{HSFETCH} & 下载洋葱服务描述符（用于 \cref{sec:lab-onion}） \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{attenzione}[掌握控制端口，就能控制 tor]
+控制端口可以指示 tor 使用哪些中继、建立单跳电路，并暴露所有流的目的地。有权访问控制端口的恶意程序能够破坏用户的匿名性。因此，Tails 和 Whonix 等系统会在应用程序与控制端口之间放置过滤器（onion-grater），仅放行严格必要的命令。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Stem}\label{sec:stem-libreria}
+
+\textbf{Stem} 是 Tor Project 为控制协议开发的 Python 库。它封装了网络报文格式的细节，负责解析回应与事件，并提供方便使用的对象。在本书所采用的版本基准中，最新的 Stem 版本为 1.8.2，发布于 2023 年 6 月。该库与当前的 tor 版本兼容，许多工具仍在使用它，但已有一段时间没有发布新版本。有时，较新的功能需要直接发送原始命令（\texttt{Controller.msg}）。Arti 使用的是另一种接口：Arti RPC（\cref{cap:30-arti}）。
+
+下面是一个最简示例，我们已经在 \cref{sec:rp-stem} 中使用过：
+\begin{lstlisting}[language=Python]
+from stem.control import Controller
+
+with Controller.from_port(port=8008) as c:
+    c.authenticate()                   # 自动寻找 cookie 或请求输入密码
+    print(c.get_version())
+    for circ in c.get_circuits():
+        print(circ.id, circ.purpose, [name for _, name in circ.path])
+\end{lstlisting}
+
+注册一个接收事件的函数。下面是\emph{可独立运行的示例}：在控制连接保持打开时注册监听器，再等待十秒以接收异步事件。等待时长仅用于演示：
+\begin{lstlisting}[language=Python]
+import time
+from stem.control import Controller, EventType
+
+def on_circuit(event):
+    print(event.id, event.status, event.purpose)
+
+with Controller.from_port(port=8008) as c:
+    c.authenticate()
+    c.add_event_listener(on_circuit, EventType.CIRC)
+    time.sleep(10)
+\end{lstlisting}
+Stem 在自己的事件线程中调用该函数。事件线程只有一个，并且依次调用所有已注册的监听器。因此，执行缓慢的回调会延迟后续事件。如果处理需要进行大量计算，应将计算委托给另一个线程。
+
+% ---------------------------------------------------------------------------
+\section{实验：实时观察流隔离}\label{sec:lab-stem}
+
+\begin{laboratorio}[11]{流隔离与切换新身份}
+\textbf{目标。}在实验网络客户端上使用 Stem，根据不同请求的 SOCKS 凭据检查哪些请求共用电路，并观察发送 \texttt{SIGNAL NEWNYM} 后发生的变化。\\
+\textbf{前置条件。}实验网络正在运行，并有一台本地 Web 服务器监听 8080 端口。在容器中运行 \file{labs/zh-Hans/实验室/isolation.py}；容器已包含 Stem 和 \cmd{curl}。\\
+\textbf{预计时间。}1 小时。
+\end{laboratorio}
+
+\paragraph{步骤 1：记录流。}我们订阅 \texttt{STREAM} 事件，每当一个流成功建立，就记录它被附加到哪条电路。必须按照目的地址过滤事件，因为 tor 也会为自己的任务创建流，例如下载目录文档。
+\begin{lstlisting}[language=Python]
+assigned = []
+def on_stream(ev):
+    if ev.status == StreamStatus.SUCCEEDED and ev.target == DESTINATION:
+        assigned.append((ev.id, ev.circ_id, ev.target))
+
+c.add_event_listener(on_stream, EventType.STREAM)
+\end{lstlisting}
+这段代码摘自 \file{labs/zh-Hans/实验室/isolation.py}：完整脚本还会定义 \texttt{DESTINATION}、导入 \texttt{StreamStatus} 并保持控制连接 \texttt{c} 打开。因此应运行完整脚本，而非单独执行此片段。
+
+\paragraph{步骤 2：使用不同凭据发起请求。}我们用 \cmd{curl} 发送四个请求：其中两个使用 SOCKS 凭据 \texttt{site-a.example:x1}，一个使用 \texttt{site-b.example:x2}，另一个不带凭据。Tor Browser 以每个页面所属主站的域名作为 SOCKS 用户名：
+\begin{lstlisting}[language=bash,numbers=none]
+$ curl --proxy-user site-a.example:x1 --socks5-hostname 127.0.0.1:9008 http://127.0.0.1:8080/
+\end{lstlisting}
+
+\paragraph{步骤 3：实验结果。}以下数据取自此前的参考实验；Conflux 标识符、电路路径和 NEWNYM 延迟都不是固定值。
+\begin{lstlisting}[numbers=none]
+凭据 site-a.example  -> conflux AADCE71E  ['test003r', 'test004r', 'test007e']
+凭据 site-a.example  -> conflux AADCE71E  ['test003r', 'test004r', 'test007e']
+凭据 site-b.example  -> conflux 31B1E3E0  ['test003r', 'test004r', 'test007e']
+凭据 -               -> conflux 35FD16D0  ['test003r', 'test004r', 'test007e']
+（NEWNYM 延迟 6 秒）
+NEWNYM 后，site-a.example  -> conflux F7011ABE
+\end{lstlisting}
+上面保留了实验脚本实际使用的英文输出标签，以便读者直接对照执行结果。两个访问\enquote{网站 A}的请求虽然发生在不同时间，却使用了同一个隧道。访问\enquote{网站 B}的请求和没有认证的请求则分别使用不同隧道。打印出的路径是隧道两个分支中的一个；由于实验网络的中继很少，这些路径恰好相同。下面将解释为什么应该观察隧道，而不是某条单独的电路。
+
+\begin{approfondimento}[单条电路并不够：Conflux 隧道]
+如果多次重复实验，使用相同凭据的两个请求偶尔会出现在编号不同的电路上。这并非隔离失败。查询 tor 的完整电路列表可以发现，几乎所有客户端电路的用途都是 \file{CONFLUX\_LINKED}，并且以相同 \file{CONFLUX\_ID} \emph{成对出现}。它们是一条隧道的两个\enquote{分支}（\cref{sec:fut-conflux}），\texttt{STREAM} 事件可能报告其中任何一个。隔离因此针对的是\emph{隧道}，而不是单个分支。只要能够获得相关信息，本书脚本就会使用 \file{CONFLUX\_ID} 对它们进行分组。
+
+还需要注意两点，这两点都能从日志中验证：
+\begin{itemize}
+  \item \texttt{SIGNAL NEWNYM} 每十秒最多执行一次（见 \file{src/core/mainloop/mainloop.c} 中的 \file{MAX\_SIGNEWNYM\_RATE}）。过早发出的请求会被延迟，tor 在日志中写入 \enquote{Rate limiting NEWNYM request: delaying by N second(s)}。如果不等待，上一次实验留下的 NEWNYM 可能在新实验进行到一半时才生效。
+  \item \texttt{STREAM} 事件还包括 tor 为自身用途建立的流，例如目录文档下载。因此需要根据目的地址过滤。
+\end{itemize}
+即便采取了这些措施，负载较重的小型网络仍可能让 tor 为第二个请求选择刚刚建立的新隧道。这就是本书的自动检查器需要重复进行实验的原因。
+\end{approfondimento}
+
+\begin{attenzione}[实验中犯过的错误]
+首次运行实验时，我们看到四个请求全部使用相同电路，看起来流隔离似乎没有生效。问题其实出在脚本中：我们把 \texttt{--proxy-user} 紧接在 \cmd{curl} 的 \texttt{-o} 选项之后，后者把它解释成了输出文件名，因此根本没有发送任何凭据。在断言系统行为与规范不一致之前，应先确认实验确实执行了自己以为正在执行的操作。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item 控制协议基于文本：单行命令、三位数字回应代码，以及以 650 为代码的异步事件。
+  \item 使用 cookie（优先采用 \texttt{SAFECOOKIE}）或密码认证。能控制该端口，就能控制 tor。
+  \item Stem 为命令和事件提供 Python 接口。它运行稳定，但自 2023 年以来没有发布新版本。
+  \item SOCKS 凭据隔离为每个网站建立独立隧道；在 Conflux 下，一条隧道包含两条电路。\texttt{NEWNYM} 最多每十秒切换一次新隧道。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:18-codici}
+解释对 \texttt{GETINFO pippo} 的回应 \texttt{552 Unrecognized key "pippo"}。错误代码 \texttt{5xx} 与事件代码 \texttt{650} 有什么不同？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:18-onion}
+使用 Stem 的 \file{create\_ephemeral\_hidden\_service}，在实验网络客户端上创建一个临时洋葱服务，把它的 80 端口转发到本地 8080 端口的服务器。使用 \cmd{curl} 访问该服务。服务密钥存放在哪里？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:18-banda}
+编写程序，在通过实验网络下载大文件时，利用 \texttt{BW} 事件每秒显示客户端的入站和出站带宽。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:18-percorso}
+结合 \opt{\_\_LeaveStreamsUnattached} 1、\texttt{EXTENDCIRCUIT} 和 \texttt{ATTACHSTREAM}，让一次请求沿你指定的路径传输（例如 \texttt{test004r}、\texttt{test005r}、\texttt{test006e}）。为什么这一能力在真实环境中可能危害匿名性？
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \titolo{Tor's control protocol}（control-spec）~\cite{torspec}：所有命令和事件。
+  \item Stem 官方文档：\url{https://stem.torproject.org/}。
+\end{itemize}

@@ -1,0 +1,37 @@
+From: Alessandro Greco <address-withheld@example.invalid>
+Subject: [PATCH] exit: use the real socket error when a connect() fails
+
+When an exit relay's outgoing connect() fails, connection_handle_write_impl()
+reads the actual error with getsockopt(SO_ERROR) into `e`, logs it, and then
+calls connection_edge_end_errno(), which recomputes the reason from
+tor_socket_errno() -- on Unix the macro `(errno)`, which still holds
+EINPROGRESS from the non-blocking connect().  EINPROGRESS is not listed in
+errno_to_stream_end_reason(), so the default branch is taken and the client
+receives END with reason MISC instead of CONNECTREFUSED (or NOROUTE,
+TIMEOUT, ...).
+
+The OR branch immediately below already does the right thing, passing `e` to
+errno_to_orconn_end_reason().  Do the same for edge connections.
+
+Fixes the case where a client that asks an exit for a closed port is told
+"misc" and cannot distinguish a refused connection from an unspecified
+failure.
+
+---
+ src/core/mainloop/connection.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/core/mainloop/connection.c b/src/core/mainloop/connection.c
+index 1111111..2222222 100644
+--- a/src/core/mainloop/connection.c
++++ b/src/core/mainloop/connection.c
+@@ -4475,7 +4475,8 @@ connection_handle_write_impl(connection_t *conn, int force)
+         log_info(LD_NET,"in-progress connect failed. Removing. (%s)",
+                  tor_socket_strerror(e));
+         if (CONN_IS_EDGE(conn))
+-          connection_edge_end_errno(TO_EDGE_CONN(conn));
++          connection_edge_end(TO_EDGE_CONN(conn),
++                              errno_to_stream_end_reason(e));
+         if (conn->type == CONN_TYPE_OR)
+           connection_or_notify_error(TO_OR_CONN(conn),
+                                      errno_to_orconn_end_reason(e),

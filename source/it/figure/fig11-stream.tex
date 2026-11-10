@@ -1,0 +1,27 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Schema dello stream client–exit–server web. Il client invia BEGIN example.com:80 e può inviare DATA optimistic prima di CONNECTED. L'exit risolve separatamente il nome con DNS e apre TCP verso il server (SYN/SYN-ACK), poi risponde CONNECTED. Il traffico DATA attraversa il circuito cifrato fino all'exit e poi il collegamento TCP verso il server. Il SENDME di circuito nel controllo classico usa incrementi di 100 celle DATA, non 31. FIN può portare a END (DONE). HTTPS può proteggere il traffico applicativo oltre l'exit: la cifratura Tor non copre il link esterno. I passi sono schematici.}
+% Ciclo di vita di uno stream
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  msg/.style={font=\ttfamily\scriptsize,fill=white,inner sep=1pt},
+  tcp/.style={-{Stealth[length=2.5mm]},thick,torgrigio}]
+  \node[client] (c) at (0,0) {Client};
+  \node[relay,fill=torverde!30] (e) at (6.5,0) {Exit};
+  \node[server] (s) at (10.5,0) {Server web};
+  \foreach \x in {0,6.5,10.5} \draw[torgrigio] (\x,-0.5) -- (\x,-7.3);
+  \draw[cellaf] (0,-1.0) -- node[msg,above]{BEGIN "example.com:80"} (6.5,-1.0);
+  \draw[cellaf,dashed] (0,-1.6) -- node[msg,above]{DATA (optimistic)} (6.5,-1.6);
+  \draw[tcp] (6.5,-1.3) -- node[msg,above]{TCP SYN} (10.5,-1.3);
+  \draw[tcp] (10.5,-2.1) -- node[msg,above]{SYN-ACK} (6.5,-2.1);
+  \draw[risposta] (6.5,-2.6) -- node[msg,above]{CONNECTED (IP, TTL)} (0,-2.6);
+  \draw[tcp] (6.5,-2.9) -- node[msg,above]{richiesta} (10.5,-2.9);
+  \draw[tcp] (10.5,-3.6) -- node[msg,above]{risposta} (6.5,-3.6);
+  \draw[risposta] (6.5,-4.1) -- node[msg,above]{DATA, DATA, \ldots} (0,-4.1);
+  \draw[cellaf] (0,-4.8) -- node[msg,above]{SENDME (circuito, 100 DATA)} (6.5,-4.8);
+  \draw[risposta] (6.5,-5.5) -- node[msg,above]{DATA, \ldots} (0,-5.5);
+  \draw[tcp] (10.5,-6.1) -- node[msg,above]{FIN} (6.5,-6.1);
+  \draw[risposta] (6.5,-6.7) -- node[msg,above]{END (DONE)} (0,-6.7);
+  \node[font=\scriptsize,text=torgrigio] at (3.25,-7.6) {dentro il circuito (3 salti, cifrato)};
+  \node[font=\scriptsize,text=torgrigio] at (8.5,-7.6) {connessione TCP normale};
+\end{tikzpicture}

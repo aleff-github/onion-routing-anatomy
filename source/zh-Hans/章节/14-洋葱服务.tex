@@ -1,0 +1,293 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{洋葱服务 v3}\label{cap:14-onion-services}
+\aggiornatoal{2026 年 9 月 23 日}{torspec 提交 \texttt{8e1f245}；tor 0.4.9.13；rend-spec v3}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 解释洋葱服务提供什么能力，以及它与通过出口访问普通网站有何不同；
+  \item 从服务的 \texttt{.onion} 地址推导公钥，并由公钥生成地址；
+  \item 描述盲化密钥、时间周期，以及客户端如何定位负责的 HSDir；
+  \item 读懂描述符的分层结构；
+  \item 逐步跟踪引介与汇合协议；
+  \item 在实验网络上下载、验证并解密一个洋葱服务的描述符（实验~8）。
+\end{itemize}
+\end{obiettivi}
+
+到目前为止，我们使用 Tor 隐藏的是\emph{谁}在连接某台服务器。服务器本身却是公开的：它的 IP 地址已知，出口中继通过公共网络直接连接到它，因此知道目的地。如果应用没有使用 HTTPS 之类的端到端加密，内容还会以明文出现。\textbf{洋葱服务}把这种关系反过来：它允许某人提供一个服务，例如网站，而不暴露服务的网络位置。客户端与服务在网络中间相会，双方都由自己的电路保护，并且彼此都不知道对方的地址。
+
+% ---------------------------------------------------------------------------
+\section{洋葱服务提供什么}\label{sec:os-proprieta}
+
+\begin{description}
+  \item[服务匿名性] 服务器的 IP 地址不会暴露：服务只通过自己主动建立的 Tor 电路与网络通信。
+  \item[自认证地址] \texttt{.onion} 地址\emph{编码了}服务的公钥，以及校验和与版本字节。任何连接到该地址的人都可以通过密码学确认，对端持有相应私钥，而不需要证书颁发机构。
+  \item[端到端加密] 客户端与服务之间的流量使用只有双方知道的密钥加密；不存在能够观察明文流量的出口中继。
+  \item[可达性] 服务不需要接受来自公网的入站连接。只要 NAT 或防火墙允许出站连接，它就能工作。
+\end{description}
+
+代价是路径更长。在基本模型中，客户端通过三跳电路到达一个会合点，服务再通过另一条三跳电路到达同一点：总共经过六个中继，而访问普通网站时只有三跳。默认启用 vanguards-lite 后（\cref{sec:vanguards}），路径不再对称。服务端会插入一个固定的第二层中继，因此其汇合侧电路变为四跳（\file{S\,$\to$\,G\,$\to$\,L2\,$\to$\,M\,$\to$\,Rend}），而客户端仍为三跳。
+
+\begin{storia}[从 v2 到 v3]
+\emph{隐藏服务（hidden services）}自 2004 年起就已存在。第一个广泛部署的版本 v2 使用 16 字符地址：从 1024 位 RSA 密钥出发，将 SHA-1 摘要截断到 80 位后生成。它还允许 HSDir 收集自己托管描述符的服务地址。版本 3（\proposta{224}）自 tor 0.3.2.1-alpha（2017）起可用，引入了 Ed25519 密钥、包含完整公钥的 56 字符地址、加密描述符和盲化密钥。V2 服务在 2021 年 10 月随 tor 0.4.5.11 和 0.4.6.8 被彻底禁用。名称也发生了变化：如今使用的术语是\emph{洋葱服务（onion service）}。
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{地址}\label{sec:os-indirizzo}
+
+v3 地址把服务的身份公钥、一个短校验和以及版本号进行 base32 编码~\spec{rend-spec}{Encoding onion addresses}：
+\[
+\texttt{address} = \mathrm{base32}(\mathit{PUBKEY} \,\|\, \mathit{CHECKSUM} \,\|\, \mathit{VERSION}) \,\|\, \texttt{".onion"}
+\]
+其中，$\mathit{PUBKEY}$ 是 32 字节 Ed25519 公钥，$\mathit{VERSION}$ 是字节 \texttt{0x03}，$\mathit{CHECKSUM}$ 则取
+$\mathrm{SHA3\text{-}256}(\texttt{".onion checksum"} \,\|\, \mathit{PUBKEY} \,\|\, \mathit{VERSION})$
+的前 2 个字节。最终的 35 字节恰好编码成 56 个 base32 字符。校验和并不能抵御攻击者，因为攻击者和任何人一样都能重新计算它；它的作用是发现输入错误。
+
+在一次实验运行中，洋葱服务得到如下地址。这是保存在 \file{labs/zh-Hans/代码/torlab/test/data/} 中的示例地址，实验测试会使用它。本节所有输出都针对这个示例，因此无需联网也可以复现。当读者启动自己的网络时，会生成新的密钥，因此地址也会不同（\cref{sec:rp-file}）。
+\begin{lstlisting}[numbers=none]
+wdjtp7qktdjkkgjjbbx2axvg2gri5p4tuhlc4bq23n7o3uwu4rveppqd.onion
+\end{lstlisting}
+实验~8 中的 \file{key\_from\_address} 函数会从该地址提取公钥并验证校验和。
+
+\begin{attenzione}[不能靠记忆识别地址]
+随机生成的 56 字符地址既难以记忆，也很难凭肉眼快速辨认。用户通常从自己信任的来源复制地址，而一个只差几个字符的地址很可能不会被注意到。这是针对洋葱服务最主要的\emph{钓鱼（phishing）}方式。\emph{个性化地址（vanity address）}通过尝试数百万把密钥，直到地址开头能拼出一个单词，只能部分缓解这一问题：攻击者同样可以生成具有相同前缀的地址。我们将在 \cref{cap:21-onion-pratica} 再讨论这个问题。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{盲化密钥}\label{sec:os-accecate}
+
+\subsection{问题}
+
+服务必须在某处发布如何找到自己的信息，也就是\emph{描述符（descriptor）}。如果描述符直接以身份密钥发布，那么任何运行 HSDir 的人都能看到自己托管描述符的全部服务地址，从而枚举这些服务，或者把同一服务在不同时间的描述符关联起来。这正是 v2 的情况。
+
+\subsection{解决方案}
+
+在 v3 中，服务使用\textbf{盲化密钥（blinded key）}对描述符签名，并且每个\emph{时间周期（time period）}使用不同的盲化密钥~\spec{rend-spec}{Appendix A: Signature scheme with key blinding}。给定身份密钥 $A=aB$（其中 $B$ 是 Ed25519 基点），先计算
+\begin{gather*}
+h = \mathrm{SHA3\text{-}256}(\texttt{"Derive temporary signing key\textbackslash 0"} \,\|\, A \,\|\, B \,\|\, N), \\
+N = \texttt{"key-blind"} \,\|\, \mathit{period} \,\|\, \mathit{period\_length}
+\end{gather*}
+（其中部分位会像 Ed25519 密钥一样被强制设置），随后得到盲化公钥：
+\[
+A' = h \cdot A.
+\]
+这种构造具有几个重要性质：
+\begin{itemize}
+  \item 任何知道地址、因此知道 $A$ 的人，都能为每个周期计算 $A'$，从而知道应该到哪里查找描述符；
+  \item 只看到 $A'$ 的人，例如 HSDir，无法恢复 $A$，也无法判断不同周期中的两个盲化密钥是否属于同一个服务；
+  \item 服务可以使用私钥 $a'=h\cdot a$ 在 $A'$ 下签名，生成的签名可以像普通 Ed25519 签名一样用 $A'$ 验证。
+\end{itemize}
+
+一个不寻常的细节说明规范与代码贴得有多近：常量字符串末尾包含一个零字节，因为 tor 用 \texttt{sizeof} 而不是 \texttt{strlen} 计算它的长度。源码注释（\file{src/feature/hs/hs\_common.c}）承认，与其修改代码，不如把这个“意外”记录进规范。
+
+\subsection{凭据与离线密钥}
+
+身份密钥生成一个\emph{凭据（credential）}：
+$\mathrm{SHA3\text{-}256}(\texttt{"credential"} \,\|\, A)$。
+每个周期再由此生成一个\emph{子凭据（subcredential）}：
+$\mathrm{SHA3\text{-}256}(\texttt{"subcredential"} \,\|\, \mathit{credential} \,\|\, A')$。
+子凭据用于描述符加密和引介握手：它证明请求方知道服务地址，而 HSDir 并不知道该地址。
+
+密钥层次结构还允许身份密钥保持\emph{离线}。每个周期的盲化密钥会认证一个短期描述符签名密钥（类型 8 的 Ed25519 证书，见 \cref{tab:cert-types}）。原则上，服务器可以预先接收未来周期的签名密钥与证书，而从不持有与其地址对应的身份私钥。并非所有实现都支持这种模式。
+
+% ---------------------------------------------------------------------------
+\section{定位描述符}\label{sec:os-hsdir}
+
+\subsection{时间周期}
+
+时间被划分为若干周期；在公共网络上，每个周期持续一天（由共识参数 \texttt{hsdir-interval} 决定）~\spec{rend-spec}{Dividing time into periods}。周期并不是在 UTC 午夜开始，而是在 UTC 正午开始。它与权威的共享随机数协议错开 12 小时；该协议每天午夜在共识中发布新的\textbf{共享随机值（shared random value, SRV）}。周期编号由从 1970 年 1 月 1 日起经过的分钟数减去偏移量，再除以周期长度得到。规范给出的示例是：2016 年 4 月 13 日 11:15:01 UTC 时，时间周期为 16903，该周期从前一天正午开始。实验~8 正好测试这个例子。
+
+在测试网络中，如果每 20 秒投票一次，等待一天显然不现实。因此 tor 把周期缩短为一轮完整的 SRV 协议周期，也就是 24 次投票（函数 \file{get\_time\_period\_length}）。在实验网络中，一个周期持续 8 分钟，并偏移 4 分钟。
+
+\subsection{HSDir 环}
+
+哪个 HSDir 保存描述符？每个带有 \texttt{HSDir} 标志的中继在一个 256 位\emph{环（ring）}上占据一个位置~\spec{rend-spec}{Where to publish a hidden service descriptor}：
+\[
+\mathit{relay\_index} = \mathrm{SHA3\text{-}256}(\texttt{"node-idx"} \,\|\, \textit{Ed25519 identity} \,\|\, \mathit{SRV} \,\|\, \mathit{period} \,\|\, \mathit{period\_length})
+\]
+对于两个\emph{副本（replica）}中的每一个，服务都计算一个索引：
+\[
+\mathit{service\_index}(r) = \mathrm{SHA3\text{-}256}(\texttt{"store-at-idx"} \,\|\, A' \,\|\, r \,\|\, \mathit{period\_length} \,\|\, \mathit{period}).
+\]
+服务把描述符上传到环上每个索引之后的前四个 HSDir（参数 \file{hsdir\_spread\_store}）；客户端则从前面三个中随机选择一个（\file{hsdir\_spread\_fetch}）。把 SRV 纳入索引计算，可以防止攻击者提前很久预测哪些中继将负责某个服务，进而把恶意中继放到恰当位置来审查该服务或观察描述符请求。服务会同时发布两个连续周期的描述符，这样即使客户端的共识稍微领先或落后，服务仍然可达。具体使用哪两个周期取决于当前处在循环中的哪个阶段：在 SRV 轮换前后，可能是“上一周期+当前周期”，也可能是“当前周期+下一周期”~\spec{rend-spec}{Generating and publishing hidden service descriptors}。
+
+\begin{approfondimento}[应该使用哪个 SRV？]
+由于时间周期与 SRV 错开半天，客户端必须谨慎选择 SRV。在一个周期开始到下一次 SRV 发布之间的半天里，它使用当前 SRV；另一半天则使用前一个 SRV。如果共识中缺少所需 SRV，例如网络刚启动时，tor 会计算一个备用值，即\emph{灾难 SRV（disaster SRV）}：
+$\mathrm{SHA3\text{-}256}(\texttt{"shared-random-disaster"} \,\|\, \mathit{period\_length} \,\|\, \mathit{period})$。
+选择逻辑由 \file{hs\_get\_current\_srv} 和 \file{hs\_get\_previous\_srv}（\file{src/feature/hs/hs\_common.c}）实现。如果共识缺少所需值，tor 会静默退回到 disaster SRV。新建实验网络时会出现这种情况，但不会持续太久：在我们的网络中，权威日志显示启动 115 秒后出现第一个 SRV；在此之前，共识中没有 \texttt{shared-rand-current-value} 行。要观察这一回退过程，可以查看新网络建立后的前几分钟。一旦网络运行一段时间，如 \cref{sec:lab-onion} 中的实验那样，就会使用真正的 SRV。
+\end{approfondimento}
+
+\subsection{只接受匿名请求}
+
+客户端通过一个 \file{BEGIN\_DIR} stream 向 HSDir 发起 HTTP 请求，路径为 \nolinkurl{/tor/hs/3/} 加上去掉末尾 \texttt{=} 的盲化密钥 base64 表示，以下载描述符。但有一个条件：请求必须经由\textbf{匿名}电路抵达。HSDir 会拒绝来自客户端直接建立电路的请求，也就是单跳电路。我们在实验中实际观察到了这一点：
+\begin{lstlisting}[numbers=none]
+HTTP/1.0 503 Rejecting single hop HS v3 descriptor request
+\end{lstlisting}
+检查逻辑位于 \file{connection\_dir\_is\_anonymous}（\nolinkurl{src/feature/dircommon/directory.c}）。这样可以防止 HSDir 把某次描述符请求与发起请求的客户端 IP 地址关联起来。
+
+% ---------------------------------------------------------------------------
+\section{描述符}\label{sec:os-descrittore}
+
+描述符包含三层~\spec{rend-spec}{Generating and publishing hidden service descriptors}，如 \cref{fig:os-descrittore} 所示。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图14-描述符}
+\caption{Tor v3 洋葱服务描述符结构：HSDir 可以读取已签名的外层；知道 onion 身份的客户端能解密第一层。启用受限发现时，获授权客户端使用自己的 X25519 密钥恢复 descriptor cookie，继而解密第二层。}
+\label{fig:os-descrittore}
+\end{figure}
+
+\paragraph{外层}是明文且带签名。它包含版本、有效期（\texttt{descriptor-lifetime}，实验中为 180 分钟）、由盲化密钥签发的签名密钥证书、修订计数器、加密的 \texttt{superencrypted} 块以及签名。签名是 Ed25519 签名，由描述符签名密钥对前缀为 \texttt{"Tor onion service descriptor sig v3"} 的文本进行签名。该前缀防止为描述符生成的签名在其他语境中同样有效。每个新版本的修订计数器都必须递增，这样 HSDir 才不会接受比自己已存版本更旧的描述符。
+
+\paragraph{第一加密层}使用由盲化密钥和子凭据派生的密钥加密。不知道服务地址的 HSDir 无法读取它。该层包含\emph{受限发现（restricted discovery）}字段（\cref{sec:os-ristretta}）以及第二层。为避免泄露是否启用了受限发现，这些字段始终存在；不需要时会填充随机数据。
+
+\paragraph{第二层}包含建立连接所需的信息：支持的握手格式、流量控制参数、可能存在的抗 DoS 参数，以及每个\textbf{引介点（introduction point）}的连接信息，包括到达它所需的 link specifier（base64）、ntor 密钥、经过认证的身份验证密钥和加密密钥。默认情况下，一个服务使用三个引介点。
+
+两层使用同一种加密方案。一个随机的 16 字节盐值（salt）、秘密数据和层专用常量一起输入 SHAKE-256，派生出 AES-256 密钥、初始化向量和认证密钥。正文使用计数器模式加密，并通过 SHA3-256 认证。第一层明文会填充到 10\,000 字节的整数倍，\texttt{auth-client} 行数也会填充到 16 的整数倍，从而尽量减少描述符大小对引介点数量和授权客户端数量的泄露。
+
+% ---------------------------------------------------------------------------
+\section{引介与汇合}\label{sec:os-rendezvous}
+
+拿到描述符后，客户端就可以连接服务。协议如 \cref{fig:os-rendezvous} 所示，涉及三类“特殊”中继：由服务选择的引介点、由客户端选择的汇合点，以及 HSDir。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图14-会合}
+\caption{汇合协议。每条箭头都代表一条多跳电路；客户端、服务与中间节点之间不存在直接连接。数字表示正文描述的步骤顺序。}
+\label{fig:os-rendezvous}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{服务准备引介点。} 服务选择若干中继，为每个中继建立电路，并发送 \file{ESTABLISH\_INTRO}（中继命令 32），其中为每个引介点携带不同的身份验证密钥和签名。中继回复 \file{INTRO\_ESTABLISHED}（38）；此后，带有该密钥的请求会被转发给服务。
+  \item \textbf{服务发布描述符。} 按照前面所述，将描述符上传到负责的 HSDir。
+  \item \textbf{客户端准备汇合。} 客户端随机选择一个中继作为汇合点，建立到它的电路，并发送 \file{ESTABLISH\_RENDEZVOUS}（33）以及一个随机 20 字节\emph{随机令牌（cookie）}。中继回复 \file{RENDEZVOUS\_ESTABLISHED}（39）。
+  \item \textbf{客户端进行引介。} 客户端建立到某个引介点的电路并发送 \texttt{INTRODUCE1}（34）。明文部分指定引介点的身份验证密钥；只有服务能读取的加密部分包含 cookie、汇合点的 link specifier 和 ntor 密钥，以及握手的前半部分。引介点向客户端发送 \file{INTRODUCE\_ACK}（40），并把消息以 \texttt{INTRODUCE2}（35）的形式转发给服务。
+  \item \textbf{服务连接汇合点。} 服务解密 \texttt{INTRODUCE2}，检查该消息是否与之前见过的请求重复（即\emph{重放缓存，replay cache}），然后建立到指定汇合点的电路，并发送 \texttt{RENDEZVOUS1}（36），其中包含 cookie 和握手后半部分。
+  \item \textbf{汇合点连接两条电路。} 它使用同一个 cookie 找到客户端的电路，把握手后半部分通过 \texttt{RENDEZVOUS2}（37）转发过去，此后就在两条电路之间转发信元。
+\end{enumerate}
+
+客户端与服务之间的握手称为 \emph{hs-ntor}，它是 ntor（\cref{sec:ntor}）的一个变体，其中加入了子凭据以及引介点的身份验证密钥。只有知道服务地址的人才能生成服务会接受的 \texttt{INTRODUCE1}。派生出的密钥再增加一层加密，就像在客户端电路末端增加一个\emph{虚拟跳（virtual hop）}，其运行摘要使用 SHA3-256 而不是 SHA-1（\cref{sec:riconoscere}）。无论引介点还是汇合点，都无法读取通信内容。
+
+在拼接后的电路上，客户端像通过出口一样用 \texttt{BEGIN} 打开数据流（\cref{cap:11-stream}）。服务则把这些数据流转发到通过 \opt{HiddenServicePort} 配置的本地端口。
+
+\begin{approfondimento}[为什么需要这么多中继？]
+引介点眼中的服务只是“某条电路的身份验证密钥”；它不知道自己服务的是哪个 \texttt{.onion} 地址。汇合点只看到一个随机 cookie 和两条电路；它不知道自己正在把哪个服务连接给哪个客户端。每个角色只看到信息的一小部分，也没有任何一个角色知道客户端或服务的 IP 地址，因为它们都隐藏在各自的 guard 后面。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{受限发现}\label{sec:os-ristretta}
+
+有些服务只希望特定客户端能够访问，例如管理面板。在\textbf{受限发现（restricted discovery）}机制下（旧称\emph{客户端授权，client authorization}），每个授权客户端拥有一个 X25519 密钥对，而服务知道其公钥。服务会在第一层的 \texttt{auth-client} 行中，分别为每个客户端加密描述符第二层的密钥。即使某人知道服务地址，只要没有授权密钥，就无法读取引介点列表，因此甚至无法尝试连接。在 tor 中，可通过把客户端公钥加入服务的 \file{authorized\_clients} 目录来配置此功能。
+
+% ---------------------------------------------------------------------------
+\section{防御机制}\label{sec:os-difese}
+
+洋葱服务天然容易成为攻击目标：因为服务看不到攻击客户端的 IP 地址，所以无法简单按 IP 封禁。主要防御措施包括：
+\begin{itemize}
+  \item \textbf{vanguards}：保护服务的 guard，抵御利用按需构建电路实施的攻击（\cref{sec:vanguards}）；
+  \item \textbf{重放缓存（replay cache）}：阻止攻击者让服务重复执行同一份工作；
+  \item 服务可通过 \file{ESTABLISH\_INTRO} 扩展在引介点设置抗 DoS 参数，限制每秒允许的 \texttt{INTRODUCE2} 消息数量；
+  \item \textbf{工作量证明（proof of work）}：当服务遭到攻击时，可以要求客户端在获得服务前先解决一个小型计算问题（\cref{cap:15-dos}）。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{实验：寻找并读取描述符}\label{sec:lab-onion}
+
+\begin{laboratorio}[8]{实验洋葱服务的描述符}
+\textbf{目标。} 编写 \file{labs/zh-Hans/代码/torlab/onion.py}：处理地址、盲化密钥、HSDir 环、描述符下载、验证与解密。\\
+\textbf{前置条件。} 实验~1--6；实验网络正在运行。\\
+\textbf{预计时间。} 4 小时。
+\end{laboratorio}
+
+\paragraph{步骤 1：盲化密钥。}
+常见密码学库提供 Ed25519 签名，但不提供计算 $A'=h\cdot A$ 所需的“点乘标量”操作。因此，本模块包含一份很小的 Ed25519 算术实现，大约三十行，基于 RFC~8032 中的公式。它足以完成这个实验，但不适合通用场景：速度慢，也没有抵抗时序攻击的保护。
+\begin{lstlisting}[language=Python]
+def blinding_factor(A, period, duration_minutes):
+    n = b"key-blind" + struct.pack(">QQ", period, duration_minutes)
+    h = bytearray(hashlib.sha3_256(
+        b"Derive temporary signing key\x00" + A + BASE_STR + n).digest())
+    h[0] &= 248; h[31] &= 63; h[31] |= 64
+    return int.from_bytes(h, "little")
+
+def blinded_key(A, period, duration_minutes):
+    return _encode_point(_multiply(blinding_factor(A, period, duration_minutes),
+                                   _decode_point(A)))
+\end{lstlisting}
+
+\paragraph{步骤 2：周期与 SRV。}
+\texttt{time\_period\_info} 函数根据共识中的 \texttt{valid-after} 时间戳与投票间隔复现 tor 的计算，判断应使用当前 SRV 还是前一个 SRV。如果共识缺少所需值，则使用 disaster SRV。
+
+\paragraph{步骤 3：追踪错误。}
+第一次运行时，我们在网络中的八个 HSDir 上都没有找到描述符。既然八个都尝试过，问题就不可能只是选错 HSDir；剩下的可能性只有盲化密钥或请求本身。为了区分这两种情况，我们让网络中的真实客户端通过控制端口下载描述符（先发送 \texttt{HSFETCH}，再发送 \texttt{GETINFO hs/client/desc/id/...}）。从返回证书中读取服务实际使用的盲化密钥后，发现它与我们的计算完全一致。因此问题出在请求上，而 tor 源码解释了原因：HSDir 会拒绝单跳请求。把到 HSDir 的路径改为三跳电路后，就成功获得了描述符。这是一种普遍有用的调试方法：实验失败时，应寻找一个中间检查点，把自己的结果与参考实现进行比较。
+
+\paragraph{步骤 4：验证并解密。} 此示例中的 \texttt{path} 是从实验网络获得的三个 \texttt{RelayInfo} 对象组成的列表，末尾是 HSDir；\texttt{A} 是身份公钥，\texttt{Ap} 是对应周期的盲化公钥。这里不展示这些对象的构造过程。
+\begin{lstlisting}[language=Python]
+d = download_descriptor(Ap, path)
+desc = parse_descriptor(d, A, Ap)
+\end{lstlisting}
+\file{parse\_descriptor} 会验证签名密钥证书确实由预期盲化密钥签发，再验证描述符签名，并解密两个加密层。以下是此前一次实验运行的缩略输出：
+\begin{lstlisting}[numbers=none]
+有效期 180 修订号 662427 引介点 3
+create2-formats 2
+flow-control 1-2 31
+introduction-point AwAGfwAAARPyAhQXE5GoH+wp3MoxW9M1QV6XSxb0fgM...
+onion-key ntor yRURxDb2eeEmF/p5M/bmHA+giwVyxjApKYyNY1KkCDo=
+auth-key
+-----BEGIN ED25519 CERT-----
+...
+\end{lstlisting}
+其中 \texttt{flow-control 1-2 31} 告诉客户端，该服务支持拥塞控制，且 \file{sendme\_inc} 的值仍是 \cref{cap:11-stream} 中见过的 31。
+
+\paragraph{步骤 5：一致性检查。}
+实验网络共有八个 HSDir，而服务会把描述符上传到 $2\times4=8$ 个 HSDir，也就是全部八个。因此“能够找到描述符”本身并不能证明环计算正确。不过，客户端日志（\file{info.log}）会记录它实际联系了哪个 HSDir：16:07 时为 \texttt{test002a}。在那个时刻，它确实位于我们代码为相应副本返回的三个 HSDir 之一。一次观察当然不是证明，但结果一致。练习~\ref{es:14-anello} 提出了一种更严格的测试。
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item 洋葱服务可以在不暴露 IP 地址的情况下提供服务；其 \texttt{.onion} 地址包含并认证服务公钥。
+  \item 描述符使用每个时间周期独有的盲化密钥签名，只有知道地址的人才能把这些盲化密钥与服务关联起来。
+  \item 描述符在 HSDir 环上的位置取决于盲化密钥、时间周期和共享随机值；客户端通过匿名请求下载描述符。
+  \item 描述符包含一个带签名的外层和两个加密层；第二层列出引介点。
+  \item 客户端和服务在客户端选择的汇合点相会，请求通过引介点送达服务。hs-ntor 握手再增加一层端到端加密。
+  \item 受限发现、vanguards、重放缓存、速率限制与工作量证明共同保护洋葱服务。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:14-indirizzo}
+一个 v3 地址编码多少字节？为什么恰好生成 56 个 base32 字符？随机输入错误仍能通过校验和验证的概率是多少？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:14-periodo}
+计算公共网络在 2026 年 1 月 1 日 09:00 UTC 时的时间周期编号。该周期何时开始？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:14-hsdir}
+攻击者希望通过控制负责的 HSDir 来阻断某个洋葱服务。它必须预测什么？最多能提前多久预测？SRV 在其中起什么作用？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:14-ruoli}
+分别列出引介点、汇合点和 HSDir 能了解到客户端与服务的哪些信息。对于试图估计某个服务受欢迎程度的攻击者来说，哪一种角色最有价值？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:14-anonimo}
+为什么 HSDir 会拒绝通过单跳电路到达的描述符请求？否则它可能了解到什么？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:14-anello}
+更严格地测试环计算。向实验网络增加中继（练习~\ref{es:19-rete}），直到 HSDir 数量超过八个，然后验证描述符是否\emph{只}存在于你的代码选出的 HSDir 上。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:14-ipt}
+从实验描述符中解码某个引介点的 link specifier（即 \texttt{introduction-point} 行中的 base64 值）。它对应哪一个实验中继？\texttt{auth-key} 行中的证书包含什么？
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \titolo{Tor Rendezvous Specification - Version 3}（rend-spec）~\cite{torspec}：地址、盲化密钥、描述符、引介与汇合协议，以及 hs-ntor 测试向量。
+  \item 提案 224：v3 服务的设计。
+  \item 共享随机数规范（srv-spec）：权威如何生成 SRV。
+\end{itemize}

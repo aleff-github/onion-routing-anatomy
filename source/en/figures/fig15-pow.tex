@@ -1,0 +1,21 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Optional onion-service PoW defence. When enabled, the service publishes pow-params containing a seed and suggested effort; a client selects actual effort E and searches for a nonce and Equi-X proof also passing the R times E, at most 2^32−1, test. The proof travels in the encrypted INTRODUCE1 extension through an introduction point as INTRODUCE2. The service checks the seed, replayed nonce, Equi-X validity and effort; invalid proofs are rejected. Verified requests are queued by descending effort; requests with no proof get effort zero. On overflow, the implementation discards the lower-effort half. Shown values 900, 400, 120, 40 and 0 are illustrative, not fixed thresholds.}
+% Onion service proof of work: from the descriptor to the priority queue
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  box/.style={draw,rounded corners=2pt,align=center,minimum height=1cm}]
+  \node[box,fill=torgrigio!8,text width=2.2cm] (d) at (0,0) {descriptor:\\\texttt{pow-params}\\seed, suggested effort};
+  \node[box,fill=torviola!10,text width=3.2cm] (c) at (3.8,0) {client: selects $E$, finds nonce\\and Equi-X solution with\\$R \cdot E \le 2^{32}-1$};
+  \node[box,fill=torgrigio!8,text width=2.2cm] (i) at (8.4,0) {introduction\\point\\(rate limit)};
+  \node[box,fill=torverde!12,text width=2.2cm] (s) at (8.4,-2.2) {service:\\verifies proof\\(fast)};
+  \draw[->] (d) -- (c);
+  \draw[->] (c) -- node[below,pos=0.45] {\texttt{INTRODUCE1}} (i);
+  \draw[->] (i) -- node[right] {\texttt{INTRODUCE2}} (s);
+  \foreach \k/\e/\c in {0/900/torverde!45,1/400/torverde!35,2/120/torverde!25,3/40/torverde!15,4/0/torgrigio!10}
+    \node[draw,minimum width=1.1cm,minimum height=0.55cm,fill=\c] (q\k) at (1.2+1.1*\k,-2.2) {$E{=}\e$};
+  \draw[->] (s) -- (q4.east);
+  \node[above=0.1cm of q2] {priority queue, ordered by effort (no proof: $E=0$)};
+  \node[below=0.1cm of q0,align=center] {served first};
+  \node[below=0.1cm of q4,align=center] {queue full: discard the\\lowest-effort half};
+\end{tikzpicture}

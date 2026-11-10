@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{Descriptor onion v3 en tres capas: la envoltura firmada y legible por HSDir contiene versión, vigencia, certificado tipo 8, revisión, superencrypted y firma Ed25519. La primera capa utiliza clave pública cegada y subcredencial, e incluye desc-auth-type, desc-auth-ephemeral-key, auth-client y encrypted. Existen entradas auth-client ficticias incluso sin descubrimiento restringido. La capa interna contiene intercambio, flujo y claves de puntos de introducción. Si hay descubrimiento restringido, la clave privada X25519 del cliente autorizado permite recuperar el descriptor cookie de auth-client y con él descifrar la capa interna. Los números son ilustrativos.}
+% Capas del descriptor
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  strato/.style={draw,rounded corners=3pt,align=left,inner sep=5pt,text width=#1},
+  lab/.style={font=\sffamily\scriptsize\bfseries,anchor=north west}]
+  \node[strato=10.5cm,fill=torgrigio!8,draw=torgrigio,minimum height=6.3cm] (e) at (0,0) {};
+  \node[lab] at ([shift={(0.15,-0.1)}]e.north west) {Capa exterior (en claro y firmada)};
+  \node[anchor=north west,align=left,font=\ttfamily\scriptsize] at ([shift={(0.3,-0.5)}]e.north west)
+    {hs-descriptor 3\\descriptor-lifetime 180\\descriptor-signing-key-cert \normalfont\sffamily(tipo 8, de clave cegada)\\\ttfamily revision-counter 662427\\superencrypted};
+  \node[strato=9.6cm,fill=torviola!10,draw=torviola,minimum height=3.35cm] (s) at (0.35,-0.85) {};
+  \node[lab] at ([shift={(0.15,-0.1)}]s.north west) {Primera capa: clave cegada + subcredencial};
+  \node[anchor=north west,align=left,font=\ttfamily\scriptsize] at ([shift={(0.3,-0.5)}]s.north west)
+    {desc-auth-type, desc-auth-ephemeral-key, auth-client \ldots\\encrypted};
+  \node[strato=8.7cm,fill=torverde!15,draw=torverde!60!black,minimum height=1.75cm] (i) at (0.7,-1.35) {};
+  \node[lab] at ([shift={(0.15,-0.1)}]i.north west) {Segunda capa (cookie del cliente si hay restricción)};
+  \node[anchor=north west,align=left,font=\ttfamily\scriptsize] at ([shift={(0.3,-0.5)}]i.north west)
+    {create2-formats 2 \quad flow-control 1-2 31\\introduction-point \ldots\ onion-key ntor \ldots\ auth-key \ldots\ enc-key \ldots};
+  \node[anchor=south west,font=\ttfamily\scriptsize] at ([shift={(0.3,0.15)}]e.south west) {signature \normalfont\sffamily(Ed25519, prefijo \texttt{"Tor onion service descriptor sig v3"})};
+\end{tikzpicture}

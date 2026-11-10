@@ -1,0 +1,136 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Open Problems and Ongoing Projects}\label{cap:31-futuro}
+\aggiornatoal{23 September 2026}{torspec proposals through number 369; tor 0.4.9.13; Arti 2.6.0}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item follow the process by which Tor's protocol changes and interpret a proposal's status;
+  \item explain why post-quantum cryptography requires changes to message formats, not just algorithms;
+  \item describe Conflux, Walking Onions, and other projects addressing performance and scalability;
+  \item identify concrete ways to contribute to the project.
+\end{itemize}
+\end{obiettivi}
+
+Nothing described in this book is final. The protocol examined here in 2026 differs from its 2016 counterpart, which lacked ntor-v3, congestion control, and CGO; it will differ again in 2036. This final chapter looks forward. For each open problem, we ask what does not yet work well enough, what has been proposed, and how far the work has progressed. Everything in the following sections is necessarily provisional: proposal statuses are those recorded in the specifications repository at this chapter's reference date.
+
+% ---------------------------------------------------------------------------
+\section{How the Protocol Changes}\label{sec:fut-processo}
+
+Since 2007, protocol changes have been developed through numbered \textbf{proposals}, somewhat like IETF RFCs. A contributor discusses an idea on the developers' mailing list, writes it in the required format, and, once there is broad agreement that the idea deserves consideration, the editors add it to the repository under a proposal number. The proposal is discussed and refined until it is detailed enough to implement. Following implementation, its normative content is incorporated into the specifications. Unlike an RFC, a proposal may change while retaining its number, and it is never the definitive document for an implemented feature: that role belongs to the specifications themselves (\proposta{001}).
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig31-proposals}
+\caption{Tor proposal statuses under Proposal~001 (simplified, non-exhaustive diagram). The path \emph{Draft}--\emph{Open}--\emph{Accepted}--\emph{Finished}--\emph{Closed} is illustrative, not required: \emph{Finished} denotes implementation and \emph{Closed} also denotes incorporation into specifications. \emph{Needs-Revision} and \emph{Needs-Research} name different blockers; \emph{Dead} may be reopened, while \emph{Rejected} rejects the feature as proposed. \emph{Informational} denotes a final informational document, not itself normative specification text. Other statuses, including \emph{Meta}, \emph{Reserve} and \emph{Obsolete}, are not drawn.}
+\label{fig:proposte}
+\end{figure}
+
+A proposal's status (\cref{fig:proposte}) should be the first thing readers check. This book has encountered proposals in many states. ntor-v3 (\proposta{332}) is \emph{Closed}: implemented and incorporated into the specifications. Congestion control (\proposta{324}) and Conflux (\proposta{329}) are \emph{Finished}: implemented but not yet fully incorporated. CGO (\proposta{359}) is \emph{Open} despite already being present in both tor and Arti. The plan for removing TAP (\proposta{350}) is \emph{Accepted}, while Walking Onions (\proposta{300}) is \emph{Informational}.
+
+% ---------------------------------------------------------------------------
+\section{Quantum Computers}\label{sec:fut-pq}
+
+\paragraph{The problem.} All of Tor's public-key mechanisms, including X25519 for handshakes, Ed25519 for signatures, and the remaining uses of RSA, would be broken by a sufficiently powerful quantum computer (\cref{cap:05-crittografia}). Nobody knows whether or when such a computer will exist. For an anonymity system, however, the threat can begin earlier: an adversary might record encrypted traffic today and decrypt it in the future.
+
+\paragraph{Two scenarios.} \proposta{355}, from 2025, distinguishes two situations. In a \emph{transition} environment, protection against a \emph{future} quantum computer is enough: traffic captured now must resist later decryption, while traditional signatures remain acceptable because an active signature-forgery attack would require a quantum computer today. In a \emph{next-generation} environment, protection must also cover a quantum computer that \emph{already exists} and can forge signatures or actively attack handshakes.
+
+\paragraph{The cost.} In 2024, NIST standardized ML-KEM, a post-quantum key-establishment mechanism, together with the signature algorithms ML-DSA and SLH-DSA~\cite{nistpqc2024}. The proposal compares their sizes with today's algorithms:
+\begin{center}\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Algorithm & Public key & Ciphertext or signature \\
+\midrule
+X25519 & 32 bytes & 32 bytes \\
+ML-KEM-768 & 1\,184 bytes & 1\,088 bytes \\
+Ed25519 & 32 bytes & 64 bytes \\
+ML-DSA-65 & 1\,952 bytes & 3\,309 bytes \\
+\bottomrule
+\end{tabular}
+\end{center}
+In \cref{cap:08-celle}, we saw that a relay message can carry no more than 498 bytes. A single ML-KEM-768 public key would therefore require three cells before accounting for the rest of a handshake. Post-quantum cryptography is not simply a matter of replacing algorithms: it changes how messages fit inside cells. The current relay format cannot directly carry a message of that size: three cells is only a lower bound on payload capacity, assuming that a future format can fragment the message.
+
+\paragraph{Current direction.} The proposal's conclusions are cautious. During the transition, adding a post-quantum mechanism to ntor, as earlier proposals suggested, may suffice. For a next-generation system, the preferred design uses two post-quantum key-establishment mechanisms to provide forward secrecy as well, if the cost is acceptable. Adding a post-quantum key to microdescriptors would also offset some of the bandwidth savings achieved by removing TAP keys (\proposta{350}) and introducing key-based families (\cref{sec:relay-famiglie}). Decisions depend on measurements still needed: how often are circuits built from scratch, and how much relay bandwidth and CPU time do handshakes consume? This remains an open research problem and an opportunity to contribute measurements (\cref{cap:29-ricerca}).
+
+% ---------------------------------------------------------------------------
+\section{Larger Messages, and Smaller Ones}\label{sec:fut-340}
+
+\proposta{340}, currently \emph{Open} at the reference date, directly addresses the one-message-per-cell constraint. It would separate relay messages from cells: long messages could span several cells, and several short messages could share one cell. It is motivated both by messages exceeding 498 bytes, needed for post-quantum handshakes, UDP transport, and Walking Onions, and by very short messages, such as \texttt{SENDME}, \texttt{XON}, and \texttt{XOFF}. These currently consume an entire cell and could instead be concealed within the padding space of other messages, making them invisible to an observer. The new format is intended to work with updated relay encryption, whose CGO design was discussed in \cref{sec:cgo}; coordinating the changes would avoid proliferating incompatible formats.
+
+% ---------------------------------------------------------------------------
+\section{Performance: Multiple Paths}\label{sec:fut-conflux}
+
+Congestion control (\cref{sec:cc}) made individual circuits more efficient. The next step is \textbf{Conflux} (\proposta{329}, \emph{Finished}). A client builds two circuits to the same exit with different guards and middle relays, links them, and distributes traffic according to each circuit's measured round-trip time. The idea originated in research by AlSabah, Bauer, Elahi, and Goldberg; Tor's version adapts it using congestion-control information and experience from multipath TCP. We observed Conflux circuits in the laboratory network (\cref{sec:rp-stem}) and through Stem (\cref{cap:18-stem}). The proposal recommends that the two legs share no relays apart from the exit, avoiding shared bottlenecks. This is a recommendation rather than a strict rule and is often violated on the laboratory's small network. tor has used Conflux since version 0.4.8; Arti, as noted in \cref{sec:arti-supporto}, does not yet do so at this reference date. OnionPerf measurement points operating with and without Conflux allow its real-network effects to be compared (\cref{sec:metrics-prestazioni}).
+
+% ---------------------------------------------------------------------------
+\section{Scalability: Walking Onions}\label{sec:fut-walking}
+
+Every Tor client currently knows \emph{every} relay: it downloads the consensus and microdescriptors, and directory traffic grows with the number of relays. Microdescriptors and consensus diffs reduce the cost but do not change its fundamental shape. The initial cost is also concentrated during bootstrap: a new client must download a full directory before constructing its first circuit (\proposta{300}).
+
+Obvious solutions have known drawbacks. Showing each client only part of the network creates \emph{epistemic} attacks: the differences between clients' views can identify them. Allowing each relay to select the next relay, as in some decentralized systems, exposes paths to capture by malicious relays. Walking Onions proposes another approach: authorities publish a signed structure associating each relay with a numeric interval. The client chooses a number randomly, and the previous relay in the circuit provides a signed proof identifying the relay occupying that interval, together with the extension. The client verifies the signature without ever needing the complete list. The original proposal is \emph{Informational}; a more detailed follow-up (\proposta{323}) tries to address its remaining gaps. Recent proposals, including the post-quantum work, take it into account.
+
+% ---------------------------------------------------------------------------
+\section{Other Open Fronts}\label{sec:fut-altri}
+
+\begin{description}
+  \item[UDP] Tor only transports TCP. Video calls, games, and QUIC, the transport underlying HTTP/3, are consequently unsupported or require potentially unsafe workarounds. \proposta{348} (\emph{Open}) explores options ranging from tunnels to exits to native datagram transport, along with new risks: application fingerprints, peer-to-peer metadata collection, and port exhaustion.
+  \item[Fingerprinting] We ended \cref{sec:att-wf} with an open problem: no general website-fingerprinting defense has yet achieved acceptable overhead. Padding state machines, deployed by tor for onion-service circuits and under development in Arti using the \emph{maybenot} library, provide a framework for future defenses.
+  \item[Correlation] The fundamental issue in \cref{cap:26-attacchi} remains unresolved: a low-latency network can preserve correlatable timing and volume patterns despite buffering and competing traffic. Known defenses such as constant-rate padding and added delays are costly; research continues into more efficient compromises and path selection that accounts for Internet topology.
+  \item[DoS] Proof of work protects onion services (\cref{cap:15-dos}); automatically tuning this mechanism is the subject of \proposta{362}.
+  \item[Arti as a relay] Once Arti can serve as a relay and authority, the C codebase may eventually be retired. This is one of the Tor Project's longer-term undertakings (\cref{cap:30-arti}).
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{How to Contribute}\label{sec:fut-contribuire}
+
+Readers who have reached this point have several ways to contribute, not all of them requiring code:
+\begin{itemize}
+  \item \textbf{Contribute bandwidth}: operate a middle relay or bridge or, with the precautions in \cref{cap:25-legale}, an exit (\cref{cap:22-relay}); alternatively, run a Snowflake proxy, even from a browser.
+  \item \textbf{Read and discuss proposals}: many remain \emph{Open} because they need comments, analysis, and measurements. The developers' discussion list is public.
+  \item \textbf{Write code}: tor and Arti are developed on the Tor Project's GitLab, with issues labeled for newcomers. Arti is especially important for new features.
+  \item \textbf{Conduct research}: use Shadow, Chutney, and Metrics data while following Research Safety Board guidance (\cref{cap:29-ricerca}).
+  \item \textbf{Translate and document}: volunteers translate Tor Browser, its manual, and the website. More documentation is always useful in languages including Italian.
+  \item \textbf{Use Tor}: a larger community may increase the anonymity set, but user count alone does not guarantee indistinguishability when timing, behavior, or other metadata differ.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item The protocol evolves through numbered proposals, whose status moves from \emph{Draft} toward \emph{Closed} as changes are implemented and integrated into specifications.
+  \item Post-quantum cryptography matters even before powerful quantum computers exist; it requires messages larger than a single cell, motivating proposal 340 on message fragmentation and packing.
+  \item Conflux distributes traffic across two circuits; Walking Onions could eliminate the need for each client to learn the complete network.
+  \item UDP, fingerprinting and correlation defenses, DoS tuning, and Arti's transition to relay operation all remain open challenges.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:31-stato}
+Choose three proposals cited in this book. For each, identify its present status and what that status means: is the feature already deployed, and is it described in the specifications?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:31-celle}
+How many cells are needed to carry one ML-KEM-768 public key and one ML-KEM-768 ciphertext if each relay message carries at most 498 bytes and separate messages cannot share a cell? What would change under \proposta{340}? Distinguish the theoretical lower bound on cell capacity (excluding framing overhead) from the actual number of cells, which would depend on the proposal's encapsulation rules.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:31-epistemico}
+Illustrate an epistemic attack: if different clients knew different subsets of the network, how could an adversary exploit those differences?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:31-conflux}
+Using Stem on the laboratory network, identify pairs of Conflux circuits sharing a \file{CONFLUX\_ID}. Verify that both legs end at the same exit and whether they avoid all other shared relays, as recommended by \proposta{329}. What do you observe, and how do you explain it?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:31-proposta}
+Choose an open problem from this chapter and write a short proposal in the Tor Project format: motivation, design, security analysis, compatibility, and implementation plan.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item The proposal index in the \texttt{torspec} repository, organized by status, and the proposal process document (\proposta{001}).
+  \item N.~Mathewson, \titolo{Options for postquantum circuit extension handshakes} (\proposta{355}).
+  \item \titolo{Walking Onions: Scaling and Saving Bandwidth} (\proposta{300}) and its follow-up (\proposta{323}).
+  \item The Tor Project blog, which announces and explains protocol changes.
+\end{itemize}

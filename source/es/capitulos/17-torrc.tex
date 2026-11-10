@@ -1,0 +1,166 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Instalación y torrc}\label{cap:17-torrc}
+\aggiornatoal{23 de septiembre de 2026}{tor 0.4.9.13; manual \texttt{tor(1)} de la misma versión}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item elegir la forma más apropiada de instalar Tor según sus necesidades;
+  \item leer y escribir un archivo \file{torrc} y localizar la documentación de cada opción;
+  \item configurar tor como cliente, con puertos SOCKS, aislamiento de flujos y un puerto de control protegido;
+  \item comprobar una configuración antes de utilizarla y diagnosticar problemas mediante registros.
+\end{itemize}
+\end{obiettivi}
+
+Con este capítulo comienza la parte práctica del libro. En los capítulos anteriores hemos explicado cómo funciona el protocolo; ahora aprenderemos a utilizar y configurar el programa que lo implementa. Todas las opciones mencionadas están documentadas en el manual de tor (\cmd{man tor}), que constituye la referencia autorizada: los valores predeterminados pueden cambiar entre versiones.
+
+% ---------------------------------------------------------------------------
+\section{¿Qué Tor conviene instalar?}\label{sec:torrc-installare}
+
+\begin{description}
+  \item[Tor Browser] Para navegar por la web, casi siempre es la elección apropiada. Incluye una versión de tor ya configurada y un navegador modificado para evitar revelar información que debilitaría las protecciones de la red (\cref{cap:23-browser}). Utilizar tor con un navegador convencional, en cambio, expone al usuario a muchas formas de identificación.
+  \item[El paquete \texttt{tor}] Para utilizar Tor con otras aplicaciones o administrar un repetidor o servicio onion. Las distribuciones Linux lo incluyen, aunque no siempre en su versión más reciente. El Tor Project mantiene un repositorio de paquetes para Debian y Ubuntu y distribuye el \emph{Tor Expert Bundle}, que incluye tor y transportes conectables, para Windows y macOS.
+  \item[Compilación desde el código fuente] Como en el laboratorio del libro (\cref{sec:rp-avvio}), para estudiar tor o instalar una versión exacta.
+  \item[Arti] El cliente escrito en Rust (\cref{cap:30-arti}), cada vez más maduro, pero con una configuración diferente.
+\end{description}
+
+Sea cual sea el método elegido, descarga el programa únicamente de la página oficial y verifica su firma. Una versión de tor modificada por un adversario anularía sus protecciones.
+
+% ---------------------------------------------------------------------------
+\section{El archivo torrc}\label{sec:torrc-formato}
+
+tor lee su configuración de un archivo de texto, normalmente \file{/etc/tor/torrc} cuando funciona como servicio del sistema. El formato es sencillo: una opción por línea, seguida de sus valores. Las líneas que comienzan por \texttt{\#} son comentarios. Algunas opciones pueden aparecer varias veces, como los distintos puertos SOCKS. También pueden indicarse opciones en la línea de órdenes con dos guiones iniciales:
+\begin{lstlisting}[language=bash,numbers=none]
+$ tor --SocksPort 9150 --DataDirectory /tmp/tor-test
+\end{lstlisting}
+
+El manual documenta cientos de opciones; \cmd{tor --list-torrc-options} las enumera todas. Las distribuciones pueden definir un segundo archivo de valores predeterminados mediante \texttt{--defaults-torrc}. El archivo indicado con \texttt{-f} tiene prioridad.
+
+\subsection{Comprobar antes de utilizar}
+
+Tres órdenes evitan muchas sorpresas:
+\begin{lstlisting}[language=bash,numbers=none]
+$ tor --verify-config -f /etc/tor/torrc     # comprobar si la configuración es válida
+Configuration was valid
+$ tor --dump-config short -f /etc/tor/torrc # opciones diferentes de los valores predeterminados
+$ tor --list-modules                        # módulos incluidos al compilar
+relay: yes
+dirauth: yes
+dircache: yes
+pow: yes
+\end{lstlisting}
+
+Como vimos en \cref{cap:15-dos}, la última orden permite saber, por ejemplo, si está disponible la prueba de trabajo para servicios onion.
+
+% ---------------------------------------------------------------------------
+\section{Una configuración de cliente}\label{sec:torrc-client}
+
+Un cliente apenas necesita configuración. De hecho, el archivo mínimo está vacío: por defecto, tor abre un puerto SOCKS 9050 en localhost. Este es un ejemplo más explícito y comentado para un servicio tor cuyo usuario tiene permisos en \file{/var/lib/tor} y \file{/var/log/tor}; no puede ejecutarse sin más como cualquier usuario sin privilegios:
+\begin{lstlisting}[language=torrc]
+# Directorio de estado, claves y caché
+DataDirectory /var/lib/tor
+
+# Puerto SOCKS para aplicaciones (¡solo localhost!)
+SocksPort 127.0.0.1:9050
+
+# Puerto de control, protegido con cookie (capítulo 18)
+ControlPort 127.0.0.1:9051
+CookieAuthentication 1
+
+# Registro al nivel notice
+Log notice file /var/log/tor/notice.log
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig17-puertos}
+\caption{Ejemplo de los puertos y el directorio de un proceso tor. SOCKS en 9050 atiende aplicaciones locales; ControlPort 9051 es opcional y requiere autenticación. Ninguno debe exponerse a la red. DataDirectory es un directorio, no un puerto. ORPort 443 es una opción para un repetidor o puente, no un número obligatorio.}
+\label{fig:porte}
+\end{figure}
+
+\begin{attenzione}[No expongas el puerto SOCKS]
+El manual es explícito: SOCKS no está cifrado ni autenticado. Un \opt{SocksPort} que escuche en una dirección accesible desde la red convierte el equipo en un proxy abierto y expone en texto claro las solicitudes de las aplicaciones dentro de la red local.
+\end{attenzione}
+
+\subsection{Aislamiento de flujos}\label{sec:torrc-isolamento}
+
+Varios flujos pueden compartir un circuito. Es eficiente, pero permite que una salida relacione actividades distintas del mismo usuario. Si un correo personal y un foro seudónimo comparten circuito, la salida puede deducir que proceden de la misma persona. Por eso tor ofrece \textbf{aislamiento de flujos}: reglas que determinan cuáles pueden compartir circuito. Se expresan como opciones de \opt{SocksPort}:
+
+\begin{description}
+  \item[\texttt{IsolateClientAddr}] Los flujos de diferentes direcciones de cliente no pueden compartir circuitos (activado por defecto).
+  \item[\texttt{IsolateSOCKSAuth}] Los flujos con diferentes credenciales SOCKS no pueden compartir circuitos (activado por defecto).
+  \item[\texttt{IsolateDestAddr}, \texttt{IsolateDestPort}] Aislamiento por destino.
+  \item[\texttt{IsolateClientProtocol}] Aislamiento por protocolo (SOCKS4, SOCKS5, DNS\ldots).
+\end{description}
+
+Los diferentes puertos SOCKS también están aislados entre sí por defecto: a cada puerto de escucha se le asigna un \emph{grupo de sesión} independiente. La opción \opt{SessionGroup} puede modificar este comportamiento y permitir que compartan circuitos. El mecanismo más utilizado es el aislamiento mediante autenticación SOCKS: Tor Browser envía credenciales distintas para cada sitio visitado y obtiene así un circuito diferente por sitio. Lo observaremos en \cref{cap:18-stem}.
+
+Los circuitos no se utilizan indefinidamente. Cuando transcurre \opt{MaxCircuitDirtiness}, diez minutos por defecto desde el primer uso, el circuito deja de aceptar flujos nuevos y tor construye otro.
+
+\subsection{Elegir repetidores: precaución}
+
+Las opciones \opt{EntryNodes}, \opt{ExitNodes} y \opt{ExcludeNodes} permiten imponer o excluir repetidores mediante huella, sobrenombre, dirección o código de país. \opt{StrictNodes} hace obligatoria la exclusión mediante \opt{ExcludeNodes} incluso si impide el funcionamiento. Estas herramientas son útiles para experimentos y determinadas situaciones. Sin embargo, emplearlas simplemente para \enquote{sentirse más seguro} suele empeorar las cosas: restringir la selección reduce la diversidad de rutas, hace al usuario distinguible y debilita las protecciones de los guardias y de la selección ponderada (\cref{cap:13-percorso}).
+
+\subsection{Otros puertos}
+
+\begin{description}
+  \item[\opt{DNSPort}] tor responde solicitudes DNS y resuelve nombres a través de la red (\cref{sec:stream-dns}).
+  \item[\opt{TransPort}] Acepta conexiones TCP \emph{transparentes} redirigidas por el cortafuegos del sistema. Sistemas como Whonix emplean este mecanismo para canalizar tráfico de aplicaciones por Tor (\cref{cap:23-browser}).
+  \item[\opt{AutomapHostsOnResolve}] Asigna direcciones virtuales a nombres \texttt{.onion} solicitados por DNS, lo que permite que aplicaciones sin compatibilidad SOCKS accedan a servicios onion mediante \opt{TransPort}.
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{El puerto de control}\label{sec:torrc-controllo}
+
+\opt{ControlPort} permite a otros programas controlar tor mientras se ejecuta: consultar su estado, solicitar circuitos nuevos o crear servicios onion dinámicamente. Es extremadamente potente y debe protegerse. Existen dos métodos de autenticación:
+\begin{description}
+  \item[Cookie] Con \opt{CookieAuthentication} 1, tor escribe un archivo de 32 bytes aleatorios en el directorio de datos. Cualquiera que pueda leerlo podrá autenticarse. La seguridad depende, por tanto, de los permisos de archivo.
+  \item[Contraseña] Con \opt{HashedControlPassword}, tor guarda un resumen de contraseña generado con \cmd{tor --hash-password}:
+\begin{lstlisting}[language=bash,numbers=none]
+$ tor --hash-password test
+16:458528FE0C0AF36260B5071446823FB789212185D7EE7F615BC120D55D
+\end{lstlisting}
+El hash mostrado corresponde a la contraseña de demostración \texttt{test} y se ha comprobado utilizando una sal fija para este ejemplo impreso. Una ejecución real utiliza una sal aleatoria, por lo que normalmente da un resultado distinto incluso con la misma contraseña. No reutilices la contraseña ni el hash del ejemplo para un servicio real.
+\end{description}
+
+Igual que SOCKS, el puerto de control nunca debe exponerse a la red. El protocolo de control es el tema de \cref{cap:18-stem}.
+
+% ---------------------------------------------------------------------------
+\section{Registros}\label{sec:torrc-log}
+
+tor registra su actividad con diversos grados de detalle: \texttt{err}, \texttt{warn}, \texttt{notice}, \texttt{info} y \texttt{debug}. El nivel \texttt{notice} basta para el funcionamiento diario. \texttt{info} y \texttt{debug} son útiles para investigar el protocolo, como hicimos en los laboratorios, pero producen muchos datos. La opción \opt{SafeLogging}, activada por defecto, sustituye direcciones y destinos por \texttt{[scrubbed]}. Un archivo de registro olvidado no debe convertirse en el historial de actividad del usuario. La red de laboratorio desactiva deliberadamente esta protección (\texttt{SafeLogging 0}) para examinar todos los detalles.
+
+Los mensajes más útiles al iniciar son los del \emph{bootstrap}. Muestran las etapas de conexión a la red y terminan con \texttt{Bootstrapped 100\% (done): Done}. Si el inicio se detiene en un porcentaje, esa etapa indica dónde investigar. Por ejemplo, quedarse atascado al conectar con el primer repetidor suele apuntar a censura o a un cortafuegos y sugiere utilizar puentes (\cref{cap:16-censura}).
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item Para navegar por la web utiliza Tor Browser; el paquete \texttt{tor} sirve para otras aplicaciones, repetidores y servicios onion.
+  \item Un \file{torrc} contiene una opción por línea. El manual es la referencia autorizada y \texttt{--verify-config} permite validar la configuración.
+  \item Mantén los puertos SOCKS y de control en localhost. Protege el puerto de control con cookie o contraseña.
+  \item El aislamiento impide que actividades distintas compartan circuito. Tor Browser lo consigue mediante credenciales SOCKS diferentes para cada sitio.
+  \item Forzar o excluir repetidores normalmente reduce la seguridad; \opt{SafeLogging} protege los registros.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:17-verifica}
+Dentro del contenedor de laboratorio, crea un \file{torrc} con una errata en el nombre de una opción y compruébalo con \texttt{--verify-config}. ¿Qué mensaje recibes? Después ejecuta \texttt{--dump-config short} sobre el \file{torrc} del cliente de laboratorio.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:17-isolamento}
+Un usuario conecta un cliente de correo con su identidad real y un foro seudónimo a través del mismo \opt{SocksPort}. ¿Qué podría deducir una salida? Propón dos configuraciones para evitarlo.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:17-exitnodes}
+¿Por qué \texttt{ExitNodes \{it\}}, que obliga a utilizar salidas italianas, reduciría el anonimato de un usuario italiano que visita un sitio de Italia? Razona según el modelo de amenazas de \cref{cap:04-modello-minaccia}.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item El manual de tor, \cmd{man tor}, y \file{doc/man/tor.1.txt} en el código fuente.
+  \item Las páginas de asistencia del Tor Project sobre instalación y repositorios de paquetes, \url{https://support.torproject.org/}.
+\end{itemize}

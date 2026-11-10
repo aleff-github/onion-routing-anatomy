@@ -1,0 +1,471 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Canales y protocolo de enlace}\label{cap:07-canali}
+\aggiornatoal{23 de septiembre de 2026}{commit de torspec \texttt{8e1f245}; tor 0.4.9.13; Arti 2.6.0; protocolo de enlace 4--5}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item explicar qué es un canal y por qué Tor lo establece sobre TLS;
+  \item describir las claves que constituyen la identidad de un repetidor y cómo se vinculan entre sí;
+  \item seguir el intercambio inicial del canal, celda a celda: VERSIONS, CERTS, AUTH\_CHALLENGE, AUTHENTICATE y NETINFO;
+  \item leer y verificar un certificado Ed25519 de Tor;
+  \item comprender por qué un cliente no se autentica y qué implica esto para el anonimato;
+  \item abrir un canal verificado con un repetidor de la red de laboratorio (laboratorio~1).
+\end{itemize}
+\end{obiettivi}
+
+El circuito, la construcción central de Tor, es una cadena de saltos. Sin embargo, cada salto se apoya en algo más sencillo: una conexión directa y cifrada entre dos nodos adyacentes. La especificación denomina \textbf{canal} a esta conexión. En este capítulo veremos cómo se establece y, sobre todo, cómo verifica cada extremo la identidad del interlocutor al que pretendía llegar. El formato de las celdas que se intercambian por el canal se estudia en el \cref{cap:08-celle}, al que nos referiremos con frecuencia.
+
+% ---------------------------------------------------------------------------
+\section{¿Qué es un canal?}\label{sec:canale-def}
+
+Un canal es una conexión directa y cifrada entre dos repetidores o entre un cliente y un repetidor~\spec{tor-spec}{Channels}. Técnicamente, es una sesión TLS sobre TCP que transporta celdas. Lo caracterizan tres propiedades:
+
+\begin{description}
+  \item[Funciones asimétricas] Cualquiera puede \emph{abrir} un canal (el \termine{iniciador}{initiator}), pero solo un repetidor puede \emph{recibirlo} (el \termine{respondedor}{responder}). Un cliente no acepta conexiones: no tiene ningún puerto a la escucha de conexiones procedentes de la red Tor.
+  \item[Identidad verificada] El respondedor siempre demuestra criptográficamente que posee una o varias identidades de repetidor. Por lo general, el iniciador ya sabe qué identidad debe encontrar: la obtiene del consenso, de la lista de autoridades compilada en el código fuente o, cuando abre el canal para extender un circuito, del propio mensaje \texttt{EXTEND2}. Si la identidad presentada no coincide con la esperada, debe cerrarse el canal.
+  \item[Uso compartido] Un canal transporta numerosos circuitos, diferenciados por sus CircID (\cref{sec:circid}). Los nodos prefieren reutilizar un canal existente a abrir un segundo canal hacia el mismo repetidor. Cuando un canal no contiene circuitos, se cierra tras un período de inactividad elegido aleatoriamente, cuyo intervalo depende de su uso (\file{channelpadding\_get\_channel\_idle\_timeout} en \file{src/core/or/channelpadding.c}): de 3 a 4,5 minutos en los canales de clientes y de 45 a 75 minutos entre repetidores, donde el valor central es el parámetro de consenso \texttt{nf\_conntimeout\_relays} (una hora). Mientras un canal está en uso, \opt{KeepalivePeriod} provoca en cambio el envío de una celda de relleno cada cinco minutos para evitar que los cortafuegos lo cierren.
+\end{description}
+
+\begin{approfondimento}[¿Canal o conexión?]
+La documentación antigua y muchos artículos científicos denominan \emph{conexiones} a los canales (\emph{OR connections}). La especificación abandonó esta denominación porque podía confundirse con las conexiones TCP que abren los repetidores de salida para los flujos salientes. Ambos términos sobreviven en el código de \texttt{tor}: \file{or\_connection\_t} es la conexión TLS, mientras que \file{channel\_t} es la abstracción que la utiliza.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{La identidad de un repetidor}\label{sec:canale-chiavi}
+
+Antes de examinar el intercambio inicial debemos saber \emph{qué} se necesita demostrar. Un repetidor se identifica mediante claves de larga duración. La especificación les asigna nombres sistemáticos: el prefijo \file{KP\_} designa una clave pública y \file{KS\_} su clave secreta correspondiente~\spec{tor-spec}{Relay keys and identities}. Las claves relevantes para el canal son:
+
+\begin{description}
+  \item[\file{KP\_relayid\_ed}] \textbf{Identidad Ed25519}, también llamada \enquote{clave de identidad maestra}. No caduca y tiene una única función: certificar la clave de firma. Puede mantenerse fuera de línea.
+  \item[\file{KP\_relayid\_rsa}] \textbf{Identidad RSA heredada}, de 1024 bits. Sigue siendo la base de las huellas de cuarenta dígitos hexadecimales que muestra Tor Metrics, pero la seguridad del protocolo ya no depende de ella.
+  \item[\file{KP\_relaysign\_ed}] \textbf{Clave de firma} de duración intermedia, certificada por la identidad. Es la clave que el repetidor utiliza normalmente mientras está conectado.
+  \item[\file{KP\_link\_ed}] Clave de corta duración que solo se utiliza cuando un repetidor inicia un canal y necesita autenticarse (\cref{sec:canale-authenticate}).
+\end{description}
+
+La \cref{fig:chiavi-relay} muestra cómo los certificados vinculan estas claves entre sí. La idea consiste en una \emph{cadena de confianza} que comienza en la identidad y llega hasta el certificado TLS utilizado por la conexión.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig07-claves}
+\caption{Cadena de certificados que vincula la identidad Ed25519 de un repetidor con el certificado TLS de la conexión. Cada flecha representa un certificado: la clave de origen firma la clave (o huella) de destino. El número identifica el CertType utilizado en la celda CERTS. A la derecha aparece la cadena RSA heredada, que vincula la antigua identidad RSA con la identidad Ed25519.}
+\label{fig:chiavi-relay}
+\end{figure}
+
+En el laboratorio, estas claves son archivos situados en el directorio \file{keys/} de cada repetidor: \file{ed25519\_master\_id\_public\_key} y la clave secreta de identidad correspondiente, \file{ed25519\_signing\_cert} y \file{ed25519\_signing\_secret\_key} para la clave de firma, y \file{secret\_id\_key} para la identidad RSA. El archivo \file{fingerprint-ed25519}, ubicado en el directorio del nodo, contiene su identidad Ed25519 codificada en base64.
+
+\begin{storia}[De RSA a Ed25519]
+Hasta 2015, la única identidad de un repetidor era su clave RSA de 1024 bits, una longitud que hoy se considera insuficiente. La \proposta{220} introdujo las identidades Ed25519 y el formato de certificados descrito en este capítulo; la compatibilidad comenzó con tor 0.2.7.2-alpha. La clave RSA se conservó por compatibilidad y se vinculó con la Ed25519 mediante un certificado cruzado.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{Resumen del intercambio inicial}\label{sec:canale-handshake}
+
+La \cref{fig:handshake-canale} resume cómo se establece un canal~\spec{tor-spec}{Negotiating and initializing channels}.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig07-handshake}
+\caption{Intercambio inicial del canal. Una vez establecido TLS, todos los mensajes viajan cifrados. El respondedor envía siempre CERTS, AUTH\_CHALLENGE y NETINFO, en ese orden. El recuadro discontinuo se aplica solo cuando el iniciador es un repetidor público que necesita demostrar su identidad; un cliente o un puente envía únicamente NETINFO.}
+\label{fig:handshake-canale}
+\end{figure}
+
+\begin{enumerate}
+  \item El iniciador abre una conexión TLS.
+  \item Ambas partes envían una celda \cella{VERSIONS} y acuerdan una versión del protocolo de enlace (\cref{sec:celle-formato}).
+  \item El respondedor envía \cella{CERTS}, con los certificados que demuestran su identidad; \cella{AUTH\_CHALLENGE}, un desafío que el iniciador firmará si desea autenticarse; y \cella{NETINFO}, con la hora y las direcciones.
+  \item El iniciador verifica los certificados. Si es un repetidor público, responde con \cella{CERTS} y \cella{AUTHENTICATE}; en todos los casos termina con \cella{NETINFO}.
+\end{enumerate}
+
+La celda \cella{NETINFO} marca el final del intercambio inicial: una vez enviada, esa parte ya no transmite más celdas del intercambio. Así sabe el respondedor si el iniciador ha decidido no autenticarse. Entre unas celdas y otras pueden aparecer tantas \cella{VPADDING} como sea necesario, pero ningún otro tipo de celda.
+
+% ---------------------------------------------------------------------------
+\section{La capa TLS}\label{sec:canale-tls}
+
+Tor utiliza TLS de una manera poco habitual. En un sitio web, el certificado del servidor está firmado por una autoridad de certificación y contiene un nombre de dominio; el navegador comprueba ambos elementos. Un repetidor, en cambio, presenta un certificado \textbf{autofirmado} sin un nombre significativo, y el cliente no lo valida según las reglas habituales de TLS. En el código del laboratorio~1 esto se traduce en dos líneas que serían un error de seguridad grave en casi cualquier otro contexto:
+
+\begin{lstlisting}[language=Python,numbers=none]
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+\end{lstlisting}
+
+Aquí no son un error porque la autenticación se realiza \emph{después}, dentro del canal, mediante la celda \cella{CERTS}. TLS proporciona cifrado e integridad al canal y demuestra la posesión de la clave asociada al certificado TLS; las celdas establecen las demás garantías.
+
+La especificación también establece varias recomendaciones~\spec{tor-spec}{The TLS handshake}:
+\begin{itemize}
+  \item las implementaciones deberían admitir TLS~1.3 y los repetidores también TLS~1.2, con suites modernas (AES-GCM, ChaCha20-Poly1305 e intercambio de claves mediante X25519 o P-256);
+  \item no debería permitirse la \emph{reanudación de sesión} (\emph{session resumption}), porque debilita el secreto hacia adelante y ha facilitado ataques como el \emph{Triple Handshake} (2013);
+  \item no debería utilizarse compresión TLS.
+\end{itemize}
+
+En la red de laboratorio, un cliente Python con OpenSSL~3.5 negocia TLS~1.3 con \texttt{tor} y utiliza la suite \file{TLS\_AES\_256\_GCM\_SHA384}.
+
+\begin{storia}[¿Por qué un intercambio tan poco habitual?]
+Las primeras versiones del protocolo de enlace colocaban los certificados de Tor directamente en el intercambio TLS (versión~1). Después los ocultaban mediante la renegociación TLS (versión~2), indicando la variante seleccionada con la lista de suites de cifrado ofrecidas. La razón era la censura: antes de los transportes conectables (\cref{cap:16-censura}), Tor intentaba parecer una conexión HTTPS corriente entre un navegador y un servidor web. Con TLS~1.2, los certificados viajaban sin cifrar y resultaban fáciles de reconocer. En la versión~3 pasaron al interior del canal cifrado, dentro de celdas \cella{CERTS}. Hoy la resistencia a la censura se confía a los transportes conectables y las variantes antiguas están obsoletas. La especificación señala que en marzo de 2025 \texttt{tor} todavía aceptaba algunas, aunque ya estaba prevista su retirada.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{CERTS: demostrar la identidad}\label{sec:canale-certs}
+
+\subsection{La celda}
+
+\cella{CERTS} es una celda de longitud variable (comando 129) cuyo cuerpo contiene una lista de certificados:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Campo & Bytes & Contenido \\
+\midrule
+N & 1 & número de certificados \\
+\multicolumn{3}{l}{\emph{se repite N veces:}} \\
+\quad CertType & 1 & tipo de certificado \\
+\quad CertLen & 2 & longitud del certificado \\
+\quad Certificate & CertLen & el certificado \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Una celda \cella{CERTS} no puede contener dos certificados del mismo tipo. Los tipos definidos se enumeran en la \cref{tab:cert-types}~\spec{cert-spec}{Certificate types (CERT\_TYPE field)}.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}cl l>{\raggedright\arraybackslash}X@{}}
+\toprule
+Tipo & Nombre & Formato & Qué certifica \\
+\midrule
+1 & \file{TLS\_LINK\_X509} & X.509 & clave TLS, firmada por la identidad RSA (obsoleto) \\
+2 & \file{RSA\_ID\_X509} & X.509 & identidad RSA autofirmada \\
+3 & \file{LINK\_AUTH\_X509} & X.509 & clave RSA de autenticación (obsoleto) \\
+4 & \file{IDENTITY\_V\_SIGNING} & Ed & clave de firma, firmada por la identidad Ed25519 \\
+5 & \file{SIGNING\_V\_TLS\_CERT} & Ed & huella del certificado TLS, firmada por la clave de firma \\
+6 & \file{SIGNING\_V\_LINK\_AUTH} & Ed & clave \file{KP\_link\_ed}, firmada por la clave de firma \\
+7 & \file{RSA\_ID\_V\_IDENTITY} & RSA$\to$Ed & identidad Ed25519, firmada por la identidad RSA \\
+8--12 & \multicolumn{3}{l}{servicios onion (8, 9, 11), certificado cruzado ntor (10), familias (12)} \\
+\bottomrule
+\end{tabularx}
+\caption{Tipos de certificado. \enquote{Ed} indica el formato de certificados Ed25519 de Tor.}
+\label{tab:cert-types}
+\end{table}
+
+\subsection{El certificado Ed25519 de Tor}
+
+Tor no utiliza X.509 para sus certificados Ed25519. Emplea un formato propio mucho más sencillo~\spec{cert-spec}{Tor Ed25519 Certificates}, representado en la \cref{fig:cert-ed}.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig07-certificado-ed}
+\caption{Certificado Ed25519 de Tor. La firma cubre todos los campos que la preceden. La caducidad se expresa en \emph{horas} desde la época Unix: un campo sin signo de cuatro bytes no se desbordará hasta dentro de cientos de miles de años.}
+\label{fig:cert-ed}
+\end{figure}
+
+\begin{description}
+  \item[VERSION] Tiene el valor 1.
+  \item[CERT\_TYPE] Tiene el mismo valor que CertType en la \cref{tab:cert-types}.
+  \item[EXPIRATION\_DATE] Expresa la fecha de caducidad en horas desde el 1 de enero de 1970.
+  \item[CERT\_KEY\_TYPE] Indica qué contiene el campo siguiente: 1 significa una clave Ed25519 y 3 indica la huella SHA-256 de un certificado X.509. Las versiones de \texttt{tor} hasta 0.4.5.1-alpha escribían siempre 1, y la especificación exige que las implementaciones lo toleren.
+  \item[CERTIFIED\_KEY] Contiene los 32 bytes certificados.
+  \item[Extensiones] Cada una contiene longitud, tipo, indicadores y datos. La única extensión definida actualmente es la de tipo 4, \emph{signed-with-ed25519-key}, que incluye la clave firmante del certificado. El indicador 1 (\file{AFFECTS\_VALIDATION}) determina cómo tratar una extensión desconocida: si está activado, debe rechazarse el certificado; en caso contrario, se ignora la extensión.
+  \item[SIGNATURE] Es la firma Ed25519 que cubre todos los campos anteriores.
+\end{description}
+
+\subsection{Verificación}\label{sec:canale-verifica}
+
+El respondedor debe enviar exactamente un certificado de tipo 4 y otro de tipo 5. El iniciador los verifica del siguiente modo~\spec{tor-spec}{Authenticating the responder from its CERTS}:
+
+\begin{enumerate}
+  \item El certificado de tipo 4 contiene una clave Ed25519 en la extensión 4: la identidad declarada \file{KP\_relayid\_ed}. Debe estar firmado con esa misma clave (es \emph{autofirmado}); la clave certificada es \file{KP\_relaysign\_ed}.
+  \item El certificado de tipo 5 debe estar firmado con \file{KP\_relaysign\_ed}, y su clave certificada debe ser la huella SHA-256 del certificado TLS recibido durante el intercambio TLS.
+  \item Ninguno de los dos certificados puede haber caducado.
+  \item Por último, la identidad obtenida debe compararse con la identidad esperada.
+\end{enumerate}
+
+¿Por qué demuestra algo esta cadena? El segundo paso vincula la clave de firma con el certificado TLS de \emph{esta} conexión. El intercambio TLS ya ha demostrado que el respondedor posee la clave privada correspondiente al certificado. El primer paso vincula la clave de firma con la identidad. Un impostor podría copiar las celdas \cella{CERTS} de un repetidor legítimo, porque no contienen secretos, pero no podría utilizarlas: tendría que presentar el certificado TLS de ese repetidor legítimo en el intercambio TLS y, por tanto, poseer su clave privada.
+
+\begin{attenzione}[Comprobar la identidad esperada]
+Una cadena completamente válida solo demuestra que el respondedor posee \emph{alguna} identidad. Si el iniciador omite el paso~4, cualquiera que disponga de una identidad propia podría hacerse pasar por el repetidor previsto. El laboratorio~1 incluye el parámetro \file{expected\_identity} precisamente por eso, y una de sus pruebas comprueba que se rechaza a un repetidor que presenta una identidad distinta.
+\end{attenzione}
+
+\subsection{La cadena RSA heredada}
+
+El iniciador también puede verificar de forma opcional la identidad RSA. El certificado de tipo 2 contiene la clave RSA de 1024 bits (autofirmada, exponente 65537); el certificado de tipo 7, en formato de \enquote{certificado cruzado}, vincula esa clave con la identidad Ed25519 ya verificada. La firma RSA de dicho certificado se calcula sobre la huella SHA-256 de la cadena \texttt{"Tor TLS RSA/Ed25519 cross-certificate"} seguida por los campos del certificado. El prefijo impide reutilizar la misma firma en un contexto distinto.
+
+\subsection{Qué envía realmente un repetidor}
+
+En la red de laboratorio, el repetidor \texttt{test003r} envía una celda \cella{CERTS} que contiene cinco certificados:
+
+\begin{lstlisting}[numbers=none]
+  type 1  584 bytes
+  type 2  442 bytes
+  type 4  140 bytes  expires 2026-10-24 16:00  key_type=1  ext=[4]
+  type 5  104 bytes  expires 2026-09-29 11:00  key_type=3  ext=[]
+  type 7  165 bytes
+\end{lstlisting}
+
+Además de la cadena Ed25519 (tipos 4 y 5) y de la RSA (tipos 2 y 7), el repetidor continúa enviando el antiguo certificado de tipo 1 para clientes anteriores. Este certificado no solo tiene la misma longitud que el certificado TLS, sino también su huella. Al comparar sus bytes se comprueba que son \emph{exactamente} el mismo certificado. La longitud no es un dato que merezca memorizarse, y conviene entender por qué. El nombre común del certificado es un dominio ficticio que \texttt{tor} construye con \texttt{www.}, seguido de entre 4 y 25 caracteres aleatorios y de \texttt{.com} (\file{crypto\_random\_hostname} en \file{src/lib/tls/tortls\_openssl.c}). Solo eso hace que la longitud varíe unos veinte bytes entre repetidores.
+
+También cambia \emph{con el tiempo} para un mismo repetidor, porque \texttt{tor} renueva el contexto TLS y, con él, el certificado, cada dos horas (\file{MAX\_SSL\_KEY\_LIFETIME\_INTERNAL} en \file{src/core/or/or.h}). Cuando repetimos la medición cuarenta minutos después, el cuerpo de la celda \cella{CERTS} tenía 1456 bytes en vez de 1451. Si tus mediciones difieren, es de esperar: lo que debe coincidir es la \emph{estructura}, y la suma de las longitudes de los certificados, más un byte de recuento y tres bytes de cabecera por certificado, debe ser igual a la longitud del cuerpo de la celda.
+
+Las dos fechas de caducidad muestran la distinta duración de las claves: la clave de firma se certifica durante treinta días, mientras que su vinculación con el certificado TLS dura solo dos días. Son los valores predeterminados de \texttt{tor} (opciones \opt{SigningKeyLifetime} y \opt{TestingLinkCertLifetime}, esta última configurable únicamente en redes de prueba), por lo que también se aplican en la red pública. La clave de identidad permanece constante, mientras las claves que la representan en línea se renuevan con frecuencia, lo que limita el daño si el repetidor resulta comprometido.
+
+% ---------------------------------------------------------------------------
+\section{AUTH\_CHALLENGE y AUTHENTICATE}\label{sec:canale-authenticate}
+
+\subsection{¿Quién se autentica?}
+
+La autenticación del iniciador es opcional. La regla que determina quién debería realizarla es una de las decisiones de diseño más importantes del protocolo~\spec{tor-spec}{Channels}:
+
+\begin{itemize}
+  \item Un \textbf{repetidor público} que abre un canal hacia otro repetidor \emph{debería} autenticarse: así, el respondedor sabe que está hablando con un repetidor de la red y no con un cliente.
+  \item Un \textbf{cliente} o un \textbf{puente} \emph{no deberían} autenticarse.
+\end{itemize}
+
+La razón de la segunda regla es el anonimato. Un cliente carece de identidad de repetidor, y crear una sería perjudicial: un guardia podría reconocer al mismo cliente cuando volviera a conectarse desde otra dirección. Por su parte, un puente no debe revelar a sus usuarios que es un repetidor de red. Como contrapartida, un repetidor puede inferir que ocupa el primer salto de un circuito si el canal no está autenticado (\cref{cap:08-celle}, \cref{sec:relay}). Esta es una de las razones por las que los repetidores se niegan a actuar como salida de circuitos de un solo salto.
+
+\subsection{El desafío}
+
+El respondedor envía siempre una celda \cella{AUTH\_CHALLENGE}. Contiene 32 bytes aleatorios y una lista de métodos de autenticación admitidos:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Campo & Bytes & Contenido \\
+\midrule
+Challenge & 32 & valor aleatorio, distinto para cada canal \\
+N\_Methods & 2 & número de métodos \\
+Methods & $2 \times$ N\_Methods & lista de métodos \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Los métodos definidos son 1 (\texttt{RSA-SHA256-TLSSecret}, obsoleto), 2 (nunca implementado) y 3 (\texttt{Ed25519-SHA256-RFC5705}). La celda recibida de los repetidores de laboratorio tiene 36 bytes: $32 + 2 + 2$, lo que corresponde a un único método, el número 3.
+
+\subsection{La respuesta}
+
+Un repetidor que desea autenticarse responde con su propia celda \cella{CERTS} (tipos 4 y 6, en vez de 4 y 5, ya que no necesariamente ha presentado un certificado TLS como iniciador) y luego con \cella{AUTHENTICATE}. Con el método 3, el cuerpo de \cella{AUTHENTICATE} es un documento firmado de 352 bytes con la clave \file{KP\_link\_ed}:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l c >{\raggedright\arraybackslash}X@{}}
+\toprule
+Campo & Bytes & Contenido \\
+\midrule
+TYPE & 8 & cadena \texttt{AUTH0003} \\
+CID, SID & 32 + 32 & huellas SHA-256 de las identidades RSA del iniciador y del respondedor \\
+CID\_ED, SID\_ED & 32 + 32 & identidades Ed25519 del iniciador y del respondedor \\
+SLOG & 32 & SHA-256 de todos los bytes \emph{recibidos} por el canal hasta AUTH\_CHALLENGE, inclusive \\
+CLOG & 32 & SHA-256 de todos los bytes \emph{enviados} por el canal antes de AUTHENTICATE \\
+SCERT & 32 & SHA-256 del certificado TLS del respondedor \\
+TLSSECRETS & 32 & valor derivado de los secretos de la sesión TLS (\emph{keying material exporter}) \\
+RAND & 24 & bytes aleatorios \\
+SIG & 64 & firma Ed25519 de todos los campos anteriores \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Cada campo vincula la firma con algún aspecto de \emph{esta} conexión: las identidades implicadas (CID, SID y otros), la conversación mantenida hasta ese momento (SLOG y CLOG, que incluyen el desafío aleatorio), el certificado TLS (SCERT) y la propia sesión TLS (TLSSECRETS). Una firma de este tipo no puede reutilizarse en otra conexión, ni tampoco por un intermediario que retransmita mensajes entre dos sesiones TLS distintas (ataque de \emph{intermediario}, o \emph{man-in-the-middle}), porque TLSSECRETS y SCERT serían diferentes a ambos lados.
+
+\begin{approfondimento}[Un error conservado en la especificación]
+TLSSECRETS se calcula mediante el \emph{exportador} TLS (RFC~5705 y, para TLS~1.3, RFC~8446, §\,7.5), utilizando la etiqueta \texttt{"EXPORTER FOR TOR TLS CLIENT BINDING AUTH0003"} y un valor de contexto. La intención era utilizar como contexto la identidad Ed25519 del iniciador, pero la implementación usó por equivocación CID, la huella de identidad RSA. Dado que esto no debilita la seguridad, se decidió documentar el comportamiento real en vez de modificarlo. Es un ejemplo útil de cómo, en un protocolo con miles de implementaciones ya desplegadas, el comportamiento efectivo del código puede convertirse en la norma.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{NETINFO: hora y direcciones}\label{sec:canale-netinfo}
+
+La última celda del intercambio inicial, enviada por ambas partes, es \cella{NETINFO}. Es una celda de longitud fija (comando 8), con el siguiente cuerpo:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}ll>{\raggedright\arraybackslash}X@{}}
+\toprule
+Campo & Bytes & Contenido \\
+\midrule
+TIME & 4 & segundos desde la época Unix, en orden de bytes de mayor a menor peso \\
+OTHERADDR & 2 + ALEN & dirección de la otra parte tal como la ve el remitente \\
+NMYADDR & 1 & número de direcciones propias del remitente \\
+MYADDR & NMYADDR $\times$ (2 + ALEN) & direcciones propias del remitente \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Cada dirección se codifica con un tipo (un byte: \texttt{0x04} para IPv4 o \texttt{0x06} para IPv6), una longitud (4 o 16) y un valor. Estos campos cumplen dos funciones:
+
+\begin{itemize}
+  \item \textbf{La hora} permite detectar una configuración incorrecta del reloj: \texttt{tor} registra una advertencia si la hora recibida de un repetidor difiere de la suya en más de una hora (constante \file{NETINFO\_NOTICE\_SKEW} en \file{src/core/or/channeltls.c}).
+  \item \textbf{Las direcciones} permiten a un repetidor descubrir desde qué dirección pública resulta visible y al iniciador comprobar si ha alcanzado al repetidor a través de una de sus direcciones \emph{canónicas}, es decir, publicadas en su descriptor.
+\end{itemize}
+
+\begin{attenzione}[Un cliente no revela su reloj]
+Los repetidores envían sus propias horas y direcciones. Un cliente, sin embargo, debería enviar \texttt{00 00 00 00} como hora y no transmitir ninguna dirección propia. El motivo es la \emph{identificación por huella}: el reloj de un ordenador suele tener una pequeña desviación característica. Si un cliente revelara su hora a cada guardia, esa desviación podría contribuir a reconocerlo a lo largo del tiempo. Este ejemplo ilustra una regla general que volverá a aparecer: un cliente Tor no debe divulgar información que no sea estrictamente necesaria.
+\end{attenzione}
+
+El campo TIME de cuatro bytes sin signo se desbordará en 2106; la \proposta{338} estudia ampliarlo a ocho bytes. El destinatario de una celda \cella{NETINFO} no debería confiar ciegamente en sus valores: la otra parte puede mentir sobre sus direcciones y su hora.
+
+Esta es la celda \cella{NETINFO} recibida del repetidor \texttt{test003r}, descodificada en el laboratorio~1:
+
+\begin{lstlisting}[numbers=none]
+Netinfo(timestamp=1790511791, peer_address='127.0.0.1',
+        my_addresses=['127.0.0.1'])
+\end{lstlisting}
+
+La hora corresponde al 27 de septiembre de 2026, a las 12:23:11 UTC. Ambas direcciones son de bucle local porque toda la red funciona en el mismo ordenador. Nuestra respuesta, construida por \file{client\_netinfo\_cell}, tiene como cuerpo \texttt{00000000 04 04 7f000001 00}: hora cero, dirección del repetidor y ninguna dirección propia.
+
+% ---------------------------------------------------------------------------
+\section{Después del intercambio inicial}\label{sec:canale-dopo}
+
+Llegados a este punto, el canal está \emph{abierto} y puede transportar circuitos. Un experimento sencillo permite observar un detalle interesante. Si escuchamos después de abrir el canal sin crear ningún circuito, el repetidor no envía \emph{nada}: en el laboratorio no llega ni una sola celda durante quince segundos.
+
+Podríamos esperar celdas \cella{PADDING}: desde el protocolo de enlace~5, los clientes y los guardias intercambian celdas de relleno en canales inactivos a intervalos aleatorios de entre 1,5 y 9,5 segundos, de modo que un observador de la red (por ejemplo, un encaminador que registre estadísticas NetFlow) no pueda distinguir los períodos activos de los silenciosos~\spec{padding-spec}{Connection-level padding}. El código fuente de \texttt{tor} explica por qué aquí no ocurre. La función que decide si añadir relleno (\file{channelpadding\_decide\_to\_pad\_channel}, en \file{src/core/or/channelpadding.c}) lo activa únicamente en canales \emph{ya utilizados} para circuitos completos o tráfico de usuario.
+
+Desde el punto de vista del repetidor, un canal solo se considera utilizado de esta forma cuando lo atraviesa un circuito de varios saltos: la primera celda \cella{RELAY\_EARLY} (extensión hacia el segundo salto) o una celda \cella{RELAY} en un circuito que continúa más allá del repetidor (\file{src/core/or/relay.c}). Un canal nuevo permanece silencioso, igual que uno que transporta únicamente circuitos de un salto, como descubriremos en el \cref{cap:09-circuiti}. El relleno aparecerá en el \cref{cap:10-cifratura-relay}, cuando nuestro cliente extienda un circuito.
+
+Este pequeño episodio deja una enseñanza metodológica: \emph{la ausencia de una observación no constituye una prueba}. Antes de concluir que el relleno no funciona, debemos verificar que realmente se cumplen las condiciones en las que debería aparecer.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: abrir un canal verificado}\label{sec:lab-canale}
+
+\begin{laboratorio}[1]{Abrir un canal hacia un repetidor y verificar su identidad}
+\textbf{Objetivo.} Escribir \file{labs/es/codigo/torlab/channel.py}, que abre un canal como un cliente Tor: TLS, \cella{VERSIONS}, verificación de \cella{CERTS}, lectura de \cella{AUTH\_CHALLENGE} y \cella{NETINFO}, y envío de su propia celda \cella{NETINFO}.\\
+\textbf{Requisitos previos.} Laboratorio~2 (\file{cells.py}, \cref{cap:08-celle}): la manipulación de celdas es la base del canal, por lo que tiene sentido implementarla primero, aunque se presente en el capítulo siguiente. La explicación de arriba abajo (primero el canal, después las celdas) y la implementación de abajo arriba (primero las celdas, después el canal) siguen aquí recorridos opuestos, algo completamente normal. También se necesita una red de laboratorio en funcionamiento (\cref{cap:19-rete-privata}) y la biblioteca \texttt{cryptography} para Ed25519.\\
+\textbf{Tiempo estimado.} 2--3 horas.
+\end{laboratorio}
+
+\paragraph{Paso 1: descodificar un certificado Ed25519.} Siguiendo la \cref{fig:cert-ed}, leemos la cabecera de longitud fija y después las extensiones, y conservamos los bytes que cubre la firma:
+
+\begin{lstlisting}[language=Python]
+def decode_ed_certificate(data):
+    if len(data) < 40 + 64 or data[0] != 1:
+        raise ChannelError("certificado Ed25519 malformado")
+    _, kind, expiration, key_type = struct.unpack(">BBIB", data[:7])
+    key = data[7:39]
+    extension_count, pos, extensions = data[39], 40, {}
+    for _ in range(extension_count):
+        length, extension_type, flag = struct.unpack(">HBB", data[pos:pos+4])
+        body = data[pos+4:pos+4+length]
+        if extension_type != 4 and flag & 1:     # AFFECTS_VALIDATION
+            raise ChannelError("extensión desconocida que afecta a la validación")
+        extensions[extension_type] = (flag, body)
+        pos += 4 + length
+    return EdCertificate(kind, expiration, key_type, key,
+                         extensions, data[:pos], data[pos:])
+\end{lstlisting}
+
+\paragraph{Paso 2: verificar la cadena.} Esta función aplica las reglas de la \cref{sec:canale-verifica} y devuelve la identidad cuya posesión se ha demostrado:
+
+\begin{lstlisting}[language=Python]
+def verify_responder_identity(certificates, cert_tls_der):
+    id_v_sign = decode_ed_certificate(certificates[4])
+    sign_v_tls = decode_ed_certificate(certificates[5])
+    identity = id_v_sign.signing_key               # extensión 4
+    id_v_sign.verify_signature(identity)             # autofirmado
+    sign_v_tls.verify_signature(id_v_sign.certified_key)
+    if sign_v_tls.certified_key != sha256(cert_tls_der).digest():
+        raise ChannelError("el certificado TLS no coincide")
+    for c in (id_v_sign, sign_v_tls):
+        if c.expired():
+            raise ChannelError("certificado caducado")
+    return identity
+\end{lstlisting}
+
+Obtenemos el certificado TLS del socket en formato DER mediante \file{sock.getpeercert(\allowbreak binary\_form=True)}. Python lo devuelve incluso aunque, en este caso, no lo hayamos validado.
+
+\paragraph{Paso 3: intercambio inicial.} La función \file{open\_channel} envía \cella{VERSIONS}, ofreciendo las versiones 4 y 5 (igual que Arti, omite la 3). Después lee celdas hasta que recibe \cella{NETINFO}: ignora \cella{VPADDING} y las \cella{VERSIONS} posteriores a la primera, y rechaza cualquier otra celda inesperada. Finalmente verifica los certificados, compara la identidad con la esperada y envía su propia \cella{NETINFO}. El código completo está en el repositorio; su bucle central es:
+
+\begin{lstlisting}[language=Python]
+while netinfo is None:
+    cell, buffer = _read(sock, buffer, version)
+    if cell.command == CellCommand.VERSIONS:
+        if version:
+            continue
+        version = negotiate_version(SUPPORTED_VERSIONS, cell.body)
+    elif cell.command == CellCommand.CERTS:
+        certificates = decode_certs(cell.body)
+    elif cell.command == CellCommand.AUTH_CHALLENGE:
+        ...                                    # métodos aceptados
+    elif cell.command == CellCommand.NETINFO:
+        netinfo = decode_netinfo(cell.body)
+    elif cell.command != CellCommand.VPADDING:
+        raise ChannelError("celda inesperada durante el intercambio inicial")
+\end{lstlisting}
+
+\paragraph{Paso 4: pruebas sin red.} En \file{labs/es/codigo/torlab/test/test\_channel.py} generaremos dos claves Ed25519, construiremos una cadena de certificados válida y comprobaremos que el código la acepta. Después la alteraremos de todas las maneras descritas por la especificación (firma modificada, clave firmante no certificada, certificado TLS diferente, certificado caducado y tipo duplicado) y comprobaremos que se detecta cada defecto. Una prueba que comprueba únicamente el caso válido no demuestra nada: un verificador que acepte todos los casos también la superaría.
+
+\paragraph{Paso 5: ejecutar en la red de laboratorio.} Con la red en marcha:
+
+\begin{lstlisting}[language=Python]
+from torlab.channel import open_channel, identity_from_file
+
+expected = identity_from_file("labs/es/laboratorio/net/nodes/003r/fingerprint-ed25519")
+c = open_channel("127.0.0.1", 5103, expected_identity=expected)
+print(c.version, c.ed_identity.hex(), c.netinfo, c.auth_methods)
+print(c.registry)
+\end{lstlisting}
+
+En una de nuestras ejecuciones:
+
+\begin{lstlisting}[numbers=none]
+5 785d3199f21d20ad...  Netinfo(time=1790511793, ...)  [3]
+['TLS TLSv1.3 TLS_AES_256_GCM_SHA384', '<- VERSIONS (6 byte)',
+ '<- CERTS (1451 byte)', '<- AUTH_CHALLENGE (36 byte)',
+ '<- NETINFO (509 byte)', '-> NETINFO: channel open']
+\end{lstlisting}
+
+En cambio, si se conecta al puerto 5104 (repetidor \texttt{test004r}) esperando la identidad de otro repetidor, el código rechaza la conexión, como debe ser, con el diagnóstico \enquote{la identidad del repetidor es distinta de la esperada}.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item Un canal es una sesión TLS entre dos nodos adyacentes. Solo los repetidores reciben canales y un canal transporta muchos circuitos.
+  \item La identidad de un repetidor es su clave Ed25519 \file{KP\_relayid\_ed}, que certifica la clave de firma \file{KP\_relaysign\_ed}; la identidad RSA permanece por compatibilidad.
+  \item El certificado TLS de un repetidor está autofirmado. La autenticación se realiza dentro del canal, mediante \cella{CERTS}, que vincula la identidad, la clave firmante y la huella del certificado TLS.
+  \item El iniciador debe verificar las firmas, las fechas de caducidad, la vinculación con TLS y la \textbf{identidad esperada}.
+  \item Los repetidores que inician canales se autentican mediante \cella{AUTHENTICATE}, una firma vinculada a la sesión TLS y a la conversación. Los clientes y puentes no se autentican para evitar crear identidades reconocibles.
+  \item \cella{NETINFO} termina el intercambio inicial. Un cliente envía una marca temporal cero y ninguna dirección propia.
+  \item El relleno del enlace necesita que el canal ya haya transportado un circuito \emph{completo} o tráfico de usuario. Un canal nuevo, o uno usado solo por circuitos de un salto, permanece silencioso. Superado ese umbral, el relleno también puede comenzar antes del primer tráfico de aplicación (\texttt{nf\_pad\_before\_usage}, cuyo valor predeterminado es 1).
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:07-ruoli}
+¿Por qué un cliente Tor no necesita un puerto de escucha accesible desde la red? ¿En qué circunstancias inicia canales un repetidor?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:07-scadenza}
+Un certificado Ed25519 tiene un campo EXPIRATION\_DATE igual a \texttt{0x000772F7}. ¿Cuándo caduca? ¿Por qué la especificación eligió horas en vez de segundos?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:07-authchallenge}
+Una celda \cella{AUTH\_CHALLENGE} tiene un cuerpo de 38 bytes. ¿Cuántos métodos ofrece? ¿Es válida una celda de 36 bytes con N\_Methods igual a 2?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-impostore}
+Un adversario graba la celda \cella{CERTS} de un repetidor legítimo y la reproduce sin cambios en su propio servidor, pero presenta su propio certificado TLS. ¿Qué paso de verificación falla? ¿Qué ocurriría si también presentara el certificado TLS del repetidor legítimo?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-netinfo}
+Escribe en hexadecimal el cuerpo de la celda \cella{NETINFO} enviada por un repetidor situado en \texttt{203.0.113.5}, a las 12:00:00 UTC del 1 de enero de 2026, a un cliente que se ha conectado desde \texttt{198.51.100.7}.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-client-auth}
+Supongamos que los clientes Tor se autenticaran ante los guardias mediante una clave generada una sola vez y guardada en disco. Describe dos maneras concretas en que esto perjudicaría el anonimato de los usuarios.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-rsa}
+Amplía \file{labs/es/codigo/torlab/channel.py} para verificar opcionalmente la identidad RSA (tipos 2 y 7), siguiendo la \cref{sec:canale-certs}. Compara la huella SHA-1 de la clave RSA obtenida con el archivo \file{fingerprint} del repetidor. \emph{Pista:} la huella es el SHA-1 de la codificación DER de la clave pública.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:07-padding}
+Con la red de laboratorio en funcionamiento, abre un canal mediante \file{labs/es/codigo/torlab/channel.py} y mantenlo abierto mientras el cliente \texttt{test008c} descarga una página a través de la red. ¿Recibirás celdas \cella{PADDING} por \emph{tu} canal? Formula una hipótesis, ponla a prueba y explica el resultado a la luz de \file{channelpadding\_decide\_to\_pad\_channel}.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:07-mitm}
+Explica por qué el campo TLSSECRETS de \cella{AUTHENTICATE} impide que un intermediario retransmita la autenticación del repetidor $A$ al repetidor $B$ mediante otra sesión TLS, aunque reenvíe fielmente todas las celdas. ¿Qué ocurriría si no existiera TLSSECRETS?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification}, capítulos \enquote{Channels}, \enquote{Negotiating and initializing channels} y \enquote{Relay keys}, y \titolo{Tor certificate formats} (cert-spec)~\cite{torspec}.
+  \item Propuesta 220, \titolo{Migrate server identity keys to Ed25519}: razones para sustituir RSA.
+  \item \titolo{Tor channel padding}, de la especificación de relleno: modelo de adversario basado en NetFlow y selección de intervalos.
+  \item RFC~5705 y RFC~8446 (§\,7.5): funciones \titolo{keying material exporter} de TLS.
+\end{itemize}

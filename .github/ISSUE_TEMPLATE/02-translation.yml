@@ -1,0 +1,69 @@
+name: "Translation problem · Errore di traduzione"
+description: "A wrong, unclear or unnatural passage in the English, Spanish, Russian or Chinese translation. · Un passaggio sbagliato o innaturale in una traduzione."
+title: "[Translation] "
+labels: ["translation", "status: to verify"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The translations were generated with AI tools and are under review: reports from native and fluent speakers are very welcome.
+        The Italian text is the reference. If the problem is in the Italian original too, say so: it will be fixed there first.
+
+        Le traduzioni sono state generate con strumenti di AI e sono in revisione. Il testo italiano è il riferimento.
+  - type: dropdown
+    id: language
+    attributes:
+      label: "Language · Lingua"
+      options:
+        - "English"
+        - "Español"
+        - "Русский"
+        - "简体中文"
+        - "Website · Sito"
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: "Chapter, section or file · Capitolo, sezione o file"
+      placeholder: "e.g. chapter 9, section 9.2 / source/es/capitulos/09-circuitos.tex / labs/ru/вики/Лабораторная-05-Потоки.md"
+    validations:
+      required: true
+  - type: textarea
+    id: original
+    attributes:
+      label: "Italian original · Originale italiano"
+      description: "If you cannot find it, write «not found». · Se non lo trovi, scrivi «non trovato»."
+    validations:
+      required: true
+  - type: textarea
+    id: translated
+    attributes:
+      label: "Translated text · Testo tradotto"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: "Kind of problem · Tipo di problema"
+      options:
+        - "Wrong meaning · Significato errato"
+        - "Technical term · Termine tecnico"
+        - "Grammar or style · Grammatica o stile"
+        - "Text left untranslated · Testo non tradotto"
+        - "Formatting · Impaginazione"
+        - "Other · Altro"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: "What is wrong · Che cosa non va"
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: "Suggested wording · Formulazione proposta"
+    validations:
+      required: false

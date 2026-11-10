@@ -1,0 +1,129 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Chapter \ref{cap:11-stream}: Streams, SENDME, and Congestion Control}
+
+\begin{soluzione}{es:11-begin}
+The hostname must be lowercase: \texttt{example.com:443} followed by a zero byte, that is, \texttt{6578616d706c652e636f6d3a343433 00}, followed by FLAGS with bit 1 set to accept IPv6: \texttt{00000001}.
+\end{soluzione}
+
+\begin{soluzione}{es:11-connected}
+IPv4 address \texttt{c0000201} is 192.0.2.1; TTL \texttt{0000012c} is 300 seconds. The client may ignore the address. If it retains it, it must not reuse it across circuits: the exit could have lied or returned a unique address to recognize the client.
+\end{soluzione}
+
+\begin{soluzione}{es:11-optimistic}
+Without optimistic data, the client waits for \texttt{CONNECTED} before sending the request, costing an extra round trip of approximately 600\,ms in an operation taking at least two RTTs. If the connection fails, queued data must be discarded because there is no destination to receive them. They must not be delivered over another connection.
+\end{soluzione}
+
+\begin{soluzione}{es:11-velocita}
+A stream can have at most 500 cells in flight, approximately $500 \times 498 \approx 249$\,KB per RTT. With a 400\,ms RTT, this is approximately 620\,KB/s. Even with many streams, a circuit is limited to 1,000 cells per RTT, approximately 1.2\,MB/s. With congestion control, the window starts at only 124 cells (about 62\,KB) but grows until RTT measurements indicate congestion, without a fixed upper limit.
+\end{soluzione}
+
+\begin{soluzione}{es:11-sendme-falso}
+A malicious client opens many streams to a server sending a large amount of data, perhaps its own server, reads very little, and repeatedly sends forged \texttt{SENDME} messages. The exit continues transmitting, while cells accumulate in the guard's, middle's, and client's queues, exhausting relay memory. Authenticated \texttt{SENDME} requires proof that the client received the cell triggering that message. If the cell contents were predictable, for example a familiar downloaded file, the client could compute the digest without receiving the cell; random padding bytes prevent that shortcut.
+\end{soluzione}
+
+\begin{soluzione}{es:11-resolve}
+Outline: send \texttt{RESOLVE} on a new StreamID with the zero-terminated hostname, then interpret \texttt{RESOLVED} as a sequence of tuples containing type, length, value, and TTL. For a nonexistent hostname, the exit sends an error-type entry (\texttt{0xF0} or \texttt{0xF1}), whose payload should be ignored.
+\end{soluzione}
+
+\begin{soluzione}{es:11-policy}
+The exit responds with \texttt{END}, reason 4 (\texttt{EXITPOLICY}), followed by the destination address, four bytes for IPv4, and a four-byte TTL. The client can use this information to avoid retrying the same exit for that destination.
+\end{soluzione}
+
+\begin{soluzione}{es:11-rtt}
+We measure the time it takes a \texttt{SENDME} to reach the exit plus the time for the unblocked exit to send additional cells and for them to reach the client. When the exit is waiting for \texttt{SENDME}, this approximates the circuit RTT as observed by the client. A second simultaneous download lengthens queues and raises the measured values: exactly the signal congestion control uses to reduce its window.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:12-directory}: The Directory System}
+
+\begin{soluzione}{es:12-validita}
+The voting interval is one hour, from \texttt{valid-after} to \texttt{fresh-until}. The client chooses a random instant between $11{:}00 + \tfrac34 \cdot 60' = 11{:}45$ and $11{:}45 + \tfrac78 \cdot 75' \approx 12{:}50$. If it still has no new consensus by 13:00, its existing one is formally expired. The client nevertheless continues to use it as \emph{reasonably live}, meaning less than 24 hours past expiration, under \file{REASONABLY\_LIVE\_TIME} in \file{networkstatus.c}. It can continue building circuits while repeatedly attempting to fetch a newer consensus. It stops relying on the old consensus approximately 24 hours after expiration.
+\end{soluzione}
+
+\begin{soluzione}{es:12-flag}
+Probably \texttt{Running} and \texttt{Valid}, and \texttt{Fast} since 500\,KB/s exceeds 100\,KB/s. Possibly \texttt{V2Dir} if the relay also serves as a directory cache. Not \texttt{Stable}, \texttt{Guard}, or \texttt{HSDir}, which require days or weeks of operation. Not \texttt{Exit}, since its policy allows only port 443, whereas this flag requires exit traffic on both ports 80 and 443.
+\end{soluzione}
+
+\begin{soluzione}{es:12-partizione}
+The cache sends the targeted client a two-hour-old but still valid consensus, which lacks recently added relays. The client therefore selects paths from a slightly different set than everyone else, potentially making its traffic recognizable. The attack is limited by the consensus's three-hour validity, by the need for a valid authority signature (the cache cannot invent a consensus), and by clients selecting caches randomly. Fetching microdescriptors by digest rather than relay identity prevents the cache from giving this particular client a different version of a relay's key, because the digest is fixed by the signed consensus.
+\end{soluzione}
+
+\begin{soluzione}{es:12-mediana}
+With three measurements, the median is 5200. One inflated measurement does not change it. If the third authority were the only one measuring this relay, the system would not have the three measurements required to use their median. The consensus would instead use advertised or voted bandwidth, with \texttt{Unmeasured=1} and an upper limit, so the inflated measurement would not affect the result.
+\end{soluzione}
+
+\begin{soluzione}{es:12-voti}
+The vote has lines absent from or different in the consensus. Examples include \texttt{Measured} bandwidth assessments from bandwidth authorities, \texttt{m} lines identifying supported consensus methods, flags assigned by that particular authority, its \texttt{flag-thresholds}, and commitments to shared randomness. The consensus retains only the combined results.
+\end{soluzione}
+
+\begin{soluzione}{es:12-md}
+Hash the text beginning with the \texttt{onion-key} line that opens the microdescriptor and ending at the newline before the next microdescriptor or at the end of the document, including the PEM-encoded RSA-key lines. The SHA-256 digest, encoded as base64 without trailing \texttt{=} characters, must match the consensus's \texttt{m} line.
+\end{soluzione}
+
+\begin{soluzione}{es:12-autorita}
+With one authority stopped, the remaining two keep voting and produce a consensus with two signatures, enough for the required majority $\lfloor 3/2 \rfloor + 1 = 2$. With two authorities stopped, the sole survivor cannot reach a majority and no new consensus is produced. The client can nevertheless continue using its last consensus as \emph{reasonably live} for approximately 24 hours after expiration. In the laboratory network, a consensus lasts only 40 seconds but the reasonably-live allowance is still 24 hours, so the disruption is not immediately observable.
+\end{soluzione}
+
+\begin{soluzione}{es:12-ns}
+An \texttt{ns} consensus normally carries SHA-1 signatures; the specification allows only those for that flavor. Its \texttt{r} line additionally contains the full relay descriptor digest, and every relay entry also includes a \texttt{p} line summarizing its exit policy.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:13-percorso}: Path Selection}
+
+\begin{soluzione}{es:13-ordine}
+The exit has the strictest requirements: it must accept the requested destination. Choosing it first establishes that a suitable exit exists. Selecting the guard first might, because of family or network exclusions, eliminate the only suitable exit or force the selection to be repeated. There is also a statistical reason: exclusions apply to later positions, so they should affect the positions offering the largest candidate sets.
+\end{soluzione}
+
+\begin{soluzione}{es:13-peso}
+As a guard: $20000 \times 0/10000 = 0$ (\texttt{Wgd=0}). As a middle: $20000 \times 0 = 0$ (\texttt{Wmd=0}). As an exit: $20000 \times 10000/10000 = 20000$ (\texttt{Wed=10000}). Under this consensus's weights, the relay is used exclusively as an exit.
+\end{soluzione}
+
+\begin{soluzione}{es:13-guard}
+Without persistent guards, compromise probability exceeds 50\% when $1 - (1 - c^2)^C > 0.5$, or $C > \ln 0.5 / \ln(1 - c^2)$: approximately \num{6932} circuits for $c = 1\%$ and 17 circuits for $c = 20\%$. With one fixed guard, the probability remains near $c$, or 1\% and 20\%, respectively. Guards are insufficient against a very powerful adversary, but the difference remains substantial.
+\end{soluzione}
+
+\begin{soluzione}{es:13-sybil}
+An adversary must provide real bandwidth: selection probabilities depend on bandwidth measured by authorities rather than merely advertised values. Exits are also closely monitored, including through \texttt{BadExit}. The limit of two relays per address forces the adversary to obtain many addresses. Declaring a family prevents their relays from appearing twice in the same circuit; omitting the declaration risks discovery and exclusion by authorities. Finally, weights reserve scarce exit capacity for actual exits, where the adversary's bandwidth counts.
+\end{soluzione}
+
+\begin{soluzione}{es:13-campione}
+Without a sample limit, an adversary controlling the client's local network could block connections to every honest guard. The client would keep sampling new guards until finding a reachable one, eventually selecting an adversarial guard. With a limited sample, the client exhausts its attempts and stops adding guards, potentially losing connectivity rather than automatically selecting an attacker-controlled guard.
+\end{soluzione}
+
+\begin{soluzione}{es:13-famiglie}
+This is a practical exercise. Obtain the microdescriptors from CollecTor alongside the corresponding consensuses. For each relay, construct its set of family identifiers using \texttt{family-ids} or mutual \texttt{family} lists, and reject a candidate if it shares a family with any relay already selected.
+\end{soluzione}
+
+\begin{soluzione}{es:13-operatori}
+This is a research exercise. Large families generally account for a substantially greater share of exit-selection probability than any single large relay. Actual concentration risk therefore depends on operators, not merely the count of relays. This motivates the community's concern with operator diversity and undeclared relay families (\cref{cap:27-casi-rete}).
+\end{soluzione}
+
+\section*{Chapter \ref{cap:14-onion-services}: Onion Services v3}
+
+\begin{soluzione}{es:14-indirizzo}
+$32 + 2 + 1 = 35$ bytes, or 280 bits. Base32 encodes five bits per character, so $280/5 = 56$ characters are required, without padding. A random typing error has approximately a $2^{-16}$ chance of accidentally matching the checksum. The version byte must also remain \texttt{0x03}, making an undetected random error still less likely.
+\end{soluzione}
+
+\begin{soluzione}{es:14-periodo}
+At 09:00 UTC on 1 January 2026, \num{29454300} minutes have elapsed since the Unix epoch. Subtracting the 720-minute offset leaves \num{29453580}, so $\lfloor 29453580 / 1440 \rfloor = 20453$. Period \num{20453} began at 12:00 UTC on 31 December 2025, because 09:00 is still before noon.
+\end{soluzione}
+
+\begin{soluzione}{es:14-hsdir}
+The adversary needs the period's blinded key, and thus knowledge of the service address, plus the period's SRV and the positions of controlled relays on the ring. They would use those values to generate relay identities positioned immediately after the service indices. The SRV becomes known only when authorities publish it, approximately half a day before the relevant period begins. The adversary cannot prepare the precisely positioned relays several days earlier, and new relays still need to earn the \texttt{HSDir} flag, which requires at least 96 hours of operation.
+\end{soluzione}
+
+\begin{soluzione}{es:14-ruoli}
+An HSDir sees a blinded key, not the service's address, and receives requests through anonymous circuits. An introduction point sees an authentication key and a circuit arriving from the service, and can count introduction requests. A rendezvous point sees a cookie, two circuits, and encrypted traffic passing between them. The introduction point is especially useful for estimating popularity because it observes each connection attempt, even though it does not know the corresponding address. Someone already knowing the address could, however, download the descriptor and establish that correspondence.
+\end{soluzione}
+
+\begin{soluzione}{es:14-anonimo}
+On a single-hop circuit, the HSDir is the first relay and sees the client's IP address. It could link \emph{who} is searching for \emph{which} service, at least by blinded key and by address if the address is already known. Rejecting nonanonymous requests forces clients to fetch descriptors through other relays.
+\end{soluzione}
+
+\begin{soluzione}{es:14-anello}
+This is a practical exercise. With more than $2 \times 4$ HSDirs, the service no longer uploads its descriptor everywhere. Fetching it from every HSDir through a three-hop circuit should find it precisely on the HSDirs calculated for the current or following period, because the service publishes descriptors for both periods.
+\end{soluzione}
+
+\begin{soluzione}{es:14-ipt}
+The base64 value holds a count of link specifiers followed by the specifiers in \texttt{EXTEND2} format (\cref{sec:extend2}). For example, type \texttt{00} supplies address and ORPort, type \texttt{02} an RSA fingerprint, and type \texttt{03} an Ed25519 identity. Recover the relay from its ORPort, which equals 5100 plus its node number. The \texttt{auth-key} line contains a type-9 certificate, signed by the descriptor-signing key, certifying the service's authentication key at that introduction point.
+\end{soluzione}

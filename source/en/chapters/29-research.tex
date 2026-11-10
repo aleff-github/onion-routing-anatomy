@@ -1,0 +1,141 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Academic Research on Tor}\label{cap:29-ricerca}
+\aggiornatoal{23 September 2026}{papers cited in this chapter; Tor Project research portal; consensus of 23 September 2026}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item find the principal venues for Tor research and the resources provided by the Tor Project;
+  \item measure anonymity quantitatively, from entropy to time to first compromise;
+  \item select an appropriate experimental method: analytical modeling, simulation, emulation, or measurement;
+  \item simulate thousands of clients over months using a real consensus (Laboratory~19).
+\end{itemize}
+\end{obiettivi}
+
+Tor has been driven by research from the beginning. Onion routing emerged from a research laboratory (\cref{cap:03-nascita-tor}); the Tor design was presented at an academic conference~\cite{dingledine2004tor}; and many mechanisms covered in this book, from guards to congestion control, emerged in response to published research. This chapter is intended for readers who want to conduct research themselves: where to publish, how to measure anonymity, which experimental tools to use, and which safety principles to observe.
+
+% ---------------------------------------------------------------------------
+\section{Where Tor Research Is Published}\label{sec:ric-dove}
+
+Research on anonymity networks is chiefly published at two kinds of venues:
+\begin{description}
+  \item[Privacy Enhancing Technologies Symposium (PETS)] and its journal, \emph{Proceedings on Privacy Enhancing Technologies} (PoPETs), a specialized venue: the foundational anonymity-measurement work discussed below appeared at the PET workshop in 2002, before the PoPETs journal existed~\cite{diaz2002measuring}.
+  \item[Major security conferences] USENIX Security, ACM CCS, IEEE Symposium on Security and Privacy, and NDSS. Many of the papers in \cref{cap:26-attacchi} appeared at these conferences.
+\end{description}
+Free Haven's \emph{Anonymity Bibliography} has collected publications in this field for more than twenty years and is a natural starting point for a literature review.
+
+The Tor Project also maintains a research portal containing data, tools, technical reports, proposed research topics, and information about the Research Safety Board. Its guidance stresses that the protocol and network are continually evolving: measurements made without understanding their internal operation can lead to incorrect conclusions. Researchers are therefore encouraged to contact the project early, to learn about concurrent experiments and planned changes.
+
+% ---------------------------------------------------------------------------
+\section{Measuring Anonymity}\label{sec:ric-metriche}
+
+In \cref{cap:01-anonimato}, we defined anonymity in terms of indistinguishability within a set. Yet not every member is equally likely from an adversary's perspective. After observing traffic, the adversary might assign much higher probabilities to some users than to others. The number of users in the set is not enough.
+
+\paragraph{Degree of anonymity.} In 2002, Díaz and coauthors proposed measuring anonymity through the entropy of the probability distribution an adversary assigns to possible senders~\cite{diaz2002measuring}. If $p_i$ is the probability the adversary assigns to user $i$ being the sender, the entropy is
+\[ H(X) = -\sum_{i=1}^{N} p_i \log_2 p_i, \]
+and it reaches its maximum, $H_M = \log_2 N$, when all $N$ users are equally likely. The \textbf{degree of anonymity} is the ratio
+\[ d = \frac{H(X)}{H_M}, \qquad 0 \le d \le 1: \]
+for $N\ge 2$, it is 1 when the posterior distribution is uniform (which does not by itself prove that the adversary learned nothing) and 0 when a single sender has probability 1. For $N=1$, the ratio is undefined because $H_M=0$.
+
+One intuitive way to interpret entropy is $2^{H(X)}$: the number of equally likely users who would provide the same uncertainty. A set of 1,000 users in which the adversary has narrowed the suspects to just two, each with probability 0.5, provides as much uncertainty as a set of two: $H = 1$ bit.
+
+\paragraph{Limits of one-time measurements.} Entropy describes an individual observation, but Tor's exposure accumulates over time, as we saw in \cref{sec:att-correlazione}: every circuit creates another opportunity for an adversary. Johnson and colleagues therefore proposed \emph{longitudinal} measures, including the probability of deanonymization at least once within a given period and median time to first compromise, calculated by simulating users' behavior against real network data~\cite{johnson2013users}. We will follow a similar approach in the laboratory.
+
+% ---------------------------------------------------------------------------
+\section{Four Methods}\label{sec:ric-metodi}
+
+\begin{description}
+  \item[Analytical modeling] A mathematical model, such as degree of anonymity or the model of Sybil attacks in \cref{sec:att-sybil}. This is fast and general, but depends on assumptions that real systems inevitably violate to some extent.
+  \item[Behavioral simulation] Reproduce a simplified component of a system, such as path selection, using real-world data. TorPS, the path simulator developed by Johnson and colleagues~\cite{johnson2013users}, and our Laboratory~19 use this approach. It is fast, but cannot account for anything omitted from the model.
+  \item[Network emulation and simulation] Run the actual software either in a private network like the Chutney laboratory used throughout this book or inside a discrete-event simulator such as Shadow~\cite{jansen2012shadow}, which can execute thousands of relays and clients on one machine with virtual time (\cref{sec:rp-shadow}). This is especially useful for performance research, because proposed protocol changes can be tested on a realistic network before deployment.
+  \item[Measurements on the public network] Only direct measurement reveals what happens on the real network. It also carries the greatest risk to real users and requires careful experimental design (\cref{sec:ric-sicurezza}).
+\end{description}
+Strong research often combines several methods: mathematical analysis suggests a hypothesis, simulation tests it at scale, and carefully designed measurement examines its realism.
+
+\begin{approfondimento}[Measuring Without Observing Individuals]
+PrivCount, developed by Jansen and Johnson, shows how measurement and privacy can coexist~\cite{jansen2016privcount}. Participating relays count relevant events, but counters are masked with random values shared with other participants. Noise is added according to the principles of \emph{differential privacy}. Only an aggregated, deliberately noisy result becomes visible, limiting what can be inferred about individual users. In 2016, the authors used PrivCount to estimate approximately 710\,000 simultaneously connected users, of whom 550\,000 were active at a given moment, and found that traffic to web ports accounted for 91\% of the data bytes observed at participating exits. These figures describe the 2016 study, not today's network. This takes the same privacy principles as rounding relay statistics (\cref{sec:metrics-utenti}) a step further.
+
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: Time to First Compromise}\label{sec:lab-ricerca}
+
+\begin{laboratorio}[19]{Months of Circuits in a Simulation}
+\textbf{Objective.} Use a real consensus to estimate how many clients an adversary controlling a given bandwidth share could deanonymize over time, with and without persistent guards.\\
+\textbf{Prerequisites.} Laboratories~7 and~15; a running network is not required.\\
+\textbf{Estimated time.} 1--2 hours.
+\end{laboratorio}
+
+The \file{labs/en/code/torlab/simulation.py} module reuses the weights from Laboratory~7. The adversary adds a guard and an exit, each representing a fraction $q$ of weighted bandwidth at its circuit position. We simulate 2,000 clients for 180 days, each building 20 circuits daily.
+
+The model replaces a persistent guard on an approximate schedule based on a \emph{confirmed} guard. According to guard-spec and the code in \file{entrynodes.c}, a confirmed guard is removed from the sample \texttt{GUARD\_CONFIRMED\_MIN\_LIFETIME} (60 days) after confirmation, and \texttt{CONFIRMED\_ON\_DATE} is randomly backdated by up to \texttt{GUARD\_LIFETIME}/10 (12 days). This produces a simulated interval of 48--60 days from initialization. The 120-day \texttt{GUARD\_LIFETIME} instead governs expiration of unconfirmed guards in the sampled set. Real guard rotation also depends on the sampled/confirmed lists, reachability, and replacements: this exercise does not reproduce the full guard algorithm. An early version incorrectly applied 120 days to confirmed guards as well, understating risk within this model. For comparison, we also simulate clients choosing a new guard for every circuit. A client becomes compromised on the first day one of its circuits includes both an adversarial guard and an adversarial exit.
+
+This model is intentionally simple: it ignores middle relays, families, /16 networks, backup guards, and failures. To remain fast, it does not use \texttt{random.choices}, which would recompute thousands of weights on every draw. It instead uses binary search over cumulative weights, allowing millions of selections without recomputing the distribution; actual runtime depends on the machine.
+
+First obtain the historical public consensus (for example, with \texttt{make -C labs/en data}); it is not committed to the repository. The simulation is deterministic: with the same model, consensus, share, and seed, the result is always this one.
+\begin{lstlisting}[language=bash,numbers=none]
+$ PYTHONPATH=labs/en/code python3 -m torlab.simulation labs/en/data/collector/consensus-microdesc-2026-09-23-15 0.05
+adversary: 5% of guard bandwidth and 5% of exit bandwidth; 2000 clients, 180 days, 20 circuits/day
+persistent guard      1d:  2.6%    7d:  4.4%   30d:  4.4%   90d:  9.4%  180d: 18.4%  median: None
+per-circuit guard      1d:  4.3%    7d: 27.9%   30d: 76.5%   90d: 98.9%  180d:100.0%  median: 15
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig29-compromise}
+\caption{Laboratory~19, simplified simulation: 2,000 clients building 20 circuits daily over 180 days, with a 23 September 2026 reference consensus and an adversary holding 5\% of weighted guard bandwidth and 5\% of weighted exit bandwidth. The cumulative fraction counts clients who used at least one circuit with both adversarial endpoints in the model. Persistent-guard rotations occur at different times for each client (simulated intervals of 48--60 days), not on three shared dates. These are simulated exposures, not observed deanonymizations on the public network.}
+\label{fig:compromissione}
+\end{figure}
+
+\Cref{fig:compromissione} shows both curves. Without persistent guards, half the clients become compromised within fifteen days and almost all within three months, because every new circuit adds another independent opportunity. With persistent guards, a client's exposure is determined largely when the guard is selected. About 4\% of clients selecting the adversarial guard are compromised early; others cannot meet this particular compromise condition while keeping an honest guard. As different clients rotate guards at staggered times (approximately every 48--60 days per client in this model), new draws expose additional clients, bringing the total to approximately 18\% after six months. When the adversarial bandwidth share is 1\%, the corresponding six-month result falls to about 4\%, versus 31\% without persistent guards.
+
+These results from one September 2026 historical snapshot illustrate persistent guards' role in this simplified model. Rather than necessarily reducing marginal risk per circuit, they redistribute exposure across clients: those retaining an honest guard cannot meet this specific compromise condition, whereas those selecting a malicious guard face higher exposure. Guard lifetime is consequently a trade-off. Slower rotation protects users with honest guards for longer but also prolongs the exposure of those with adversarial guards. A patient adversary who remains in the network for months gains new opportunities at each rotation.
+
+% ---------------------------------------------------------------------------
+\section{Conducting Research Safely}\label{sec:ric-sicurezza}
+
+\Cref{cap:25-legale} introduced the Tor Research Safety Board's guidelines~\cite{trsb}. When designing an experiment, ask first: \emph{does my research question truly require the public network?} Many performance and attack questions can be answered using Shadow or a private network, with reproducible experiments and control over variables. When public-network measurement is essential, follow the principles already discussed: act only on your own traffic, collect the minimum data, aggregate before publication, and consult the Board and Tor Project before beginning.
+
+Recent history provides contrasting examples. \Cref{cap:27-casi-rete} described an experiment, or attack, affecting real users through a signal visible to receiving relays; a passive third party would first need to decrypt the inter-relay TLS connections. PrivCount, by contrast, shows that detailed network measurement is possible without exposing individual users. The difference lies not merely in the tools but in experimental design.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item Tor research appears at PETS and major security conferences. The Tor Project provides data, tools, and a Research Safety Board.
+  \item Entropy measures anonymity for a single observation; degree of anonymity normalizes it between zero and one. Over time, measures such as probability of compromise within a given interval are needed.
+  \item Analytical models, behavioral simulations, network emulation or simulation, and measurements on the public network address different questions and carry different risks.
+  \item In the reference-consensus simulation, persistent guards substantially reduce the fraction of clients compromised over time by concentrating exposure among fewer clients.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:29-entropia}
+An adversary observes a four-user system and assigns probabilities $1/2$, $1/4$, $1/8$, and $1/8$. Calculate the entropy, degree of anonymity, and equivalent number of equally likely users.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:29-metodo}
+Choose and justify the most appropriate method for each question: (a) How would latency change if circuits used four hops? (b) How many users access Tor from a particular country? (c) Would a new guard-selection algorithm reduce time to first compromise?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:29-durata}
+Run Laboratory~19's \texttt{simulate} with \texttt{guard\_lifetime} set to 30 and 180 days instead of the default 60, and compare the fraction of clients compromised after 180 days. Explain your findings.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:29-asimmetria}
+Repeat Laboratory~19 with an adversary controlling 10\% of exit bandwidth but no guard bandwidth, then one controlling 10\% of guard bandwidth but no exit bandwidth. What can each achieve, and why?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:29-torps}
+Extend the simulator with three features that the current model ignores: clients reusing circuits for ten minutes instead of continually creating new ones, the /16 restriction between guards and exits, and an adversary controlling the entire autonomous system of a major network. Which additions change the results most?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item C.~Díaz, S.~Seys, J.~Claessens, B.~Preneel, \titolo{Towards Measuring Anonymity}~\cite{diaz2002measuring}.
+  \item R.~Jansen, A.~Johnson, \titolo{Safely Measuring Tor}~\cite{jansen2016privcount}.
+  \item Tor Project research portal, \url{https://research.torproject.org/}.
+  \item The \emph{Anonymity Bibliography}, \url{https://www.freehaven.net/anonbib/}.
+\end{itemize}

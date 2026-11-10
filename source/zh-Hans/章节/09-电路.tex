@@ -1,0 +1,403 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{电路构建：TAP、CREATE\_FAST、ntor 与 ntor-v3}\label{cap:09-circuiti}
+\aggiornatoal{2026 年 9 月 23 日}{torspec 提交 \texttt{8e1f245}；tor 0.4.9.13；提案 216、332、350}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 描述客户端如何使用 CREATE2 和 EXTEND2 逐跳构建电路；
+  \item 解释一次电路握手必须保证什么：中继认证、秘密性与前向保密；
+  \item 逐步跟踪 CREATE\_FAST、ntor 和 ntor-v3，并理解 TAP 为什么被淘汰；
+  \item 从协商出的密钥材料中派生某一跳使用的四个值（Df、Db、Kf、Kb）；
+  \item 使用官方测试向量验证实现；
+  \item 在实验网络上向真实中继建立电路（实验~3）。
+\end{itemize}
+\end{obiettivi}
+
+有了已经打开的通道（\cref{cap:07-canali}）以及 cell 这套“协议字母表”（\cref{cap:08-celle}），我们终于可以构建 Tor 最核心的结构：\textbf{电路（circuit）}。本章将看到客户端如何分别与路径上的每一个中继建立只属于双方的共享秘密，以及怎样把这些秘密转换成实际加密流量所需的密钥。下一章 \cref{cap:10-cifratura-relay} 会说明这些密钥如何真正用于分层加密。
+
+% ---------------------------------------------------------------------------
+\section{一次只增加一跳}\label{sec:circ-telescopio}
+
+客户端以\emph{增量}方式，也就是所谓\enquote{telescoping（伸缩式）}方式构建电路~\cite{dingledine2004tor}：
+\begin{enumerate}
+  \item 选择一条路径，例如守卫 $R_1$、中间中继 $R_2$ 和出口 $R_3$（\cref{cap:13-percorso}）。
+  \item 通过与 $R_1$ 的通道，发送包含密码学握手前半部分的 \cella{CREATE2}。$R_1$ 回复 \cella{CREATED2}；此后客户端与 $R_1$ 拥有共同的密钥材料。
+  \item 客户端向 $R_1$ 发送一条为 $R_1$ 加密的 \texttt{EXTEND2}，要求它把电路扩展到 $R_2$。消息中包含一份新的握手前半部分，这一次目标是 $R_2$。
+  \item $R_1$ 向 $R_2$ 打开或复用通道，把握手数据放进 \cella{CREATE2} 发送过去。$R_2$ 的 \cella{CREATED2} 返回 $R_1$，随后 $R_1$ 再把结果封装在 \texttt{EXTENDED2} 中转回客户端。
+  \item 客户端完成与 $R_2$ 的握手，再以相同方式通过 $R_1$ 和 $R_2$ 把电路扩展到 $R_3$。
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\input{图/图09-伸缩式构建}
+\caption{三跳电路的伸缩式构建。每一次握手只发生在客户端与一个中继之间；中间的中继只是运输握手消息。虚线箭头表示消息在已经建立的电路内部传输，并使用此前跳已经协商出的密钥进行加密。}
+\label{fig:telescopio}
+\end{figure}
+
+这种设计带来一个根本结果：与 $R_3$ 的握手虽然会经过 $R_1$ 和 $R_2$，但它是针对 $R_3$ 的公钥设计的，因此 $R_1$ 和 $R_2$ 都无法推导出对应共享秘密。不同跳又使用不同秘密，因此任何中继都无法读取客户端与其他中继交换的内容。守卫 $R_1$ 知道客户端是谁，却不知道流量最终去向；出口 $R_3$ 知道流量去往哪里，却不知道原始客户端是谁。
+
+\begin{storia}[第一代洋葱路由]
+最初 Naval Research Laboratory 的系统让客户端一次性构造一个完整\enquote{洋葱}：消息按所有中继的公钥逐层加密，每个中继剥掉自己的一层，得到下一跳地址和属于自己的会话密钥（\cref{cap:03-nascita-tor}）。如果攻击者在未来攻陷某个中继，就可能使用长期密钥解密过去记录下来的洋葱。Tor 改为让每一跳都进行临时 Diffie--Hellman 握手，因此引入\emph{前向保密}：会话密钥一旦被删除，即使未来获得长期密钥，也无法解密过去的流量~\cite{dingledine2004tor}。
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{信元与消息}\label{sec:circ-celle}
+
+\subsection{CREATE2 与 CREATED2}
+
+\cella{CREATE2} 的格式刻意保持通用~\spec{tor-spec}{Create and Created cells}：2 字节握手类型 HTYPE、2 字节长度 HLEN 和 HDATA。\cella{CREATED2} 只需要 HLEN 与 HDATA，因为握手类型已经由请求确定。所有内容都必须放进一个定长 cell，所以 \cella{CREATE2} 中握手数据最多为 $509 - 4 = 505$ 字节。
+
+\begin{center}
+\begin{tabular}{cll}
+\toprule
+HTYPE & 握手 & 状态 \\
+\midrule
+\texttt{0x0000} & TAP & 已过时；tor 0.4.9.1-alpha 中移除 \\
+\texttt{0x0001} & --- & 保留 \\
+\texttt{0x0002} & ntor & 仍在使用 \\
+\texttt{0x0003} & ntor-v3 & 仍在使用；优先选择 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+如果握手成功，中继回复 \cella{CREATED2}；失败则回复 \cella{DESTROY}。新 cell 的 CircID 遵循 \cref{sec:circid}：link protocol~4 及以后，打开通道的一方使用最高位为 1 的值。
+
+\subsection{EXTEND2 与 EXTENDED2}\label{sec:extend2}
+
+RELAY 消息 \texttt{EXTEND2}（RELAY 命令 14）除了包含 \cella{CREATE2} 的握手字段，还包含一组\emph{link specifier}，告诉当前中继怎样联系并识别下一跳~\spec{tor-spec}{Extend and Extended messages}：
+
+\begin{center}
+\begin{tabular}{cll}
+\toprule
+类型 & 内容 & 长度 \\
+\midrule
+\texttt{00} & IPv4 地址和 ORPort & 6 \\
+\texttt{01} & IPv6 地址和 ORPort & 18 \\
+\texttt{02} & 旧式 RSA 身份（SHA-1，20 字节） & 20 \\
+\texttt{03} & Ed25519 身份 & 32 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+负责扩展电路的中继必须验证消息中指出的\emph{每一个}身份；如果新连接的中继没有在 \cref{cap:07-canali} 所述通道握手中证明自己掌握这些身份，就不能继续扩展电路。这样，即便客户端从未直接与 $R_2$ 通信，也能确信自己的握手确实到达预期中继。当前中继还会拒绝把电路扩展到自己，或者扩展回刚刚把请求发来的那个中继。
+
+两个细节可以看出协议对\emph{不可区分性}的重视。首先，规范建议 link specifier 始终按照同一顺序发送（\texttt{00}、\texttt{02}、\texttt{03}、\texttt{01}），避免顺序本身暴露客户端实现。其次，\texttt{EXTEND2} 总是封装在 \cella{RELAY\_EARLY} 中（\cref{sec:comandi}）；这种 cell 数量受到限制，因此不能任意构造极长电路。
+
+\texttt{EXTENDED2}（RELAY 命令 15）的 body 与 \cella{CREATED2} 完全相同。
+
+% ---------------------------------------------------------------------------
+\section{一次握手必须实现什么}\label{sec:circ-requisiti}
+
+在研究不同握手之前，先明确目标。握手结束时，客户端和中继必须拥有一个共享秘密，并满足：
+\begin{description}
+  \item[中继认证] 客户端必须知道它与\emph{那个特定中继}共享秘密，而不是其他人。反过来，中继不能通过握手知道客户端身份：认证只发生\emph{一个方向}，否则每个中继都能识别客户端。
+  \item[秘密性] 网络观察者以及电路中负责转发握手的前一跳，都不能推导出共享秘密。
+  \item[前向保密] 即使未来有人获得中继长期密钥，也不能重建过去的会话秘密。
+  \item[效率] 高负载中继每秒需要执行数千次握手，因此计算成本至关重要。
+\end{description}
+
+接下来看到的几种握手，在这些目标之间采用了不同取舍。
+
+% ---------------------------------------------------------------------------
+\section{TAP：第一代握手}\label{sec:tap}
+
+Tor 最初使用 TAP（\emph{Tor Authentication Protocol}）。它把 1024 位模群上的传统 Diffie--Hellman 密钥交换与 1024 位 RSA 公钥加密结合起来：客户端用中继的 RSA \enquote{onion} key 加密自己的 Diffie--Hellman 半边，只有目标中继能够解密并回复。随后使用基于 SHA-1 的 KDF-TOR 派生密钥（\cref{sec:circ-chiavi}）。
+
+TAP 能满足基本要求，但安全余量不断缩小：1024 位对 RSA 与模 Diffie--Hellman 都已经不足；其混合加密结构也被认为较脆弱，而且握手计算成本较高。从 2013 年开始，ntor 与 TAP 并存；到了 tor 0.4.9.1-alpha，中继彻底停止支持 TAP（\proposta{350}）。它仍留下一个兼容性痕迹：中继描述符中还会发布旧 RSA \enquote{onion} key。在实验网络的 microdescriptor 中，可以看到 \texttt{onion-key} 与真正使用的 \texttt{ntor-onion-key} 同时存在。
+
+% ---------------------------------------------------------------------------
+\section{CREATE\_FAST：何时不需要公钥}\label{sec:create-fast}
+
+有一种情况不必再进行公钥握手：\emph{第一跳}。客户端刚刚向该中继建立 TLS 通道并验证过它的身份，TLS 已经提供加密且经过认证的信道。\cella{CREATE\_FAST} 正是利用这一事实~\spec{tor-spec}{CREATE\_FAST/CREATED\_FAST cells}：
+\begin{enumerate}
+  \item 客户端发送 20 个随机字节 $X$。
+  \item 中继回复 20 个随机字节 $Y$ 和 20 字节 $KH$。
+  \item 双方从 $K_0 = X \| Y$ 使用 KDF-TOR 派生密钥材料。输出最前面的 20 字节必须等于 $KH$，从而证明中继确实收到了 $X$。
+\end{enumerate}
+
+\cella{CREATE\_FAST} 的安全性完全依赖 TLS：任何能够读取 TLS 流量的人，也能同时得到 $X$ 与 $Y$。因此它只应使用于单跳电路。典型场景是客户端刚启动，需要先从某个中继下载目录信息，却尚未知道该中继的 onion key。tor 源代码对此非常明确：\file{src/core/or/circuitbuild.c} 中的 \file{should\_use\_create\_fast\_for\_circuit} 只有在客户端没有第一跳可用 onion key 时才选择 \cella{CREATE\_FAST}。
+
+\begin{attenzione}[CREATE\_FAST 会暴露第一跳]
+中继收到 \cella{CREATE\_FAST} 后，可以确定自己就是电路第一跳，因此通道另一端就是客户端。规范建议中继正是利用这一点，拒绝让这类单跳电路继续作为互联网出口。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{ntor}\label{sec:ntor}
+
+ntor 由 Goldberg、Stebila 与 Ustaoglu 提出~\cite{goldberg2013ntor}，通过 \proposta{216} 集成进 Tor（tor 0.2.4.8-alpha，2013）。它以\textbf{Curve25519} 替代 RSA 和模 Diffie--Hellman。Curve25519 使用只有 32 字节的密钥，并能提供高效的椭圆曲线密钥交换（\cref{cap:05-crittografia}）。
+
+\subsection{组成部分}
+
+中继拥有一把中期 Curve25519 onion key：私钥 $b$ 和公钥 $B = b\,G$，并在描述符中以 \texttt{ntor-onion-key} 发布。客户端知道 $B$，也知道中继身份——在 ntor 中是 20 字节 RSA 指纹 \texttt{ID}。我们用 $\mathrm{EXP}(P,k)$ 表示点 $P$ 与标量 $k$ 的 Curve25519 Diffie--Hellman 运算，用 $H(x,t)$ 表示以 $t$ 为 key、消息为 $x$ 的 HMAC-SHA256。各个 $t$ 都是从协议标识符 \texttt{"ntor-curve25519-sha256-1"} 派生的固定字符串。
+
+\subsection{协议}
+
+\begin{enumerate}
+  \item 客户端生成临时密钥对 $(x,X)$，并在 \cella{CREATE2} 中发送 \texttt{ID}（20 字节）、$B$（32 字节，用来说明它使用的是哪把 onion key）以及 $X$（32 字节），共 84 字节。
+  \item 中继检查 \texttt{ID} 和 $B$，生成临时密钥对 $(y,Y)$，然后计算
+  % EPUB 中该公式被渲染为 SVG；可访问性替代文本在 epub.mk4 中定义。
+  % 如果公式发生变化，还必须复核对应 alt text 规则。
+  \[ \mathit{secret\_input} = \mathrm{EXP}(X, y) \,\|\, \mathrm{EXP}(X, b) \,\|\, \texttt{ID} \,\|\, B \,\|\, X \,\|\, Y \,\|\, \texttt{PROTOID}. \]
+  从中派生 $\mathit{KEY\_SEED} = H(\mathit{secret\_input}, t_{\mathit{key}})$ 和确认值 $\mathit{AUTH}$，随后返回 $Y$（32 字节）与 $\mathit{AUTH}$（32 字节）。
+  \item 客户端使用自己的秘密计算相同的 $\mathit{secret\_input}$：$\mathrm{EXP}(Y,x) \,\|\,\allowbreak \mathrm{EXP}(B,x) \,\|\, \ldots$，然后验证 $\mathit{AUTH}$ 是否匹配。
+\end{enumerate}
+
+握手核心由两个 Diffie--Hellman 交换组成：
+\begin{itemize}
+  \item $\mathrm{EXP}(X,y)=\mathrm{EXP}(Y,x)$ 把两把\textbf{临时}密钥结合在一起，提供前向保密；握手结束后 $x$ 与 $y$ 立即删除。
+  \item $\mathrm{EXP}(X,b)=\mathrm{EXP}(B,x)$ 使用中继 onion key，提供\textbf{认证}：只有知道 $b$ 的一方才能计算正确结果并产生正确的 $\mathit{AUTH}$。
+\end{itemize}
+
+两个交换缺一不可。没有第一个，未来偷到 $b$ 的攻击者就能重建全部会话秘密；没有第二个，中间节点就可能冒充目标中继。与此同时，客户端完全没有使用长期密钥，因此中继只知道自己与\enquote{发送 $X$ 的某个实体}建立了共享秘密。
+
+\begin{approfondimento}[检查全零共享秘密]
+规范要求双方检查任何 Diffie--Hellman 运算结果都不能是这里用全零表示的无效结果。攻击者可能发送某些小阶点，让 $\mathrm{EXP}(Y,x)$ 落入可预测值。对 Curve25519 而言，检查全零结果是完整验证 $Y$ 所在群的简单替代方案，而且足以满足这里的安全要求。在实验~3 中，这对应 \file{x25519\_dh} 函数里的三行代码。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{ntor-v3}\label{sec:ntor3}
+
+ntor 有一个限制：握手本身除了密钥之外无法携带其他协商信息。随着协议发展，在建立某一跳时逐渐需要\emph{协商}额外功能，例如拥塞控制（\cref{cap:11-stream}）以及 CGO（\cref{cap:10-cifratura-relay}）。ntor-v3（\proposta{332}）在两个方向都增加\textbf{加密消息}，同时改变了若干密码学选择。
+
+\subsection{变化}
+
+\begin{itemize}
+  \item 中继身份改为 32 字节的\textbf{Ed25519} 身份，而不是 RSA 指纹。
+  \item 哈希家族改为 SHA-3：SHA3-256 用于 hash 与 MAC，SHAKE-256 用于可变长度密钥派生。每个输入都带有经过长度编码的域标签（$\mathrm{ENCAP}$），防止一个用途计算出的值被误解释成另一个用途的数据。
+  \item 双方都知道的验证字符串 \texttt{VER} 参与所有计算，因此某个上下文中完成的握手不能直接重用于另一个上下文。普通电路中 tor 使用 \texttt{"circuit extend"}，对应 \file{src/core/crypto/onion\_crypto.c} 中的 \file{NTOR3\_CIRC\_VERIFICATION}。
+  \item 客户端可以发送加密消息 $CM$，中继也可以返回加密消息 $SM$。
+\end{itemize}
+
+\subsection{协议}
+
+\begin{enumerate}
+  \item 客户端生成 $(x,X)$，并立即计算 $B_x=\mathrm{EXP}(B,x)$。根据 $B_x$ 与公开参数派生两把“第一阶段”密钥：一把用 AES-256-CTR 加密 $CM$，另一把用 MAC 对它认证。随后发送 \texttt{ID}（32）、$B$（32）、$X$（32）、加密后的 $CM$ 和 MAC（32）。
+  \item 中继计算 $\mathrm{EXP}(X,b)=B_x$，得到相同的第一阶段密钥，验证 MAC 并解密 $CM$。然后生成 $(y,Y)$，把 $\mathrm{EXP}(X,y)$ 和 $\mathrm{EXP}(X,b)$ 两个交换结果组合成 $\mathit{key\_seed}$。再用 SHAKE-256 派生用于加密响应 $SM$ 的密钥和电路密钥流。回复 $Y$（32）、$\mathit{AUTH}$（32）和加密后的 $SM$。
+  \item 客户端验证 $\mathit{AUTH}$，解密 $SM$，并派生相同的密钥流。
+\end{enumerate}
+
+\begin{attenzione}[客户端消息没有前向保密]
+$CM$ 的加密密钥只依赖 $B_x$，而 $B_x$ 使用中继的 onion key 派生。记录握手、并在未来得到 $b$ 的攻击者，可以解密过去的 $CM$。规范对此明确说明：只有中继返回的数据具备前向保密。因此 $CM$ 只能包含协商参数，绝不能包含用户数据。
+\end{attenzione}
+
+\subsection{扩展}
+
+$CM$ 与 $SM$ 采用统一格式~\spec{tor-spec}{Sending extensions in the circuit extension handshake}：第一个字节是扩展数量；每项扩展依次包含 1 字节类型、1 字节长度和数据。当前电路建立阶段定义的扩展包括：
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}cl>{\raggedright\arraybackslash}X@{}}
+\toprule
+类型 & 方向 & 含义 \\
+\midrule
+1 & client $\to$ relay & \file{CC\_FIELD\_REQUEST}：客户端请求 \proposta{324} 拥塞控制；body 为空 \\
+2 & relay $\to$ client & \file{CC\_FIELD\_RESPONSE}：中继接受；1 字节 \file{sendme\_inc} \\
+3 & client $\to$ relay & 子协议请求，例如 CGO（\texttt{Relay=6}）使用 \texttt{[02 06]} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{今天 tor 会选择哪种握手？}
+
+在 tor 0.4.9.13 中，每一跳分别选择握手类型（\file{circuit\_pick\_create\_handshake}）。当中继支持拥塞控制且该功能已启用——当前公共网络通常如此——或者需要协商 CGO 时，使用 ntor-v3。否则退回 ntor。正如规范所指出，现代客户端实际上几乎总会选择 ntor-v3；ntor 主要作为兼容性方案保留。
+
+% ---------------------------------------------------------------------------
+\section{从共享秘密到电路密钥}\label{sec:circ-chiavi}
+
+每种握手最终都会得到一串伪随机字节，从中提取传统 relay-cell 加密方案（称为 \enquote{tor1}）使用的密钥~\spec{tor-spec}{Setting circuit keys}：
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+密钥 & 字节 & 用途 & 方向 \\
+\midrule
+Df & 20 & 累积摘要的初始值（SHA-1） & client $\to$ relay \\
+Db & 20 & 累积摘要的初始值（SHA-1） & relay $\to$ client \\
+Kf & 16 & AES-128-CTR 密钥 & client $\to$ relay \\
+Kb & 16 & AES-128-CTR 密钥 & relay $\to$ client \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+总计 72 字节，对应 tor 源代码中的 \file{CPATH\_KEY\_MATERIAL\_LEN}。具体怎样产生字节流取决于握手：
+\begin{description}
+  \item[KDF-TOR] 用于 CREATE\_FAST，也曾用于 TAP：
+  $K=\mathrm{SHA1}(K_0\|\texttt{00})\,\|\,\mathrm{SHA1}(K_0\|\texttt{01})\,\|\,\ldots$。
+  前 20 字节构成 $KH$，之后依次为 Df、Db、Kf、Kb。单字节计数器把输出限制在 5,120 字节以内，但远高于实际需求。
+  \item[KDF-RFC5869] ntor 使用基于 SHA-256 的 HKDF，以 \file{KEY\_SEED} 作为密钥；Df、Db、Kf、Kb 占最前面的 72 字节。
+  \item[SHAKE-256] ntor-v3 使用输出的前 32 字节加密 $SM$，之后依次是 Df、Db、Kf、Kb。
+\end{description}
+
+两个方向使用不同密钥绝非多余。如果客户端与中继在两个方向共用同一 AES-CTR 密钥，就会重复使用同一密钥流；把两个密文 cell 做 XOR，就会直接得到两份明文的 XOR。
+
+CGO 会改变密钥布局，详见 \cref{cap:10-cifratura-relay}。
+
+% ---------------------------------------------------------------------------
+\section{实验：建立真实电路}\label{sec:lab-circuiti}
+
+\begin{laboratorio}[3]{电路握手}
+\textbf{目标。} 编写 \file{labs/zh-Hans/代码/torlab/ntor.py}，实现 CREATE\_FAST、ntor 和 ntor-v3；使用官方测试向量验证实现；在实验网络上向真实中继建立单跳电路。\\
+\textbf{前置条件。} 实验~1 和~2；已经运行的实验网络；\texttt{cryptography} 库（X25519、AES）和标准库 \texttt{hashlib}（SHA-3、SHAKE）。\\
+\textbf{预计时间。} 3--4 小时。
+\end{laboratorio}
+
+\paragraph{步骤 1：用少量代码实现 ntor-v3。} 实现几乎可以逐行对应规范。先定义辅助函数：
+
+\begin{lstlisting}[language=Python]
+NTOR3_PROTOID = b"ntor3-curve25519-sha3_256-1"
+def _t(name):  return NTOR3_PROTOID + b":" + name.encode()
+def _encap(s): return struct.pack(">Q", len(s)) + s
+def _h3(s, t): return hashlib.sha3_256(_encap(t) + s).digest()
+def _mac3(k, msg, t):
+    return hashlib.sha3_256(_encap(t) + _encap(k) + msg).digest()
+def _kdf3(s, t, n): return hashlib.shake_256(_encap(t) + s).digest(n)
+\end{lstlisting}
+
+客户端握手如下：
+
+\begin{lstlisting}[language=Python]
+def ntor3_client_start(ID, B, message, ver=b"circuit extend", x=None):
+    sk, X = x25519_generate(x)
+    Bx = x25519_dh(sk, B)
+    phase1 = _kdf3(Bx + ID + X + B + NTOR3_PROTOID + _encap(ver),
+                  _t("kdf_phase1"), 64)
+    enc_k1, mac_k1 = phase1[:32], phase1[32:]
+    encrypted = aes_ctr(enc_k1, message)
+    mac = _mac3(mac_k1, ID + B + X + encrypted, _t("msg_mac"))
+    state = Ntor3State(sk, X, B, ID, Bx, mac, ver)
+    return state, ID + B + X + encrypted + mac
+
+def ntor3_client_finish(st, response, length=72):
+    Y, auth, msg = response[:32], response[32:64], response[64:]
+    secret_input = (x25519_dh(st.x, Y) + st.Bx + st.ID + st.B + st.X + Y
+                    + NTOR3_PROTOID + _encap(st.ver))
+    key_seed = _h3(secret_input, _t("key_seed"))
+    verify = _h3(secret_input, _t("verify"))
+    auth_input = (verify + st.ID + st.B + Y + st.X + st.mac
+                  + _encap(msg) + NTOR3_PROTOID + b"Server")
+    if not hmac.compare_digest(_h3(auth_input, _t("auth_final")), auth):
+        raise HandshakeError("ntor-v3 AUTH 无效")
+    stream = _kdf3(key_seed, _t("kdf_final"), 32 + length)
+    return aes_ctr(stream[:32], msg), stream[32:]
+\end{lstlisting}
+
+$\mathit{AUTH}$ 使用 \file{hmac.compare\_digest} 比较，无论两个值从第几个字节开始不同，执行时间都尽量保持一致。普通比较可能通过时序泄露前缀中已经匹配了多少字节。
+
+\paragraph{步骤 2：测试向量。} 密码学握手不能仅靠\enquote{两端能够互通}来验证：如果两个实现犯了同一个错误，它们仍然可能完美互通。正确方法是使用规范提供的\textbf{测试向量}：固定输入——包括那些正常情况下应该随机生成的密钥——以及逐字节规定的期望输出。\proposta{332} 给出完整 ntor-v3 向量，\proposta{216} 给出多组 ntor HKDF 向量。\file{labs/zh-Hans/代码/torlab/test/test\_ntor.py} 复现这些数据，例如：
+
+\begin{lstlisting}[language=Python]
+def test_ntor3_vectors_proposal_332():
+    st, hdata = ntor3_client_start(h(V["ID"]), h(V["B"]), h(V["CM"]),
+                                    ver=h(V["VER"]), x=h(V["x"]))
+    assert hdata.hex() == V["client"]
+    sm, stream = ntor3_client_finish(st, h(V["server"]), length=256)
+    assert sm == h(V["SM"])
+    assert stream[:32].hex() == V["keystream_start"]
+\end{lstlisting}
+
+其他测试还会验证：修改 $\mathit{AUTH}$，或者换一个 \texttt{VER} 字符串，都必须使握手失败。
+
+\paragraph{步骤 3：中继密钥。} 执行握手需要中继 Ed25519 身份与 \texttt{ntor-onion-key}。真实客户端从共识和 microdescriptor 取得它们（\cref{cap:12-directory}）；实验中也从同类数据源读取，即实验客户端的 \file{cached-microdescs.new}。每个中继都有类似条目：
+
+\begin{lstlisting}[numbers=none]
+onion-key
+-----BEGIN RSA PUBLIC KEY-----
+MIGJAoGBAJet1Oxp+cvg/vgryEmJuVv2s++WxQt5Id1BQ9UNwCOVFcYvEN9KVklM
+...
+-----END RSA PUBLIC KEY-----
+ntor-onion-key gsi2OisnQE96UkjOVvBKtWDLfwRdYG9d4DScg2wz4Qs
+id ed25519 Kz1dj/u6/g7WvhHrt9Ds0jVZjKC+KHo26hWViXAJ1Pg
+\end{lstlisting}
+
+可以注意到：旧 TAP key 仍在发布但已不使用；真正需要的是后面两行 Base64 数据。
+
+\paragraph{步骤 4：连接真实中继。} 使用实验~1 打开到 \texttt{test003r} 的通道，然后分别为各种握手类型发送 \cella{CREATE2}：
+
+\begin{lstlisting}[language=Python]
+c = open_channel("127.0.0.1", 5103, expected_identity=ed)
+st, hd = ntor3_client_start(ed, B, encode_extensions([]))
+c.send(Cell(0x80000001, CellCommand.CREATE2,
+              create2_body(HTYPE_NTOR_V3, hd)))
+r = c.receive()
+sm, stream = ntor3_client_finish(st, hdata_created2(r.body))
+keys = CircuitKeys.from_stream(stream)
+\end{lstlisting}
+
+用各个变体重复这一测试，得到：
+
+\begin{lstlisting}[numbers=none]
+<- CircID=0x80000001 CREATED2 消息体=509 字节
+   ntor-v3 成功，中继消息：[]
+<- CircID=0x80000002 CREATED2 消息体=509 字节
+   带 CC_FIELD_REQUEST 的 ntor-v3 成功，响应：[(2, b'\x1f')]
+<- CircID=0x80000003 CREATED2 消息体=509 字节
+   ntor 成功
+<- CircID=0x80000004 CREATED_FAST 消息体=509 字节
+   CREATE_FAST 成功
+<- CircID=0x80000005 DESTROY 消息体=509 字节     （MAC 已修改）
+   原因：1
+\end{lstlisting}
+
+未修改时所有握手都成功。第二种情况下，中继接受拥塞控制并返回扩展 2，其中 \file{sendme\_inc}=31（\cref{cap:11-stream}）。最后一种情况故意翻转了 MAC 中的一位，中继用 reason 1、即 \texttt{PROTOCOL} 的 \cella{DESTROY} 拒绝握手。这里可以暴露真实错误原因，因为错误由当前中继自己产生，而不是转发另一个节点的 \cella{DESTROY}（\cref{sec:comandi}）。
+
+\paragraph{一个意外观察。} \cref{cap:07-canali} 中我们发现新通道不会收到 \cella{PADDING}。现在，同一通道已经有四条打开的电路，但继续等待二十秒仍然没有收到任何 cell。原因仍在 tor 源代码中（\file{src/core/or/relay.c}）：只有当某条电路\enquote{使用}通道并继续扩展到当前中继之外时，该通道才会成为 padding 的候选。我们的单跳电路不满足条件。到 \cref{cap:10-cifratura-relay} 真正扩展多跳电路时，padding 就会出现。
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item 电路逐跳构建：第一跳使用 \cella{CREATE2}/\cella{CREATED2}，之后通过已建立的电路发送 \texttt{EXTEND2}/\texttt{EXTENDED2}。每次握手只涉及客户端与一个中继。
+  \item \texttt{EXTEND2} 包含链路说明符（地址、RSA 身份和 Ed25519 身份）；执行扩展的中继必须验证这些身份。
+  \item 电路握手认证中继而不认证客户端，同时必须提供秘密性和前向保密。
+  \item TAP（1024 位 RSA 与 DH）已在 tor 0.4.9.1-alpha 中移除。\cella{CREATE\_FAST} 依赖 TLS，只应使用于单跳电路。
+  \item ntor 组合两次 Curve25519：临时--临时交换提供前向保密，临时--onion-key 交换提供身份认证。
+  \item ntor-v3 使用 Ed25519 身份和 SHA-3 家族，并加入加密消息来协商拥塞控制与 CGO 等功能；客户端消息本身不具备前向保密。
+  \item 密钥流提供 Df、Db（各 20 字节）以及 Kf、Kb（各 16 字节），也就是每个方向各一把加密密钥和一个摘要状态。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:09-dimensioni}
+计算 ntor 的 \cella{CREATE2} 中 HDATA 长度；再计算 ntor-v3 在 $CM$ 为 3 字节时的 HDATA 长度。一个 \cella{CREATE2} 最多能够承载多大的 ntor-v3 $CM$？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:09-fast}
+为什么不能在电路第二跳使用 \cella{CREATE\_FAST}？第一跳中继能够做什么？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:09-direzioni}
+为什么客户端与中继在两个方向使用不同 AES key（Kf、Kb）？如果只使用一把 key，会发生什么？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-extend2}
+为了把电路扩展到实验中继 \texttt{test004r}，写出一个 \texttt{EXTEND2} body 头部（specifier 数量与 IPv4 specifier）的十六进制值。使用 ntor-v3 且 $CM$ 只有 1 字节时，完整消息共多少字节？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-ds}
+在 ntor 中，假设客户端只使用 $\mathrm{EXP}(Y,x)$，完全省略 $\mathrm{EXP}(B,x)$。请描述一个由转发握手的中间中继实施的具体攻击。反过来，如果省略 $\mathrm{EXP}(Y,x)$，失去的是哪一种安全属性？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-ver}
+ntor-v3 中 \texttt{VER} 字符串的目的是什么？设想 Tor 之外的另一个协议使用相同密钥执行相同握手；如果没有 \texttt{VER}，可能出现什么问题？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:09-cc}
+重复实验步骤 4，并在 \file{CC\_FIELD\_REQUEST} 之外加入子协议请求 \texttt{[02 06]}（CGO）。中继是否接受？根据 \proposta{359} 解释为什么 CGO 还要求拥塞控制。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:09-ntor-ref}
+tor 仓库包含 ntor 的 Python 参考实现 \file{src/test/ntor\_ref.py}。用它生成完整 ntor 握手测试向量（客户端与中继两端），并加入 \file{test\_ntor.py}。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:09-relay}
+实现 ntor-v3 的\emph{中继端}（函数 \file{server\_part1} 和 \file{server\_part2}），使用 \proposta{332} 的向量验证。然后在内存中让你自己的客户端实现与中继实现完成一次完整握手。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification} 中的 \enquote{Creating and extending circuits} 与 \enquote{Setting circuit keys}~\cite{torspec}。
+  \item I.~Goldberg, D.~Stebila, B.~Ustaoglu, \titolo{Anonymity and one-way authentication in key exchange protocols}~\cite{goldberg2013ntor}：定义 ntor 并给出其安全性论证的论文。
+  \item 提案 216（ntor）、提案 332（ntor-v3）和提案 350（移除 TAP）。
+\end{itemize}

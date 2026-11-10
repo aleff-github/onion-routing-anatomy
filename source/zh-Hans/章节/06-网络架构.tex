@@ -1,0 +1,132 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{网络架构}\label{cap:06-architettura}
+\aggiornatoal{2026 年 9 月 23 日}{tor 0.4.9.13；2026 年 9 月 23 日 15:00 UTC 的公共共识}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 列出 Tor 网络中各类节点的角色及其责任；
+  \item 描述协议层次，从 TLS 通道一直到应用程序的流（stream）；
+  \item 从整体上跟踪用户通过 Tor 打开一个网页时发生的全部步骤；
+  \item 理解不同实现和不同版本如何在同一张 Tor 网络中共存。
+\end{itemize}
+\end{obiettivi}
+
+在进入后续章节的底层细节之前，我们先从全局观察这张网络。本章相当于一张地图：其中每一个元素都会在后面的章节中重新出现，并被进一步拆解；相应位置都会给出交叉引用。
+
+% ---------------------------------------------------------------------------
+\section{角色}\label{sec:arch-ruoli}
+
+Tor 网络由承担不同角色的程序组成，而且同一个程序往往可以同时承担多个角色。\cref{fig:arch-ruoli} 对这些角色进行了概括。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图06-角色}
+\caption{Tor 网络中的主要角色。客户端经由守卫、中间中继和出口构建电路；目录权威发布列出中继的共识；在审查环境下，网桥可以代替公开守卫充当第一跳；访问洋葱服务时，客户端与服务通过汇合点相遇，不需要出口。}
+\label{fig:arch-ruoli}
+\end{figure}
+
+\begin{description}
+  \item[客户端] 用户侧程序，例如 Tor Browser 中包含的 Tor 客户端。它负责选择路径、构建电路，并向应用程序提供 SOCKS 端口。客户端不接受来自网络的入站连接，也不会向网络认证自己的身份（\cref{cap:07-canali}）。
+  \item[中继] 为其他用户转发流量的节点。根据目录权威赋予的标志（flag）以及节点自身配置，它可以承担以下角色：
+  \begin{itemize}
+    \item \textbf{守卫（guard）}：客户端电路的第一跳；客户端只偶尔重新选择守卫，并会在较长时间内重复使用它（\cref{sec:guard}）；
+    \item \textbf{中间中继（middle）}：位于路径中间，既不知道原始来源，也不知道最终目的地；
+    \item \textbf{出口（exit）}：路径最后一跳，根据自身出口策略打开互联网连接（\cref{cap:11-stream}）；
+    \item \textbf{HSDir}：保存洋葱服务描述符（\cref{sec:os-hsdir}）；
+    \item \textbf{目录缓存（directory cache）}：重新分发共识和描述符（\cref{cap:12-directory}）。
+  \end{itemize}
+  \item[目录权威] 九台受信任服务器，每小时对网络状态进行投票并给共识签名；其中一些还负责测量中继带宽。
+  \item[网桥] 不公开列入常规中继列表的第一跳中继，供无法访问公开中继的用户使用，通常会配合可插拔传输（\cref{cap:16-censura}）。
+  \item[洋葱服务] 只能通过 Tor 访问、同时不暴露自身网络位置的服务（\cref{cap:14-onion-services}）。
+\end{description}
+
+在 2026 年 9 月 23 日的公共共识中，共有 9,358 个中继：其中 5,306 个带有 \texttt{Guard} 标志，3,177 个带有 \texttt{Exit} 标志（1,615 个同时拥有两者）。守卫贡献了总带宽的 70\,\%，出口贡献了 33\,\%（\cref{cap:13-percorso}）。
+
+% ---------------------------------------------------------------------------
+\section{协议层次}\label{sec:arch-livelli}
+
+Tor 协议可以看成由多层组成的协议栈，每一层都建立在下一层之上（\cref{fig:arch-livelli}）。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图06-层次}
+\caption{Tor 协议的层次，以及本书介绍各层的章节。每一层都依赖下面一层：应用流以 RELAY 消息的形式传输，RELAY 消息装入经过分层加密的 cell，而 cell 又在 TLS 通道中传输。}
+\label{fig:arch-livelli}
+\end{figure}
+
+\begin{description}
+  \item[通道] 两个相邻节点之间的 TLS 连接，同时用于验证中继身份（\cref{cap:07-canali}）。
+  \item[信元（cell）] 通道承载的 514 字节传输单元（\cref{cap:08-celle}）。
+  \item[电路] 由多跳组成的路径，通过逐跳握手构建，并为每一跳派生不同密钥（\cref{cap:09-circuiti}）。
+  \item[分层加密] relay 消息会针对路径上的每一跳包上一层加密（\cref{cap:10-cifratura-relay}）。
+  \item[应用流] 由出口打开的应用 TCP 连接，通过窗口和拥塞控制机制进行管理（\cref{cap:11-stream}）。
+\end{description}
+
+除这条协议栈之外，还并行存在目录系统和洋葱服务协议。目录系统向客户端提供中继列表；洋葱服务协议则利用电路，让客户端与服务在汇合点相遇。
+
+% ---------------------------------------------------------------------------
+\section{一个网页从开始到结束}\label{sec:arch-percorso}
+
+下面从高层次跟踪一个用户第一次启动 Tor Browser 并打开网页时发生的事情。
+
+\begin{enumerate}
+  \item \textbf{启动。} tor 联系一个目录权威，或者联系源代码中列出的约两百个\emph{备用目录服务器（fallback directory）}之一，下载共识并验证其签名。随后，它下载中继的微描述符（\cref{cap:12-directory}）。
+  \item \textbf{选择守卫。} tor 按带宽加权，从守卫中随机选出一个较小样本，并实际使用其中两个（\cref{sec:guard}）。
+  \item \textbf{建立通道。} tor 向守卫打开 TLS 连接，并通过 \cella{CERTS} cell 验证守卫身份（\cref{cap:07-canali}）。
+  \item \textbf{构建电路。} tor 选择一个适合目标目的地的出口和一个中间中继，并使用 \cella{CREATE2} 与 \texttt{EXTEND2} 构建三跳电路（\cref{cap:09-circuiti,cap:13-percorso}）。实际运行时，tor 会提前构建一些电路，以便需要时立即使用。
+  \item \textbf{打开应用流。} 浏览器通过 SOCKS 端口请求连接到 \texttt{www.example.com:443}。tor 向出口发送 \texttt{BEGIN} 消息；出口解析域名并建立 TCP 连接（\cref{cap:11-stream}）。
+  \item \textbf{传输数据。} 浏览器通过这条应用流与网站进行 HTTPS 通信。出口能看到网站名称和 TLS 流量，但不知道是谁发起了请求；守卫知道谁发起了请求，却不知道访问目标；中间中继两者都不知道。
+\end{enumerate}
+
+整个启动过程通常只需要几秒钟。后续章节介绍的许多机制——包括 padding、拥塞控制和 vanguard——都会在这一流程周围静默运行。
+
+% ---------------------------------------------------------------------------
+\section{实现与版本}\label{sec:arch-versioni}
+
+\subsection{两种实现}
+
+历史最悠久的实现是用 C 编写的 \textbf{tor}，它可以承担全部角色：客户端、中继、目录权威和洋葱服务。与此同时，Tor Project 正在开发用 Rust 重写的 \textbf{Arti}（\cref{cap:30-arti}），目前已可作为客户端并支持洋葱服务。在 2026 年 9 月 23 日的公共共识中，没有中继使用 Arti：6,027 个中继运行 tor 0.4.9.12，2,520 个运行 0.4.9.11，其余大部分仍是 0.4.9 系列的较早版本；另有 47 个中继运行开发版本 0.5.0.0-alpha-dev。
+
+\subsection{子协议}
+
+一张由数千个节点构成、而且所有节点升级时间各不相同的网络，如何逐步引入新功能？Tor 不依赖软件版本号来完成这一点，而是使用\textbf{子协议（subprotocol）}：每一项功能属于一个拥有独立版本号的子协议，每个中继都会在共识的 \texttt{pr} 行中声明自己支持哪些版本~\spec{tor-spec}{Subprotocol-based versioning}。例如，公共网络上的某个中继可能声明：
+
+\begin{lstlisting}[numbers=none]
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5
+   HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+\end{lstlisting}
+
+如果客户端希望与某个中继使用 ntor-v3，就会检查该中继是否声明 \texttt{Relay=4}；CGO 需要 \texttt{Relay=6}，拥塞控制需要 \texttt{FlowCtrl=2}。这些数字表示彼此独立的\emph{能力}，并不是累积版本：从形式上说，\texttt{Relay=6} 并不自动蕴含 \texttt{Relay=4}（\proposta{346} 因此更倾向使用\enquote{子协议能力}这一说法）。实践中，tor 因为按顺序实现了这些功能，所以通常会把支持能力声明成连续范围。共识还会列出\emph{必需}的子协议；如果某个 tor 版本不支持它们，就会知道自己已经过旧，并拒绝继续运行，而不是让用户处于风险之中。
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item Tor 网络由客户端、中继（守卫、中间中继、出口、HSDir 和目录缓存）、目录权威、网桥以及洋葱服务组成。
+  \item 协议形成一套分层结构：TLS 通道、信元、电路、分层加密和应用流。
+  \item 守卫知道用户但不知道目的地；出口知道目的地但不知道用户。
+  \item C 实现 tor 与 Rust 实现 Arti 可以共存。网络功能通过共识 \texttt{pr} 行中声明的子协议能力进行协商。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:06-vista}
+对于以下每一种角色——守卫、中间中继、出口、HSDir 和目录权威——说明当某个用户通过 Tor 访问网站时，它能够知道哪些有关该用户的信息。
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:06-pr}
+根据本章展示的 \texttt{pr} 行，这个中继支持第 9--11 章讨论的哪些功能？它能否作为使用 CGO 的出口？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:06-livelli}
+通过 Tor 下载一个 100\,KB 网页。逐层估算客户端与守卫之间的链路上大约会传输多少字节，并考虑 cell、relay 消息头以及 SENDME 的额外开销。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item R.~Dingledine, N.~Mathewson, P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}：Tor 的原始架构论文，其中很大一部分设计至今仍然适用。
+  \item Tor Metrics, \url{https://metrics.torproject.org/}：中继、用户和版本的最新统计数据。
+\end{itemize}

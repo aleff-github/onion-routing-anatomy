@@ -1,0 +1,350 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Alessandro Greco
+"""Лабораторная работа 8 — onion-сервисы v3: адреса, ослеплённые ключи, HSDir и дескрипторы.
+
+Источники: rend-spec, "Encoding onion addresses", "Deriving blinded keys and
+subcredentials", "Locating, uploading, and downloading hidden service descriptors",
+"Hidden service descriptors: encryption format", Приложение A (ослепление ключей).
+Учебный модуль: использовать только в частной лабораторной сети книги.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import re
+import struct
+from dataclasses import dataclass
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+from .channel import decode_ed_certificate
+
+ # --- Адреса .onion ----------------------------------------------------------------
+
+VERSION = 3
+
+
+def _require_bytes(value: bytes, size: int, label: str) -> None:
+    if not isinstance(value, bytes) or len(value) != size:
+        raise ValueError(f"{label} должен содержать ровно {size} байт")
+
+
+def _require_u64(value: int, label: str, *, positive: bool = False) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or not (0 <= value < 2 ** 64):
+        raise ValueError(f"{label} должен быть неотрицательным uint64")
+    if positive and value == 0:
+        raise ValueError(f"{label} должен быть положительным")
+
+
+
+
+def onion_address(key: bytes) -> str:
+    """Кодирует канонический адрес onion v3 из 32-байтового открытого ключа Ed25519."""
+    _require_bytes(key, 32, "ключ идентификатора onion")
+    checksum = hashlib.sha3_256(b".onion checksum" + key + bytes([VERSION])).digest()[:2]
+    return base64.b32encode(key + checksum + bytes([VERSION])).decode("ascii").lower() + ".onion"
+
+def key_from_address(address: str) -> bytes:
+    """Проверяет имя, алфавит Base32, версию и контрольную сумму."""
+    if not isinstance(address, str):
+        raise ValueError("недопустимый адрес onion v3")
+    canonical = address.lower()
+    if not re.fullmatch(r"[a-z2-7]{56}\.onion", canonical):
+        raise ValueError("недопустимый адрес onion v3")
+    raw = base64.b32decode(canonical[:-6].upper(), casefold=False)
+    key, checksum, version = raw[:32], raw[32:34], raw[34]
+    if version != VERSION:
+        raise ValueError("неподдерживаемая версия адреса onion v3")
+    expected = hashlib.sha3_256(b".onion checksum" + key + bytes([version])).digest()[:2]
+    if not hmac.compare_digest(expected, checksum):
+        raise ValueError("недопустимая контрольная сумма адреса onion v3")
+    return key
+
+# --- Арифметика Ed25519 (RFC 8032): ослепление ключей -----------
+
+P = 2 ** 255 - 19
+L = 2 ** 252 + 27742317777372353535851937790883648493
+D = -121665 * pow(121666, P - 2, P) % P
+I = pow(2, (P - 1) // 4, P)
+
+
+def _x_from_y(y: int, sign: int) -> int:
+    xx = (y * y - 1) * pow(D * y * y + 1, P - 2, P)
+    x = pow(xx, (P + 3) // 8, P)
+    if (x * x - xx) % P:
+        x = x * I % P
+    if (x * x - xx) % P:
+        raise ValueError("некорректная точка")
+    return P - x if x & 1 != sign else x
+
+
+def _decode_point(b: bytes) -> tuple[int, int, int, int]:
+    """Декодирует каноническую точку Ed25519 (без проверки подгруппы)."""
+    _require_bytes(b, 32, "сжатая точка Ed25519")
+    encoded = int.from_bytes(b, "little")
+    sign, y = encoded >> 255, encoded & ((1 << 255) - 1)
+    if y >= P:
+        raise ValueError("неканоническая кодировка Ed25519")
+    x = _x_from_y(y, sign)
+    if x % P == 0 and sign:   # RFC 8032 5.1.3
+        raise ValueError("неканонический бит знака Ed25519")
+    return (x, y, 1, x * y % P)
+
+def _encode_point(p) -> bytes:
+    x, y, z, _ = p
+    zi = pow(z, P - 2, P)
+    x, y = x * zi % P, y * zi % P
+    return (y | ((x & 1) << 255)).to_bytes(32, "little")
+
+
+def _add(p, q):
+    a = (p[1] - p[0]) * (q[1] - q[0]) % P
+    b = (p[1] + p[0]) * (q[1] + q[0]) % P
+    c = 2 * p[3] * q[3] * D % P
+    d = 2 * p[2] * q[2] % P
+    e, f, g, h = b - a, d - c, d + c, b + a
+    return (e * f % P, g * h % P, f * g % P, e * h % P)
+
+
+def _multiply(k: int, p):
+    r = (0, 1, 1, 0)                               # identity element
+    while k:
+        if k & 1:
+            r = _add(r, p)
+        p = _add(p, p)
+        k >>= 1
+    return r
+
+
+# Базовая точка в текстовом формате спецификации для вычисления h.
+BASE_STR = (b"(15112221349535400772501151409588531511454012693041857206046113283949847762202, "
+            b"46316835694926478169428394003475163141307993866256225615783033603165251855960)")
+
+
+def blinding_factor(A: bytes, period: int, duration_minutes: int) -> int:
+    _require_bytes(A, 32, "ключ идентификатора сервиса")
+    _require_u64(period, "time period")
+    _require_u64(duration_minutes, "длительность периода", positive=True)
+    n = b"key-blind" + struct.pack(">QQ", period, duration_minutes)
+    h = bytearray(hashlib.sha3_256(b"Derive temporary signing key\x00" + A + BASE_STR + n).digest())
+    h[0] &= 248
+    h[31] &= 63
+    h[31] |= 64
+    return int.from_bytes(h, "little")
+
+def blinded_key(A: bytes, period: int, duration_minutes: int) -> bytes:
+    """A' = h·A: открытый ключ сервиса на заданный период."""
+    return _encode_point(_multiply(blinding_factor(A, period, duration_minutes), _decode_point(A)))
+
+
+def credential(A: bytes) -> bytes:
+    _require_bytes(A, 32, "ключ идентификатора сервиса")
+    return hashlib.sha3_256(b"credential" + A).digest()
+
+def subcredential(A: bytes, blinded: bytes) -> bytes:
+    _require_bytes(blinded, 32, "ослеплённый ключ сервиса")
+    return hashlib.sha3_256(b"subcredential" + credential(A) + blinded).digest()
+
+# --- Временные периоды и кольцо HSDir --------------------------------------------------
+
+SR_ROUNDS = 12            # SHARED_RANDOM_N_ROUNDS; одна фаза протокола общей случайности
+
+
+@dataclass
+class TimePeriodInfo:
+    period: int
+    duration_minutes: int
+    uses_current_srv: bool
+
+
+def time_period_info(valid_after: int, voting_interval: int, test_network: bool) -> TimePeriodInfo:
+    """Вычисляет период HS по расписанию голосования консенсуса."""
+    _require_u64(valid_after, "valid-after")
+    _require_u64(voting_interval, "интервал голосования", positive=True)
+    phase = SR_ROUNDS * voting_interval
+    if phase < 60 or phase % 60 or 2 * phase >= 2 ** 64:
+        raise ValueError("недопустимая длительность фазы SRV")
+    duration = (2 * phase if test_network else 24 * 3600) // 60
+    minutes = valid_after // 60 - phase // 60
+    period = minutes // duration
+    if period < 0:
+        raise ValueError("временной период до эпохи Unix")
+    within_cycle = valid_after % (2 * phase)
+    return TimePeriodInfo(period, duration, within_cycle >= phase)
+
+def disaster_srv(t: TimePeriodInfo) -> bytes:
+    _require_u64(t.period, "time period")
+    _require_u64(t.duration_minutes, "duration", positive=True)
+    return hashlib.sha3_256(b"shared-random-disaster" + struct.pack(">QQ", t.duration_minutes, t.period)).digest()
+
+def service_index(blinded: bytes, replica: int, t: TimePeriodInfo) -> bytes:
+    _require_bytes(blinded, 32, "ослеплённый ключ сервиса")
+    _require_u64(replica, "replica", positive=True)
+    _require_u64(t.period, "time period")
+    _require_u64(t.duration_minutes, "duration", positive=True)
+    return hashlib.sha3_256(b"store-at-idx" + blinded + struct.pack(">QQQ", replica, t.duration_minutes, t.period)).digest()
+
+def relay_index(id_ed: bytes, srv: bytes, t: TimePeriodInfo) -> bytes:
+    _require_bytes(id_ed, 32, "идентификатор Ed25519 HSDir")
+    _require_bytes(srv, 32, "общее случайное значение")
+    _require_u64(t.period, "time period")
+    _require_u64(t.duration_minutes, "duration", positive=True)
+    return hashlib.sha3_256(b"node-idx" + id_ed + srv + struct.pack(">QQ", t.period, t.duration_minutes)).digest()
+
+def responsible_hsdirs(blinded: bytes, hsdir: list[tuple[str, bytes]], srv: bytes, t: TimePeriodInfo,
+                       replicas: int = 2, spread: int = 3) -> list[list[str]]:
+    """Выбирает разные HSDir для каждой реплики; отвергает неполные кольца."""
+    _require_bytes(blinded, 32, "ослеплённый ключ сервиса")
+    _require_bytes(srv, 32, "общее случайное значение")
+    if not isinstance(replicas, int) or isinstance(replicas, bool) or replicas <= 0:
+        raise ValueError("число реплик должно быть положительным")
+    if not isinstance(spread, int) or isinstance(spread, bool) or spread <= 0:
+        raise ValueError("охват HSDir должен быть положительным")
+    if len(hsdir) < replicas * spread:
+        raise ValueError("недостаточно HSDir для различных реплик")
+    names = [name for name, _ in hsdir]
+    if len(set(names)) != len(names):
+        raise ValueError("повторяющиеся имена HSDir")
+    ring = sorted((relay_index(ed, srv, t), name) for name, ed in hsdir)
+    selected, result = set(), []
+    for replica in range(1, replicas + 1):
+        idx = service_index(blinded, replica, t)
+        start = next((i for i, (x, _) in enumerate(ring) if x > idx), 0)
+        group = []
+        for k in range(len(ring)):
+            name = ring[(start + k) % len(ring)][1]
+            if name not in selected:
+                group.append(name)
+                selected.add(name)
+                if len(group) == spread:
+                    break
+        result.append(group)
+    return result
+
+# --- Дескриптор --------------------------------------------------------------------------
+
+def _decrypt_layer(blob: bytes, secret_data: bytes, subcred: bytes, revision: int,
+                    constant: bytes) -> bytes:
+    """Проверяет SALT | ШИФРТЕКСТ | MAC до расшифровки."""
+    if len(blob) < 48:
+        raise ValueError("усечённый зашифрованный слой дескриптора")
+    _require_bytes(secret_data, 32, "секрет дескриптора")
+    _require_bytes(subcred, 32, "подучётные данные дескриптора")
+    _require_u64(revision, "ревизия дескриптора")
+    salt, ciphertext, mac = blob[:16], blob[16:-32], blob[-32:]
+    input_data = secret_data + subcred + struct.pack(">Q", revision) + salt + constant
+    keys = hashlib.shake_256(input_data).digest(80)
+    k, iv, k_mac = keys[:32], keys[32:48], keys[48:]
+    expected = hashlib.sha3_256(struct.pack(">Q", 32) + k_mac + struct.pack(">Q", 16) + salt
+                              + ciphertext).digest()
+    if not hmac.compare_digest(expected, mac):
+        raise ValueError("неверный MAC зашифрованного дескриптора")
+    d = Cipher(algorithms.AES(k), modes.CTR(iv)).decryptor()
+    return (d.update(ciphertext) + d.finalize()).rstrip(b"\x00")
+
+def _object_block(text: str, keyword: str) -> bytes:
+    """Извлекает единственный PEM-блок со строгой проверкой Base64."""
+    lines = text.splitlines()
+    positions = [i for i, line in enumerate(lines) if line == keyword]
+    if len(positions) != 1:
+        raise ValueError("отсутствующий или повторный объект дескриптора")
+    pos = positions[0]
+    if pos + 2 >= len(lines):
+        raise ValueError("усечённый объект дескриптора")
+    begin = lines[pos + 1]
+    marker = {"descriptor-signing-key-cert": "ED25519 CERT"}.get(keyword, "MESSAGE")
+    if begin != f"-----BEGIN {marker}-----":
+        raise ValueError("неверный заголовок объекта дескриптора")
+    try:
+        end = lines.index(f"-----END {marker}-----", pos + 2)
+    except ValueError:
+        raise ValueError("незавершённый объект дескриптора") from None
+    encoded = "".join(lines[pos + 2:end])
+    if not encoded:
+        raise ValueError("пустой объект дескриптора")
+    try:
+        return base64.b64decode(encoded, validate=True)
+    except (ValueError, base64.binascii.Error):
+        raise ValueError("неверный base64 объекта дескриптора") from None
+
+@dataclass
+class Descriptor:
+    duration_minutes: int
+    revision: int
+    signing_key: bytes
+    introduction_points: list[str]
+    inner_layer: str
+
+
+def parse_descriptor(text: str, A: bytes, blinded: bytes, *, check_expiration: bool = False,
+                     reference_time: float | None = None) -> Descriptor:
+    """Читает подписанный дескриптор HSv3 с необязательной проверкой срока сертификата.
+
+    Для архивных образцов лаборатории используют check_expiration=False.
+    Для актуальных данных нужны проверка срока и подлинности директории.
+    Учебный декодер не поддерживает restricted discovery.
+    """
+    _require_bytes(A, 32, "ключ идентификатора сервиса")
+    _require_bytes(blinded, 32, "ослеплённый ключ сервиса")
+    if not text.startswith("hs-descriptor 3\n"):
+        raise ValueError("неподдерживаемая версия дескриптора onion-сервиса")
+    lines = {}
+    for row in text.splitlines():
+        if row.startswith(("descriptor-lifetime ", "revision-counter ", "signature ")):
+            keyword, value = row.split(" ", 1)
+            if keyword in lines:
+                raise ValueError("повторное поле дескриптора")
+            lines[keyword] = value
+    if any(k not in lines for k in ("descriptor-lifetime", "revision-counter", "signature")):
+        raise ValueError("отсутствует поле дескриптора")
+    lifetime = int(lines["descriptor-lifetime"])
+    if not 30 <= lifetime <= 720:
+        raise ValueError("время жизни дескриптора вне диапазона")
+    revision = int(lines["revision-counter"])
+    _require_u64(revision, "ревизия дескриптора")
+    signature_marker = "\nsignature "
+    if text.count(signature_marker) != 1 or not text.splitlines()[-1].startswith("signature "):
+        raise ValueError("подпись дескриптора должна быть последней строкой")
+    subcred = subcredential(A, blinded)
+    cert = decode_ed_certificate(_object_block(text, "descriptor-signing-key-cert"))
+    if cert.kind != 0x08 or cert.key_type != 0x01 or cert.signing_key != blinded:
+        raise ValueError("сертификат подписи не привязан к ослеплённому ключу")
+    if check_expiration and cert.expired(reference_time):
+        raise ValueError("истёк срок сертификата подписи дескриптора")
+    cert.verify_signature(blinded)
+    signing_key = cert.certified_key
+    body = text[:text.index(signature_marker) + 1].encode("utf-8")
+    try:
+        signature = base64.b64decode(lines["signature"] + "=" * (-len(lines["signature"]) % 4), validate=True)
+    except (ValueError, base64.binascii.Error):
+        raise ValueError("неверный base64 подписи дескриптора") from None
+    if len(signature) != 64:
+        raise ValueError("неверная длина подписи дескриптора")
+    try:
+        Ed25519PublicKey.from_public_bytes(signing_key).verify(
+            signature, b"Tor onion service descriptor sig v3" + body)
+    except InvalidSignature:
+        raise ValueError("неверная подпись дескриптора") from None
+    outer = _decrypt_layer(_object_block(text, "superencrypted"), blinded, subcred, revision,
+                              b"hsdir-superencrypted-data").decode("utf-8")
+    inner = _decrypt_layer(_object_block(outer, "encrypted"), blinded, subcred, revision,
+                              b"hsdir-encrypted-data").decode("utf-8")
+    introduction_points = [r.split(" ", 1)[1] for r in inner.splitlines()
+                           if r.startswith("introduction-point ")]
+    return Descriptor(lifetime, revision, signing_key, introduction_points, inner)
+
+def download_descriptor(blinded: bytes, path: list) -> str:
+    """Скачивает дескриптор по выделенной анонимной лабораторной цепи HSDir.
+
+    Нужны три узла; анонимность в публичной сети не гарантируется.
+    """
+    _require_bytes(blinded, 32, "ослеплённый ключ сервиса")
+    if len(path) < 3:
+        raise ValueError("Для запросов HSDir необходимо не менее трёх узлов")
+    from .circuit import build
+    from .directory import download
+    url = "/tor/hs/3/" + base64.b64encode(blinded).decode("ascii").rstrip("=")
+    return download(build(path, cc=False), url, 1).decode("utf-8")

@@ -1,0 +1,157 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Correlación de tráfico, identificación de sitios y ataques Sybil}\label{cap:26-attacchi}
+% Encabezado más corto: el título completo no cabe junto al número de página.
+\chaptermark{Correlación de tráfico, identificación de sitios, Sybil}
+\aggiornatoal{23 de septiembre de 2026}{artículos citados en este capítulo; tor 0.4.9.13; red de laboratorio}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item clasificar los ataques contra el anonimato en Tor según los puntos de observación del adversario;
+  \item explicar la correlación de tráfico de extremo a extremo y medirla sobre tráfico propio en la red de laboratorio (laboratorio~16);
+  \item describir la identificación de sitios web (\emph{website fingerprinting}) y las limitaciones de sus evaluaciones;
+  \item reconocer los ataques Sybil y las defensas de la red, desde los guardias hasta las mediciones de ancho de banda.
+\end{itemize}
+\end{obiettivi}
+
+El modelo de amenazas de \cref{cap:04-modello-minaccia} dejó claro que Tor no resiste a un adversario que observa ambos extremos de una comunicación. Veinte años de investigación han cuantificado esa advertencia y demostrado que los puntos de observación son más numerosos y accesibles de lo que podría parecer. Este capítulo examina los ataques desde el punto de vista del defensor: qué necesita un ataque, qué consigue y cuáles de los mecanismos estudiados lo dificultan.
+
+% ---------------------------------------------------------------------------
+\section{La posición del adversario}\label{sec:att-posizioni}
+
+Resulta útil clasificar los ataques según lo que puede observar el adversario:
+\begin{description}
+  \item[Un extremo] La conexión del cliente con el guardia, observada por un proveedor de conectividad, una red local o un censor; o la conexión entre la salida y el destino. En el enlace del cliente al guardia se observan tiempos, volumen y dirección del tráfico cifrado. Entre la salida y el destino, el cifrado de aplicación depende del protocolo. La identificación de sitios puede aprovechar metadatos del lado del cliente sin leer contenido.
+  \item[Ambos extremos] El adversario observa entrada y salida, ya sea operando repetidores en ambas posiciones o controlando redes en las rutas que las conectan. Esto permite correlacionar tráfico.
+  \item[Dentro de la red] Los repetidores hostiles, incluidos los intermedios, pueden medir, retrasar, marcar o descartar celdas.
+  \item[Por encima de la red] La infraestructura subyacente de Internet, incluidos los sistemas autónomos (AS) y los puntos de intercambio de Internet (IXP) atravesados por las conexiones de los repetidores.
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{Correlación de extremo a extremo}\label{sec:att-correlazione}
+
+Tor evita introducir deliberadamente grandes retrasos o mezclas de celdas al estilo de una red mix para seguir siendo utilizable (\cref{sec:radici-latenza}). En consecuencia, la \emph{forma} del tráfico ---cuántos bytes pasan durante cada intervalo--- puede seguir siendo reconocible en ambos extremos, aunque los retrasos, el almacenamiento intermedio, la multiplexación y otros flujos la alteren (\cref{fig:correlazione}). Quien observa ambos extremos puede comparar las formas y decidir si corresponden a los mismos flujos sin romper ningún cifrado.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig26-correlacion}
+\caption{Dos trazas \emph{sintéticas}, no mediciones reales, del volumen de tráfico en una dirección en los enlaces cliente--guardia y salida--servidor. Las ráfagas se parecen, pero no son idénticas; el desfase de un intervalo de 250\,ms es solo ilustrativo, no un retardo fijo de Tor. El cifrado protege el contenido, pero no necesariamente los patrones temporales y de volumen. La sobrecarga, el almacenamiento intermedio, la multiplexación y otros flujos pueden alterar las trazas; la similitud estadística por sí sola no demuestra una correspondencia.}
+\label{fig:correlazione}
+\end{figure}
+
+\paragraph{¿Qué tan fácil es encontrar coincidencias?} En 2018, DeepCorr entrenó una red neuronal para reconocer parejas de flujos Tor. Con unos 900 paquetes por flujo, alcanzó un 96\,\% de exactitud frente al 4\,\% del método estadístico anterior en las mismas condiciones~\cite{nasr2018deepcorr}. Para el adversario, lo más difícil suele ser ocupar los puntos de observación adecuados y no comparar los flujos.
+
+\paragraph{¿Qué probabilidad hay de que el adversario observe ambos extremos?} Johnson y sus colaboradores simularon usuarios típicos durante meses con el algoritmo real de selección de rutas de Tor~\cite{johnson2013users}. Con repetidores maliciosos de ancho de banda moderado, el 80\,\% de los usuarios de los tipos modelados quedó desanonimizado al menos una vez en seis meses. Frente a un único AS, algunos usuarios de ubicaciones frecuentes se aproximaban al 100\,\% en tres meses. Estos resultados históricos de simulación no significan que todas las conexiones estén expuestas; muestran que las oportunidades se acumulan con el tiempo. Ese razonamiento motivó guardias de mayor duración y un número menor de guardias por cliente (\cref{sec:guard}).
+
+\paragraph{Internet como adversario.} RAPTOR identificó tres mecanismos que permiten a un AS aumentar sus oportunidades~\cite{sun2015raptor}: aprovechar la asimetría de las rutas de Internet, porque puede bastar observar \emph{una} dirección en cada extremo, incluidos los acuses de recibo de TCP; aprovechar los cambios naturales de encaminamiento con el tiempo; y secuestrar o interceptar prefijos mediante BGP. Estas técnicas no modifican Tor. Las defensas incluyen vigilar el encaminamiento y, posiblemente, seleccionar rutas teniendo en cuenta la topología.
+
+\paragraph{Ataques activos.} Un adversario que controla un extremo puede \emph{imprimir} deliberadamente un patrón de tráfico característico retrasando o agrupando paquetes y buscarlo en el otro. El ataque de marcado estudiado en la capa de cifrado de \cref{sec:tor1-debolezze} es una versión extrema de esta idea. Ya en 2005, Murdoch y Danezis demostraron que no siempre resulta necesario observar directamente los enlaces. Un servidor malicioso impone un ritmo al tráfico hacia la víctima; el adversario mide la latencia de sus propios circuitos a través de repetidores candidatos, y aquellos que se ralentizan según ese ritmo podrían formar parte del circuito de la víctima~\cite{murdoch2005lowcost}.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: correlacionar tráfico propio}\label{sec:lab-attacchi}
+
+\begin{laboratorio}[16]{Correlación de extremo a extremo}
+\textbf{Objetivo.} Demostrar en la red de laboratorio que un patrón de tráfico sobrevive al circuito y permite identificar qué flujo observado en la salida corresponde a cada cliente.\\
+\textbf{Requisitos previos.} Laboratorio~11; red de laboratorio en ejecución. Todos los flujos son generados por el propio script del experimento.\\
+\textbf{Tiempo estimado.} 1 hora.
+\end{laboratorio}
+
+El script \file{labs/es/laboratorio/correlacion.py} inicia un servidor en el puerto 8095 del contenedor y seis clientes. Cada uno utiliza credenciales SOCKS distintas: con \opt{IsolateSOCKSAuth} activo, sus flujos no pueden compartir circuito (\cref{sec:lab-stem}). Durante veinte segundos los clientes alternan aleatoriamente ráfagas de bloques de 2\,KB con períodos de silencio. Dos \enquote{observadores} registran datos:
+\begin{itemize}
+  \item El observador de entrada registra cuándo escribe datos cada cliente. Esto idealiza lo que podría ver alguien que observara el enlace con el guardia. Allí los datos estarían empaquetados en celdas y TLS, pero los patrones temporales necesarios para correlacionar sobreviven a ambas capas.
+  \item El observador de salida, nuestro servidor, registra cuándo llegan los bytes de cada conexión y recibe un identificador de evaluación de cuatro bytes, excluido del algoritmo de correlación.
+\end{itemize}
+
+Ambos agrupan los bytes en intervalos de 250\,ms. Para cada cliente calculamos la correlación de Pearson frente a los seis flujos de salida. El de mayor correlación es la coincidencia propuesta. El script conoce la respuesta correcta, comunicada por el cliente en sus cuatro primeros bytes, pero solo la utiliza para evaluar el resultado, nunca para elegir la coincidencia.
+
+\begin{lstlisting}[language=bash,numbers=none]
+$ docker exec -w /tmp torbook-es-network python3 /lab/correlacion.py 1
+cliente 0: +0.79 -0.11 +0.12 +0.17 +0.11 -0.01  -> flujo de salida 0 OK
+cliente 1: -0.11 +0.80 -0.02 +0.07 +0.18 +0.08  -> flujo de salida 1 OK
+cliente 4: +0.13 +0.02 +1.00 +0.21 +0.10 +0.21  -> flujo de salida 2 OK
+cliente 3: +0.21 +0.09 +0.33 +0.81 -0.07 +0.03  -> flujo de salida 3 OK
+cliente 2: +0.17 +0.05 +0.10 -0.09 +0.85 -0.03  -> flujo de salida 4 OK
+cliente 5: -0.00 +0.01 +0.23 +0.06 -0.13 +0.92  -> flujo de salida 5 OK
+correspondencias correctas: 6/6
+\end{lstlisting}
+
+Las columnas identifican los flujos observados en la salida según el orden de llegada de las conexiones, distinto del orden de los clientes. La correlación correcta destaca en cada fila, entre 0,79 y 1,00, mientras los demás valores suelen estar cerca de cero. No hacen falta claves de descifrado ni celdas descifradas: bastan volumen y tiempos. La red de laboratorio es pequeña y está poco cargada, de modo que el retardo es mínimo. Los resultados históricos de DeepCorr indican que clasificadores bastante más sofisticados pueden operar con unos cientos de paquetes en la red real, bajo las condiciones estudiadas. Es un extracto de una ejecución de referencia, no una predicción exacta: el orden, los coeficientes y los aciertos pueden variar, incluso hasta 5/6. El laboratorio forma parte de \texttt{make verifica-lab}.
+
+% ---------------------------------------------------------------------------
+\section{Identificación de sitios web}\label{sec:att-wf}
+
+Un adversario que solo observa el enlace entre cliente y guardia no puede correlacionar ambos extremos, pero sí puede \emph{reconocer} un sitio web. Cada página genera una secuencia característica de celdas en ambas direcciones: cantidades, orden y ráfagas. El adversario visita los sitios objetivo mediante Tor, registra sus secuencias y entrena un clasificador. Después compara el tráfico de la víctima con los patrones aprendidos.
+
+La investigación de estos ataques ha sido una competición continua entre clasificadores y defensas:
+\begin{itemize}
+  \item En 2011, Panchenko y sus colaboradores utilizaron características de volumen, tiempo y dirección para mejorar del 3\,\% al 55\,\% el reconocimiento en un conjunto cerrado de 775 sitios. También demostraron un ataque eficaz de \emph{mundo abierto}, donde las víctimas pueden visitar sitios ajenos al conjunto de entrenamiento del adversario~\cite{panchenko2011website}.
+  \item En 2018, Deep Fingerprinting utilizó una red neuronal convolucional y superó el 98\,\% de exactitud sobre 95 sitios web sin defensas, y el 90\,\% frente a WTF-PAD, una defensa de relleno adaptativo considerada para Tor~\cite{sirinam2018deep}.
+\end{itemize}
+
+\begin{approfondimento}[La falacia de la frecuencia base]
+Las cifras de exactitud extremadamente altas deben interpretarse con cuidado. Juarez y sus colaboradores mostraron que muchos estudios suponían condiciones favorables: una página visitada cada vez, la misma versión de Tor Browser para víctima y adversario y datos de entrenamiento recogidos poco antes del ataque~\cite{juarez2014critical}. Más importante todavía, en un mundo abierto los sitios vigilados representan una fracción diminuta de las visitas totales. Incluso un clasificador con una tasa reducida de falsos positivos puede generar más falsas alarmas que identificaciones correctas entre millones de visitas ajenas. Es la misma trampa estadística que aparece en las pruebas diagnósticas de enfermedades raras; los adversarios reales deben tenerla en cuenta.
+\end{approfondimento}
+
+\paragraph{Defensas.} El relleno de canales (\cref{cap:07-canali}) dificulta identificar los períodos inactivos, pero no está diseñado para impedir la identificación de páginas. tor implementa además un mecanismo más general de \emph{relleno de circuitos}: las máquinas de estados pueden programar celdas ficticias. En la fecha de referencia del texto, los mecanismos desplegados ayudan a que los circuitos de introducción y encuentro de servicios onion se parezcan a circuitos ordinarios (\cref{cap:14-onion-services}, \proposta{302}). Una defensa ampliamente eficaz contra la identificación de sitios con un coste aceptable de ancho de banda sigue siendo un problema de investigación abierto.
+
+% ---------------------------------------------------------------------------
+\section{Sybil: multiplicar identidades de repetidores}\label{sec:att-sybil}
+
+Un \textbf{ataque Sybil} introduce muchas identidades en una red. En Tor, el adversario añade numerosos repetidores con la esperanza de ser seleccionado frecuentemente como guardia y salida. Tres defensas elevan su coste:
+\begin{description}
+  \item[Ancho de banda medido] Un repetidor que miente sobre su capacidad podría atraer demasiados clientes. Bauer y sus colaboradores demostraron este engaño basado en descriptores en 2007~\cite{bauer2007lowresource}. Actualmente los pesos de consenso dependen de mediciones de las autoridades, no de simples declaraciones (\cref{sec:dir-voto}); por tanto, atraer mucho tráfico exige aportar ancho de banda real.
+  \item[Restricciones de rutas] Dos repetidores de la misma familia o red IPv4 /16 no pueden aparecer en un mismo circuito (\cref{sec:percorso-vincoli}). Los operadores honestos declaran sus familias; los deshonestos al menos quedan limitados por sus direcciones.
+  \item[Vigilancia de la red] Las autoridades pueden excluir repetidores o asignar \texttt{BadExit}. Voluntarios e investigadores examinan grupos con características compartidas y vigilan el comportamiento de las salidas. En 2014, por ejemplo, un analizador de salidas descubrió 25 repetidores que manipulaban tráfico o estaban mal configurados, con prácticas como interceptación de HTTPS, alteración de DNS y \emph{sslstrip}~\cite{winter2014spoiled}.
+\end{description}
+
+En \cref{cap:27-casi-rete} examinaremos grupos de repetidores maliciosos descubiertos posteriormente y por qué la vigilancia debe mantenerse de forma continua.
+
+\paragraph{Ataques Sybil contra servicios onion.} En v2, las posiciones de los HSDir responsables de un servicio eran previsibles. Un adversario podía generar identidades de repetidores elegidas para ocuparlas. Biryukov y sus colaboradores aprovecharon esto en 2013 para medir la popularidad de servicios, dejarlos inaccesibles o facilitar ataques de localización~\cite{biryukov2013trawling}. En v3, las posiciones dependen de claves cegadas y de un valor aleatorio compartido que cambia cada día (\cref{cap:14-onion-services}), lo que dificulta mucho la colocación dirigida y precalculada; una vez publicados los valores del período se pueden calcular los HSDir responsables, por lo que el riesgo no desaparece.
+
+% ---------------------------------------------------------------------------
+\section{Descubrir el guardia}\label{sec:att-guard}
+
+Un guardia protege al cliente, pero también constituye un objetivo atractivo: identificarlo indica al adversario dónde observar. Contra un servicio onion, el atacante puede provocar numerosas construcciones de circuitos, por ejemplo solicitando múltiples conexiones, hasta que un repetidor controlado por él sea seleccionado como intermedio adyacente al guardia. El primer ataque de esta clase, publicado en 2006, contribuyó a motivar el uso de guardias~\cite{overlier2006locating}. Los vanguards (\cref{sec:vanguards}) añaden una capa de repetidores intermedios que se mantienen fijos durante cierto tiempo. Esto dificulta avanzar hacia el guardia real, pero no garantiza que sea imposible descubrirlo.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item Los ataques se distinguen por sus puntos de observación: un extremo, ambos extremos, el interior de la red o las rutas subyacentes de Internet.
+  \item La correlación compara la forma del tráfico en ambos extremos sin romper el cifrado. La dificultad para el adversario consiste en ocupar las posiciones adecuadas y las oportunidades se acumulan con el tiempo.
+  \item La identificación de sitios web reconoce páginas a partir del tráfico cifrado observado en un extremo. Las evaluaciones deben considerar las frecuencias base y condiciones realistas.
+  \item Las defensas frente a Sybil incluyen pesos medidos, familias, restricciones /16 y vigilancia de salidas y grupos de repetidores. En v3 la ubicación de HSDir es más difícil de manipular de antemano, aunque se puede calcular para el período vigente.
+  \item Los guardias y vanguards hacen más lento y costoso descubrir el primer salto.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:26-posizione}
+Para cada ataque de este capítulo, identifica el punto mínimo de observación que necesita el adversario y la defensa de Tor que lo dificulta.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:26-base}
+Un clasificador reconoce un sitio web vigilado con probabilidad 0,95 y señala erróneamente una visita ajena con probabilidad 0,001. Si solo una de cada \num{100000} visitas se dirige realmente al sitio vigilado, ¿qué porcentaje de las alertas es correcto?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:26-bin}
+Repite el laboratorio~16 utilizando intervalos de dos segundos, después una duración total de cinco segundos y finalmente el mismo ritmo de tráfico para todos los clientes. ¿Qué modificación perjudica más a las coincidencias y por qué?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:26-difesa}
+Modifica los clientes del laboratorio~16 para enviar bloques a velocidad constante, incluido relleno cuando no tienen datos. ¿Cuánto ancho de banda consume y qué ocurre con la correlación?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:26-probabilita}
+Con \file{path\_selection.py} y el consenso real del laboratorio~15, calcula la probabilidad de que un adversario que controle el 5\,\% del ancho de banda de guardias y el 5\,\% del de salidas ocupe ambos extremos de al menos un circuito de un cliente en seis meses. Compara un guardia fijo con cambiar de guardia en cada circuito. Indica un número supuesto de circuitos en seis meses y, solo para el modelo didáctico, usa selecciones independientes ponderadas por ancho de banda; explica sus límites.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item A.~Johnson y otros, \titolo{Users Get Routed}~\cite{johnson2013users}.
+  \item Y.~Sun y otros, \titolo{RAPTOR: Routing Attacks on Privacy in Tor}~\cite{sun2015raptor}.
+  \item M.~Juarez y otros, \titolo{A Critical Evaluation of Website Fingerprinting Attacks}~\cite{juarez2014critical}.
+  \item La \emph{Anonymity Bibliography}, \url{https://www.freehaven.net/anonbib/}, para consultar investigaciones posteriores.
+\end{itemize}

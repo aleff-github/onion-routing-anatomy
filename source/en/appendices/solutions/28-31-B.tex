@@ -1,0 +1,103 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Chapter \ref{cap:28-opsec}: Operational Security Mistakes}
+
+\begin{soluzione}{es:28-livello}
+Traffic bypassing Tor, documents opened while online, and DNS leaks belong to the application layer; defensive measures include Tor Browser, Tails or Whonix, \opt{SafeSocks}, and opening files while disconnected. Metadata, signing into accounts, and mixing identities belong to the content layer; use metadata-removal tools and separate sessions. Writing style, publication times, and using Tor within a small anonymity set belong to the behavioral layer; consider habits, bridges, and when to publish.
+\end{soluzione}
+
+\begin{soluzione}{es:28-dns}
+A local DNS query travels from the user's computer to the system's resolver, commonly operated by the connectivity provider, and includes the website's domain name. The provider and anyone observing the path to the resolver can learn which website the user intends to visit, even if the subsequent connection uses Tor.
+\end{soluzione}
+
+\begin{soluzione}{es:28-evento}
+Subscribe to \texttt{EventType.STATUS\_CLIENT} through Stem. A request containing only an IP address produces a \texttt{WARN}-severity event with action \texttt{DANGEROUS\_SOCKS} and arguments \texttt{PROTOCOL} and \texttt{ADDRESS}. A graphical interface could identify the application and destination in a warning and explain that the application's SOCKS configuration should be corrected.
+\end{soluzione}
+
+\begin{soluzione}{es:28-insieme}
+With obfs4, a local observer would have seen an encrypted, apparently structureless connection to an ordinary-looking address and could not have established with certainty that it was Tor traffic. Other clues remain: connection volume, timing, unusual duration, similar connections, and the messages' contents or possible motives, all of which could narrow the population to people expected to take that examination.
+\end{soluzione}
+
+\begin{soluzione}{es:28-modello}
+This is an open-ended exercise. A strong answer follows the structure of \cref{cap:04-modello-minaccia}: adversaries and their capabilities, what each can observe at every layer of \cref{fig:livelli}, chosen protections and reasons for them, and an explicit list of residual risks, such as correlation by an adversary observing both ends or seizure of the user's devices.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:29-ricerca}: Academic Research on Tor}
+
+\begin{soluzione}{es:29-entropia}
+$H = \tfrac12 \cdot 1 + \tfrac14 \cdot 2 + 2 \cdot \tfrac18 \cdot 3 = 1.75$ bits. $H_M = \log_2 4 = 2$ bits, so $d = 0.875$. The equivalent number of equally likely users is $2^{1.75} \approx 3.4$.
+\end{soluzione}
+
+\begin{soluzione}{es:29-metodo}
+(a) Simulate a network with Shadow or, at small scale, emulate it with Chutney: real tor behavior is needed, but no real users need to be involved. (b) Measure the real network using public aggregated data, as Tor Metrics does (\cref{sec:metrics-utenti}). (c) Use TorPS-style behavioral simulation with real consensuses spanning a long period, potentially supplemented by theoretical analysis.
+\end{soluzione}
+
+\begin{soluzione}{es:29-durata}
+With \texttt{guard\_lifetime} set to 30 days, yielding an effective lifetime of 18--30 days after timestamp backdating, a client selects guards approximately seven or eight times in 180 days, and the simulation produces 32.1\% compromise. At the default 60 days, an effective 48--60 days produces about three selections and 18.4\% compromise. With a 180-day lifetime, one or two selections produce 8.6\%. Approximately, with $k$ independent guard selections the compromised fraction approaches $1-(1-q)^k$, where $q = 5\%$; $k\approx 7.5$ produces about 31\%, consistent with the 30-day simulation. Longer guard lifetimes mean fewer selections and expose fewer new clients, but clients who selected a malicious guard remain exposed longer.
+\end{soluzione}
+
+\begin{soluzione}{es:29-asimmetria}
+Neither adversary compromises any client according to this laboratory's criterion, which requires observing both endpoints. Their observations still differ: an adversarial exit sees destinations and any application traffic left unencrypted, but not client identities. An adversarial guard sees the IP addresses of clients that selected it, but not their destinations, and might attempt website fingerprinting (\cref{sec:att-wf}).
+\end{soluzione}
+
+\begin{soluzione}{es:29-torps}
+This is a research exercise. Reusing circuits decreases the number of new selections per day and slows the compromise curve without persistent guards. The /16 restriction has little effect unless adversarial relays are concentrated within a network. An autonomous-system adversary changes the model more fundamentally because it observes traffic without operating relays, requiring Internet-topology data of the kind used in \cite{johnson2013users}.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:30-arti}: Arti}
+
+\begin{soluzione}{es:30-crate}
+Chapter~5: \texttt{tor-llcrypto}. Chapter~7: \texttt{tor-proto} for channels and \texttt{tor-chanmgr}. Chapter~8: \texttt{tor-cell}. Chapters~9--11: \texttt{tor-proto} for circuits, encryption, streams, and flow control. Chapter~12: \texttt{tor-netdoc}, \texttt{tor-dirmgr}, and \texttt{tor-dirclient}. Chapter~13: \texttt{tor-circmgr}, \texttt{tor-guardmgr}, and \texttt{tor-relay-selection}. Chapter~14: \texttt{tor-hsclient}, \texttt{tor-hsservice}, and \texttt{tor-hscrypto}. Chapter~15: \texttt{equix} and \texttt{hashx} for proof of work. Chapter~16: \texttt{tor-ptmgr}.
+\end{soluzione}
+
+\begin{soluzione}{es:30-obsoleto}
+Benefits: less code, a smaller attack surface, no special cases such as two-byte CircIDs, and no obsolete weak cryptography to maintain. Drawbacks: Arti cannot communicate with very old relays. The public Tor network already excludes versions that are no longer recommended, however, so the practical impact mainly concerns private networks and outdated installations.
+\end{soluzione}
+
+\begin{soluzione}{es:30-cella}
+\texttt{decode\_cell} reads the command from the fifth byte and uses it to determine whether the cell is variable-length. In that case, the next two bytes specify its length, and its total length is $7 +$ the declared value; otherwise the total is 514 bytes. If insufficient input has arrived, the function returns \texttt{Ok(None)} rather than treating the incomplete cell as an error. The caller tries again when more bytes are available. This is the same behavior needed in a stream decoder such as the one from Laboratory~2.
+\end{soluzione}
+
+\begin{soluzione}{es:30-isolamento}
+Yes. Arti's SOCKS proxy isolates streams with different SOCKS credentials by default and also separates distinct listeners. Observe circuits from the relays' side, for example through an exit's ControlPort, or in Arti's debug logs. When using Arti as a library, explicit isolation is available through \texttt{TorClient::isolated\_client} or \texttt{StreamPrefs} isolation tokens. As of Arti 2.6.0, the source's \file{cfg.rs} still documents equivalent per-port configuration as future work.
+\end{soluzione}
+
+\begin{soluzione}{es:30-libreria}
+This is a programming exercise. Load the laboratory TOML file into a \texttt{TorClientConfig}, start the client with \texttt{TorClient::create\_bootstrapped}, and open a stream with \texttt{connect(("127.0.0.1", 8080))}. Send an HTTP request over the stream. The configuration must permit local addresses, as does the file generated by Laboratory~20.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:31-futuro}: Open Problems}
+
+\begin{soluzione}{es:31-stato}
+Examples at the chapter's reference date: \proposta{332}, for ntor-v3, is \emph{Closed}, meaning it is implemented and incorporated into the specifications. \proposta{324}, for congestion control, is \emph{Finished}, implemented but awaiting complete integration of its text into the specifications. \proposta{359}, for CGO, is \emph{Open}: already present in the code, but its proposal is still under discussion. Check the header of each proposal and the repository's status index for updates.
+\end{soluzione}
+
+\begin{soluzione}{es:31-celle}
+With the traditional format, the simple size calculation requires $\lceil 1184/498 \rceil = 3$ cells for the 1,184-byte ML-KEM-768 public key and $\lceil 1088/498 \rceil = 3$ more for the 1,088-byte ciphertext: six in total. The present protocol, however, cannot even fragment an individual relay message that way. \proposta{340} provides the required framing, allowing one message to span cells and several messages to share a cell. Its proposed relay-cell body is 493 bytes, not 498, because the new format consumes 16 bytes for authentication, $509 - 16 = 493$, as discussed in \cref{cap:08-celle}. The first fragment of a message carries at most 490 useful bytes because it also includes a framing header. The proposal currently retains a 493-byte limit for ordinary message bodies, so carrying a larger post-quantum \texttt{EXTEND2} will additionally require a new \texttt{Relay} subprotocol version lifting that limit. Even with that extension, the public key still occupies three cells and the ciphertext another three. Since those values travel in \emph{opposite} directions, from client to relay and relay back to client, they cannot be packed together. The total remains six cells.
+\end{soluzione}
+
+\begin{soluzione}{es:31-epistemico}
+If every client downloaded a different subset of relays, an adversary knowing or influencing a particular client's subset could recognize its circuits. A circuit using relays available only to that client would disclose who constructed it. Even without advance knowledge, observing which relays a client uses over time can progressively narrow the set of plausible clients.
+\end{soluzione}
+
+\begin{soluzione}{es:31-conflux}
+Filter circuits with purpose \texttt{CONFLUX\_LINKED} and group them by \texttt{CONFLUX\_ID} (\cref{cap:18-stem}), then compare paths within each pair. Both legs always end at the same exit, as expected. They often share other relays on the laboratory network. For example, the legs \texttt{[test007e, test003r, test006e]} and \texttt{[test003r, test007e, test006e]} use exactly the same relays in different orders. This is not a tor defect. The private network has few eligible relays, and \proposta{329} expresses its recommendation with \texttt{SHOULD NOT}, not a strict prohibition. Such sharing is much rarer on the public network with thousands of relays.
+\end{soluzione}
+
+\begin{soluzione}{es:31-proposta}
+This is an open-ended exercise. The reference format is given in \proposta{001}: a header containing number, title, author, date, and status, followed by motivation, design, security and compatibility analyses, an implementation plan, and a deployment plan.
+\end{soluzione}
+
+\section*{Appendix \ref{cap:B-crittografia}: Further Cryptography}
+
+\begin{soluzione}{es:B-bit}
+Of the 256 bits, five are fixed: the lowest three, the highest, and the next-highest bit. There are therefore $2^{251}$ distinct values compared with $2^{256}$ before clamping. This reduction does not weaken the scheme: the curve's security level is approximately 128 bits regardless.
+\end{soluzione}
+
+\begin{soluzione}{es:B-inversa}
+From $y = (u-1)/(u+1)$, obtain $u = (1+y)/(1-y) \bmod p$. In Python, read $y$ from the 32 little-endian bytes after clearing the sign bit, calculate \texttt{(1 + y) * pow(1 - y, P - 2, P) \% P}, and encode the result as 32 little-endian bytes. Applying \texttt{montgomery\_to\_edwards} with the original $x$-sign bit recovers the original Edwards key (for $y \neq 1$).
+\end{soluzione}
+
+\begin{soluzione}{es:B-digest}
+A randomly modified cell passes both checks with approximate probability $2^{-16} \cdot 2^{-32} = 2^{-48}$: two zero \texttt{recognized} bytes and four correct digest bytes. But a marking attack does not require the altered cell to be \emph{accepted}. An adversarial accomplice that observes it, or the endpoint that rejects it, can recognize the modification through its effects, such as circuit closure or predictable contents. That observation can be enough to link two points on the circuit.
+\end{soluzione}

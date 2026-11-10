@@ -1,0 +1,29 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 替代文本。
+\altfig{洋葱路由三代设计的比较。前两代由客户端一次性为整条路径准备一个加密洋葱；Tor 则逐跳扩展电路，并与每个中继分别进行密钥交换。}
+% NRL 洋葱路由的三代设计。
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  nodo/.style={relay,minimum size=0.65cm,font=\sffamily\tiny},
+  eti/.style={anchor=east,align=right,font=\sffamily\small}]
+  % 第一代。
+  \node[eti] at (-0.5,0) {\textbf{第一代}\\(1996)};
+  \node[client,minimum width=1.1cm,minimum height=0.6cm,font=\sffamily\tiny,align=center] (c1) at (0.6,0) {客户端\\+ 节点};
+  \foreach \i in {1,...,5} \node[nodo] (a\i) at (0.6+1.05*\i,0) {};
+  \draw[cellaf] (c1) -- (a1); \foreach \i/\j in {1/2,2/3,3/4,4/5} \draw[cellaf] (a\i) -- (a\j);
+  \draw[decorate,decoration={brace,amplitude=3pt}] (1.3,0.45) -- node[above=3pt,font=\sffamily\tiny,align=center] {固定 5 节点；一个洋葱\\一次构建整条电路} (5.95,0.45);
+  % 第二代。
+  \node[eti] at (-0.5,-1.6) {\textbf{第二代}};
+  \node[client,minimum width=1.1cm,minimum height=0.6cm,font=\sffamily\tiny] (c2) at (0.6,-1.6) {客户端};
+  \foreach \i in {1,...,4} \node[nodo] (b\i) at (0.6+1.05*\i,-1.6) {};
+  \draw[cellaf] (c2) -- (b1); \foreach \i/\j in {1/2,2/3,3/4} \draw[cellaf] (b\i) -- (b\j);
+  \node[anchor=west,font=\sffamily\tiny,align=left] at (5.4,-1.6) {客户端与节点分离，\\长度可变，混合转发（后放弃）};
+  % 第三代。
+  \node[eti] at (-0.5,-3.2) {\textbf{第三代}\\Tor (2002)};
+  \node[client,minimum width=1.1cm,minimum height=0.6cm,font=\sffamily\tiny] (c3) at (0.6,-3.2) {客户端};
+  \foreach \i in {1,2,3} \node[nodo] (d\i) at (0.6+1.05*\i,-3.2) {};
+  \draw[cellaf] (c3) -- node[above,font=\sffamily\tiny] {1} (d1);
+  \draw[cellaf] (d1) -- node[above,font=\sffamily\tiny] {2} (d2);
+  \draw[cellaf] (d2) -- node[above,font=\sffamily\tiny] {3} (d3);
+  \node[anchor=west,font=\sffamily\tiny,align=left] at (4.3,-3.2) {3 个节点，\emph{逐跳}构建：\\每跳单独密钥交换，具备前向保密};
+\end{tikzpicture}

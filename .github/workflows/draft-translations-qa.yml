@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Compila solo su avvio manuale e conserva artefatti privati; nessun push, tag o release.
+name: Bozze traduzioni (PDF EPUB copertine)
+
+on:
+  workflow_dispatch:
+    inputs:
+      lingua:
+        description: "Quale traduzione compilare?"
+        type: choice
+        required: true
+        default: tutte
+        options:
+          - tutte
+          - en
+          - es
+          - ru
+          - zh-Hans
+
+permissions:
+  contents: read
+
+jobs:
+  bozza:
+    name: Bozza ${{ matrix.lingua }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        lingua: ${{ fromJSON(inputs.lingua == 'tutte' && '["en","es","ru","zh-Hans"]' || format('["{0}"]', inputs.lingua)) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Controlli strutturali
+        run: make -C source/${{ matrix.lingua }} check
+      - name: Strumenti di controllo PDF ed EPUB
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils epubcheck
+      - name: Compila e raccogli la bozza (TeX Live in Docker)
+        run: make book-traduzione LINGUA=${{ matrix.lingua }}
+      - name: Verifica il codice stampato nel PDF
+        run: make composizione LINGUE=${{ matrix.lingua }}
+      - name: Verifica EPUB, metadati, formule e testo
+        run: make epub-check LINGUE=${{ matrix.lingua }}
+      - name: Conserva i file come artefatti privati di revisione
+        uses: actions/upload-artifact@v4
+        with:
+          name: bozza-${{ matrix.lingua }}-non-verificata
+          path: book/${{ matrix.lingua }}/
+          if-no-files-found: error
+          retention-days: 14

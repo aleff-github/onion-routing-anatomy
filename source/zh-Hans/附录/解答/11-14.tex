@@ -1,0 +1,129 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{第 \ref{cap:11-stream} 章：流、SENDME 与拥塞控制}
+
+\begin{soluzione}{es:11-begin}
+主机名必须使用小写：\texttt{example.com:443} 后接一个零字节，即 \texttt{6578616d706c652e\allowbreak 636f6d3a343433 00}，然后是 FLAGS，设置第 1 位表示接受 IPv6：\texttt{00000001}。
+\end{soluzione}
+
+\begin{soluzione}{es:11-connected}
+IPv4 地址 \texttt{c0000201} 表示 192.0.2.1；TTL \texttt{0000012c} 表示 300 秒。客户端可以忽略该地址。如果选择保存，就不能跨电路重复使用：出口可能撒谎，或者返回专门生成的唯一地址来识别客户端。
+\end{soluzione}
+
+\begin{soluzione}{es:11-optimistic}
+如果不使用乐观发送，客户端必须等到收到 \texttt{CONNECTED} 才能发送请求，因此在至少需要两个 RTT 的操作中额外增加一次往返时间，约 600\,ms。连接失败时，排队的数据必须丢弃，因为没有目的地可以接收它们；不能把这些数据通过另一条连接发送。
+\end{soluzione}
+
+\begin{soluzione}{es:11-velocita}
+一条流最多允许 500 个尚未确认的信元，相当于每个 RTT 约 $500\times498\approx249$\,KB。如果 RTT 为 400\,ms，速率约为 620\,KB/s。即使存在多条流，单条电路也只能在一个 RTT 内发送至多 1\,000 个信元，约 1.2\,MB/s。使用拥塞控制时，窗口开始只有 124 个信元（约 62\,KB），随后依据 RTT 测量增长，直到发现拥塞；不存在固定的窗口上限。
+\end{soluzione}
+
+\begin{soluzione}{es:11-sendme-falso}
+恶意客户端可以向发送大量数据的服务器（也许是它自己运营的服务器）打开许多流，只读取少量数据，却不断发送伪造的 \texttt{SENDME}。出口因此继续传输，而信元会在守卫、中间中继和客户端的队列中积累，消耗中继内存。经过认证的 \texttt{SENDME} 要求客户端证明自己收到了触发该消息的信元。如果信元内容可预测，例如是熟悉的下载文件，客户端就可以在未收到信元的情况下计算摘要；随机填充字节能够阻止这一捷径。
+\end{soluzione}
+
+\begin{soluzione}{es:11-resolve}
+思路：在新的 StreamID 上发送 \texttt{RESOLVE}，消息体是以零字节结尾的主机名，然后将 \texttt{RESOLVED} 解释为一组包含类型、长度、值和 TTL 的元组。对于不存在的域名，出口返回错误类型条目（\texttt{0xF0} 或 \texttt{0xF1}），应当忽略其载荷。
+\end{soluzione}
+
+\begin{soluzione}{es:11-policy}
+出口发送 \texttt{END}，原因码为 4（\texttt{EXITPOLICY}），后接目的地址（IPv4 地址占四字节）以及四字节 TTL。客户端可以根据这些信息避免再次通过同一个出口访问该目的地。
+\end{soluzione}
+
+\begin{soluzione}{es:11-rtt}
+我们测量 \texttt{SENDME} 到达出口所需的时间，加上出口解除阻塞后发送额外信元、这些信元到达客户端所需的时间。当出口正在等待 \texttt{SENDME} 时，这可以近似反映客户端观察到的电路 RTT。第二个并行下载会增加排队，抬高测量值：这恰好是拥塞控制用于缩小窗口的信号。
+\end{soluzione}
+
+\section*{第 \ref{cap:12-directory} 章：目录系统}
+
+\begin{soluzione}{es:12-validita}
+投票周期为一小时，即从 \texttt{valid-after} 到 \texttt{fresh-until}。客户端在 $11{:}00+\tfrac34\cdot60'=11{:}45$ 与 $11{:}45+\tfrac78\cdot75'\approx12{:}50$ 之间随机选择一次更新时间。如果到 13:00 仍未获得新共识，旧共识在形式上已经过期。客户端仍可依据 \file{networkstatus.c} 中的 \file{REASONABLY\_LIVE\_TIME} 把它视为\emph{合理地仍可使用}——过期不足 24 小时。此时客户端会不断尝试获取新共识，同时继续建立电路；直到旧共识过期约 24 小时后，才会停止依赖它。
+\end{soluzione}
+
+\begin{soluzione}{es:12-flag}
+很可能有 \texttt{Running} 和 \texttt{Valid}，同时因为 500\,KB/s 高于 100\,KB/s，可能获得 \texttt{Fast}。如果该中继也提供目录缓存，还可能有 \texttt{V2Dir}。它没有 \texttt{Stable}、\texttt{Guard} 或 \texttt{HSDir}，因为这些标志需要连续运行数天至数周。它也没有 \texttt{Exit}，因为出口策略只允许端口 443，而该标志要求同时允许端口 80 和 443 的出口流量。
+\end{soluzione}
+
+\begin{soluzione}{es:12-partizione}
+缓存向某个特定客户端发送两小时前、但仍有效的旧共识，其中不包括最近加入的中继。该客户端因而在与其他人稍有不同的节点集合中选择路径，可能让自己的流量变得容易识别。攻击受到三项限制：共识只有三小时有效期；必须有真正的权威签名（缓存不能伪造共识）；客户端随机选择缓存。客户端按摘要而不是中继名称请求微描述符，因此缓存不能为这名客户端单独提供另一版本的中继密钥，因为摘要已经由签名的共识固定。
+\end{soluzione}
+
+\begin{soluzione}{es:12-mediana}
+三次测量的中位数为 5200。单个被人为抬高的测量值不会改变中位数。如果第三台权威节点是唯一测量此中继的节点，系统就得不到取中位数所需的三次测量。此时共识会使用声明或投票带宽，设置 \texttt{Unmeasured=1} 并施加上限，因此被抬高的测量值不会影响结果。
+\end{soluzione}
+
+\begin{soluzione}{es:12-voti}
+投票文档包含共识中不存在或与共识不同的行。例如，带宽权威节点提供的 \texttt{Measured} 评估、标识所支持共识方法的 \texttt{m} 行、该权威节点自行分配的标志、\texttt{flag-thresholds} 以及共享随机性承诺。共识只保留综合后的结果。
+\end{soluzione}
+
+\begin{soluzione}{es:12-md}
+对从微描述符开头的 \texttt{onion-key} 行开始，到下一微描述符前一个换行符或文档结尾为止的文本计算哈希，包含 PEM 编码的 RSA 密钥行。SHA-256 摘要按 base64 编码并移除末尾 \texttt{=} 后，必须与共识中的 \texttt{m} 行匹配。
+\end{soluzione}
+
+\begin{soluzione}{es:12-autorita}
+一台权威节点停止后，剩余两台仍可投票，生成带两个签名的共识，满足所需多数 $\lfloor3/2\rfloor+1=2$。如果两台停止，仅存的一台无法达到多数，因此不会生成新共识。客户端仍可在旧共识过期后约 24 小时内，把它视为\emph{合理地仍可使用}而继续工作。实验网络中一份共识只持续 40 秒，但上述宽限期仍为 24 小时，因此故障不会立即显现。
+\end{soluzione}
+
+\begin{soluzione}{es:12-ns}
+\texttt{ns} 格式的共识通常包含 SHA-1 签名，规范也只允许该格式使用这类签名。它的 \texttt{r} 行还包含完整的中继描述符摘要，每个中继条目中另有汇总出口策略的 \texttt{p} 行。
+\end{soluzione}
+
+\section*{第 \ref{cap:13-percorso} 章：路径选择}
+
+\begin{soluzione}{es:13-ordine}
+出口具有最严格的条件：必须允许连接所请求的目的地。首先选择出口可以确保存在合适的候选。如果先选择守卫，家族或网络限制可能排除唯一合适的出口，迫使算法重新开始。统计学上也有理由：排除限制作用于后续位置，所以应该尽量让它们影响候选集合更大的位置。
+\end{soluzione}
+
+\begin{soluzione}{es:13-peso}
+作为守卫：$20000\times0/10000=0$（\texttt{Wgd=0}）。作为中间中继：$20000\times0=0$（\texttt{Wmd=0}）。作为出口：$20000\times10000/10000=20000$（\texttt{Wed=10000}）。根据这份共识的权重，该中继只会用作出口。
+\end{soluzione}
+
+\begin{soluzione}{es:13-guard}
+没有持久守卫时，当 $1-(1-c^2)^C>0.5$ 时，失守概率超过 50\%，也就是 $C>\ln0.5/\ln(1-c^2)$：当 $c=1\%$ 时大约需要 \num{6932} 条电路，$c=20\%$ 时大约需要 17 条电路。固定使用一个守卫时，概率仍接近 $c$，分别为 1\% 和 20\%。面对控制能力极强的攻击者，守卫机制也不够，但两种策略的差异仍很显著。
+\end{soluzione}
+
+\begin{soluzione}{es:13-sybil}
+攻击者必须真正提供带宽，因为选中概率依赖权威节点测量的带宽，而不是自行声明的数值。出口还受到严格监控，包括 \texttt{BadExit} 标志。每个 IP 地址最多两台中继的限制，迫使攻击者获取大量地址。声明家族会阻止其多台中继同时出现在同一条电路；不声明则有被目录权威节点发现并排除的风险。最后，带宽权重会把稀缺的出口容量保留给实际承担出口角色的中继，而攻击者提供的带宽也只在适当位置发挥作用。
+\end{soluzione}
+
+\begin{soluzione}{es:13-campione}
+如果没有样本大小限制，控制客户端本地网络的攻击者可以阻断所有诚实守卫的连接。客户端便会不断抽取新的守卫，直到找到一台可连接的守卫，最终可能选中攻击者控制的中继。限制样本后，客户端会耗尽尝试次数并停止添加守卫，即使因此失去连接，也不会自动选择攻击者的守卫。
+\end{soluzione}
+
+\begin{soluzione}{es:13-famiglie}
+这是实践练习。应从 CollecTor 下载与共识对应的微描述符。针对每台中继，使用 \texttt{family-ids} 或相互声明的 \texttt{family} 列表构建家族标识符集合；如果一个候选中继与已选中任何中继属于同一家族，就拒绝它。
+\end{soluzione}
+
+\begin{soluzione}{es:13-operatori}
+这是研究练习。大型家族总体上通常占有比任何单台大型中继都高得多的出口选择概率。因此，实际集中风险取决于运营者，而不只是中继数量。这也是 Tor 社区关注运营者多样性和未声明中继家族的原因（\cref{cap:27-casi-rete}）。
+\end{soluzione}
+
+\section*{第 \ref{cap:14-onion-services} 章：v3 洋葱服务}
+
+\begin{soluzione}{es:14-indirizzo}
+$32+2+1=35$ 字节，即 280 比特。Base32 每个字符编码五比特，因此不带填充时需要 $280/5=56$ 个字符。随机输入错误恰好匹配校验和的概率约为 $2^{-16}$。版本字节还必须等于 \texttt{0x03}，使随机错误未被发现的概率进一步降低。
+\end{soluzione}
+
+\begin{soluzione}{es:14-periodo}
+2026 年 1 月 1 日 UTC 09:00，距离 Unix 纪元已经过 \num{29454300} 分钟。减去 720 分钟的偏移得到 \num{29453580}，因此 $\lfloor29453580/1440\rfloor=20453$。第 \num{20453} 个周期从 2025 年 12 月 31 日 UTC 12:00 开始，因为 09:00 仍早于中午。
+\end{soluzione}
+
+\begin{soluzione}{es:14-hsdir}
+攻击者需要该周期的盲化密钥，因此首先需要知道服务地址；还要知道该周期的 SRV，以及自己控制的中继在环上的位置。之后可利用这些数值生成中继身份，使其恰好位于服务索引之后。SRV 只有在权威节点公布时才会得知，通常距离相关周期开始还有大约半天。攻击者不能提前几天精确部署中继；新中继还必须获得 \texttt{HSDir} 标志，而这至少需要运行 96 小时。
+\end{soluzione}
+
+\begin{soluzione}{es:14-ruoli}
+HSDir 看到的是盲化密钥，而不是服务地址，请求通过匿名电路到达。引介点看到认证密钥以及服务发起的电路，并能统计引介请求。汇合点看到 cookie、两条电路和在它们之间传输的加密流量。引介点特别适合估算热度，因为它能看到每次连接尝试，虽然不知道对应服务地址。不过，已经知道地址的人可以下载描述符并建立对应关系。
+\end{soluzione}
+
+\begin{soluzione}{es:14-anonimo}
+单跳电路中的 HSDir 就是第一跳，因此能够看到客户端 IP 地址。它至少能通过盲化密钥，或者在已知地址时直接通过地址，将\emph{谁}正在搜索\emph{哪个}服务联系起来。拒绝非匿名请求会迫使客户端通过其他中继获取描述符。
+\end{soluzione}
+
+\begin{soluzione}{es:14-anello}
+这是实践练习。当 HSDir 数量大于 $2\times4$ 时，服务不再把描述符上传到所有位置。通过三跳电路向每台 HSDir 请求描述符，应当只在为当前或下一周期计算出的指定 HSDir 上找到它，因为服务会为两个周期发布描述符。
+\end{soluzione}
+
+\begin{soluzione}{es:14-ipt}
+base64 值中首先是链路说明符数量，随后是符合 \texttt{EXTEND2} 格式的说明符（\cref{sec:extend2}）。例如，类型 \texttt{00} 包含地址与 ORPort，类型 \texttt{02} 包含 RSA 指纹，类型 \texttt{03} 包含 Ed25519 身份。可以通过 ORPort 找到中继，它等于 5100 加节点编号。\texttt{auth-key} 行包含类型 9 证书，由描述符签名密钥签署，用于认证服务在该引介点的认证公钥。
+\end{soluzione}

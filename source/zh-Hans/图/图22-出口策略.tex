@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 无障碍替代文本。
+\altfig{Chutney 实验出口策略：只在测试网络中设置 ExitPolicyRejectPrivate 0，关闭对私有地址的优先拒绝。两个发送到 127.0.0.1 的端口 8080 与 8081 的 BEGIN 请求按顺序经过规则。8080 命中 reject 127.0.0.1:8080，返回 END EXITPOLICY；8081 不命中拒绝，而命中 accept 127.0.0.0/8:*，因此可以尝试 TCP 连接，但只有服务器监听时才可能收到 CONNECTED。若把 accept 提前，特定拒绝就无效。公开出口不得禁用 ExitPolicyRejectPrivate。}
+% 仅在实验室中的出口策略
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.45cm,
+  reg/.style={draw,rounded corners=1pt,minimum height=0.6cm,text width=4.6cm,font=\ttfamily\scriptsize},
+  esito/.style={draw,rounded corners=2pt,minimum height=0.6cm,text width=2.5cm,align=center}]
+  \node[font=\sffamily\scriptsize] (top) at (0,1.25) {两个 BEGIN：127.0.0.1:8080 / :8081};
+  \node[draw,rounded corners=2pt,fill=torviola!10,font=\ttfamily\tiny] (r0) at (0,0.15) {ExitPolicyRejectPrivate 0};
+  \node[reg,fill=avviso!12,below=of r0] (r1) {reject 127.0.0.1:8080};
+  \node[reg,fill=torverde!12,below=of r1] (r2) {accept 127.0.0.0/8:*};
+  \node[reg,fill=torgrigio!10,below=of r2] (r3) {（其他默认策略）};
+  \draw[->] (top) -- (r0); \draw[->] (r0) -- (r1); \draw[->] (r1) -- node[right,font=\sffamily\tiny] {8081：不匹配} (r2); \draw[->] (r2) -- node[right,font=\sffamily\tiny] {其他情况} (r3);
+  \node[esito,fill=avviso!15,draw=avviso,right=1.2cm of r1] (e1) {\texttt{END} 原因\\\texttt{EXITPOLICY}};
+  \draw[->,avviso,thick] (r1) -- node[above,font=\sffamily\tiny] {8080 匹配} (e1);
+  \node[esito,fill=torverde!15,draw=torverde!60!black,right=1.2cm of r2] (e2) {尝试 TCP\\服务器监听时\\才可 CONNECTED};
+  \draw[->,torverde!60!black,dashed] (r2) -- node[above,font=\sffamily\tiny] {8081 匹配} (e2);
+  \node[anchor=west,font=\sffamily\tiny,text=torgrigio,align=left] at (-5.9,-0.55) {第一条匹配规则\\决定结果};
+  \node[anchor=west,font=\sffamily\tiny,text=avviso] at (-5.9,-1.95) {不可用于公开出口};
+  \node[font=\sffamily\tiny,text=torgrigio,anchor=south] at (r0.north) {仅实验：ExitPolicyRejectPrivate 0};
+\end{tikzpicture}

@@ -1,0 +1,111 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Capítulo \ref{cap:23-browser}: Tor Browser, Tails y Whonix}
+
+\begin{soluzione}{es:23-identita}
+Nuevo circuito para este sitio cambia únicamente el circuito utilizado por el sitio de la pestaña activa, sin borrar cookies, historial ni estado de otros sitios; el sitio podría seguir reconociendo al usuario por esos datos almacenados. Nueva identidad cierra todo, elimina el estado del navegador y obtiene circuitos nuevos para toda la actividad. Ninguna acción cambia el guardia, porque rotarlo con frecuencia aumenta la probabilidad de seleccionar finalmente uno malicioso (\cref{sec:guard}). En cualquier caso, el guardia no puede ver qué sitios visita el cliente.
+\end{soluzione}
+
+\begin{soluzione}{es:23-estensioni}
+El usuario quizá bloquee la carga de rastreadores adicionales, pero Tor Browser ya los aísla por sitio y limita los identificadores persistentes. Instalar una extensión sacrifica la uniformidad: los sitios podrían detectar su presencia o sus listas de filtrado y distinguir al usuario del conjunto más amplio de personas que utilizan Tor Browser. Además, introduce código adicional con acceso a las páginas visitadas.
+\end{soluzione}
+
+\begin{soluzione}{es:23-isolamento}
+Con credenciales SOCKS idénticas para dos pestañas que visitan el mismo sitio, tor asigna sus flujos al mismo circuito. Una tercera pestaña con credenciales distintas recibe otro circuito. \texttt{GETINFO stream-status} permite ver el identificador de circuito asociado a cada flujo.
+\end{soluzione}
+
+\begin{soluzione}{es:23-scelta}
+(a) Tor Browser basta, posiblemente con un puente. (b) Tails: se inicia desde una memoria USB, normalmente no deja rastros en el equipo de otra persona y conserva únicamente datos colocados en el almacenamiento persistente cifrado, con los riesgos propios de hardware comprometido. (c) Whonix: las aplicaciones de la Workstation acceden a la red mediante tor por diseño arquitectónico y permite trabajos prolongados sin exigir amnesia.
+\end{soluzione}
+
+\begin{soluzione}{es:23-impronta}
+Es un ejercicio abierto. Entre las propiedades posibles figuran dimensiones de pantalla y ventana, zona horaria, idioma, fuentes disponibles y renderizado de canvas. En un navegador normal pueden aportar desde unos pocos bits, como la zona horaria, hasta muchos, como las características de fuentes y canvas. Tor Browser redondea dimensiones mediante letterboxing, declara UTC y un idioma común, limita fuentes y normaliza o desactiva interfaces reveladoras. Quedan diferencias como el sistema operativo, el nivel de seguridad elegido y las dimensiones redondeadas.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:24-metrics}: medir la red}
+
+\begin{soluzione}{es:24-dieci}
+Las solicitudes de directorio se reducirían a la mitad y, con el divisor fijo de diez, la estimación de usuarios también se reduciría a la mitad. Los gráficos mostrarían una caída repentina y aproximadamente simultánea entre países conforme se extendiera la versión nueva de tor. Una caída gradual global correlacionada con la adopción del programa sugeriría un cambio de comportamiento del cliente, no una pérdida equivalente de usuarios. Habría que revisar el divisor del método de estimación.
+\end{soluzione}
+
+\begin{soluzione}{es:24-frazione}
+$20\,000\,000/(0{,}6\cdot10)\approx3\,333\,333$ usuarios estimados. Con una fracción de cobertura del 8\%, el valor se descarta porque queda por debajo del mínimo del 10\%.
+\end{soluzione}
+
+\begin{soluzione}{es:24-flag}
+Esquema: filtra repetidores que tengan ambos indicadores y divide la suma de sus anchos de banda entre el total de la red. Para calcular la probabilidad de selección de salida, utiliza \texttt{probabilities(consensus, "exit")} del laboratorio~7 y suma las probabilidades de repetidores cuya red /16 figure entre las cinco más representadas.
+\end{soluzione}
+
+\begin{soluzione}{es:24-censura}
+Es un ejercicio abierto. Un bloqueo documentado suele producir una caída brusca de las estimaciones de usuarios directos el día en que comienza. Las estimaciones de usuarios de puentes, especialmente Snowflake o WebTunnel, pueden aumentar durante los días siguientes conforme las personas afectadas cambian de transporte. Metrics puede señalar la fecha de la caída inicial.
+\end{soluzione}
+
+\begin{soluzione}{es:24-privacy}
+Sin redondeo, un adversario que sepa que es el único usuario de un país que llega a cierto repetidor, o conozca exactamente la cantidad de los demás usuarios, podría consultar sus estadísticas extra-info y confirmar si otra persona de ese país se conectó, mediante una diferencia de uno. El redondeo oculta variaciones pequeñas. Un adversario que controle muchos repetidores no necesita los recuentos publicados porque puede observar directamente las conexiones entrantes de sus propios nodos.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:25-legale}: aspectos legales y éticos}
+
+\begin{soluzione}{es:25-condizioni}
+(a) Una salida que iniciara por sí misma solicitudes hacia sitios web, quizá para \enquote{mezclar} el tráfico, iniciaría transmisiones. (b) Una salida que redirigiera conexiones a un destino diferente del especificado en la celda \texttt{BEGIN} estaría seleccionando al destinatario. (c) Una salida que insertara contenido en páginas HTTP o filtrara contenido por su significado seleccionaría o modificaría información. Son también ejemplos de conductas que pueden dar lugar al indicador \texttt{BadExit}.
+\end{soluzione}
+
+\begin{soluzione}{es:25-strumento}
+Un cuchillo de cocina es legal, mientras una agresión no lo es. Una persona que lee mediante Tor un periódico censurado puede estar utilizando lícitamente una herramienta legal; esa misma persona comete un delito si accede sin autorización a un equipo, con Tor o sin él. Un operador de repetidores aporta capacidad de transmisión sin seleccionar contenidos, más parecido a un transportista que a un autor, siempre que no participe en actividades ilícitas. Las conclusiones jurídicas concretas dependen de la jurisdicción y de los hechos.
+\end{soluzione}
+
+\begin{soluzione}{es:25-segnalazione}
+Explica que la dirección corresponde a una salida Tor, verificable con herramientas públicas del Tor Project; que el operador no conoce ni registra las identidades de los clientes y no puede identificarlos; y que el sitio reclamante puede, si lo desea, gestionar de forma diferente las conexiones de direcciones públicas de salida. En la práctica, el operador podría añadir una regla de política de salida que rechace la dirección de ese sitio si las ventajas operativas compensan la restricción.
+\end{soluzione}
+
+\begin{soluzione}{es:25-esperimento}
+La propuesta observa tráfico real de usuarios sin consentimiento, recopila datos que podrían revelar información y no son adecuados para publicar, como los dominios visitados, y ofrece un beneficio limitado. Contradice varios principios de seguridad de la investigación y en Italia podría plantear problemas penales y de protección de datos. Las alternativas más seguras incluyen utilizar agregados públicos de Metrics, medir la accesibilidad de sitios de noticias solo con el propio cliente Tor del investigador o pedir al Research Safety Board que evalúe un diseño de recuento respetuoso con la privacidad mediante agregación y ruido, como en las estadísticas de repetidores.
+\end{soluzione}
+
+\begin{soluzione}{es:25-ricerca}
+Es un ejercicio de investigación. Busca sentencias en bases jurídicas oficiales, como las decisiones publicadas de tribunales italianos o del Tribunal de Justicia de la Unión Europea, en lugar de depender solo de resúmenes de terceros. Para cada resolución registra tribunal, fecha, legislación aplicable y resultado, y distingue asuntos de operadores de repetidores de otros relacionados con usuarios de Tor.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:26-attacchi}: correlación, identificación y ataques Sybil}
+
+\begin{soluzione}{es:26-posizione}
+La correlación de tráfico exige observar ambos extremos, mediante repetidores o redes subyacentes; los guardias, las restricciones de rutas y el ancho de banda medido la dificultan. La identificación de sitios web necesita únicamente el enlace cliente--guardia; existen defensas limitadas de relleno y la investigación continúa. Descubrir un guardia requiere un repetidor intermedio y la capacidad de provocar la construcción de circuitos; guardias y vanguards ayudan. Un adversario Sybil administra muchos repetidores y las defensas incluyen mediciones de ancho de banda, familias, restricciones /16 y vigilancia. Los ataques de encaminamiento exigen influencia sobre un sistema autónomo o un punto de intercambio de Internet; las respuestas incluyen vigilancia BGP fuera del protocolo Tor.
+\end{soluzione}
+
+\begin{soluzione}{es:26-base}
+Entre \num{100000} visitas, se esperan aproximadamente 0,95 alertas verdaderas y $0{,}001\cdot99999\approx100$ falsos positivos. La proporción de alertas correctas es $0{,}95/(0{,}95+100)\approx0{,}9\%$. Casi todas son falsas.
+\end{soluzione}
+
+\begin{soluzione}{es:26-bin}
+Con intervalos de dos segundos durante solo cinco segundos, quedan únicamente dos o tres muestras por serie y la correlación se vuelve inestable. Si todos los clientes siguen el mismo ritmo de tráfico, por ejemplo con la misma semilla aleatoria, las series resultan casi idénticas y se vuelve imposible asociarlas correctamente. Igualar ritmos es especialmente perturbador: es el principio del tráfico a velocidad constante de PipeNet (\cref{sec:radici-bassa}).
+\end{soluzione}
+
+\begin{soluzione}{es:26-difesa}
+Con una tasa constante de transmisión, las series de tráfico de entrada dejan de variar. La correlación de Pearson es matemáticamente indefinida porque la varianza es cero, o queda dominada por el ruido de red; el ataque falla. El coste es transmitir a la tasa máxima elegida incluso sin datos útiles. En el laboratorio pueden ser decenas o cientos de KB/s por cliente, varias veces el volumen de los datos de aplicación.
+\end{soluzione}
+
+\begin{soluzione}{es:26-probabilita}
+Con un guardia fijo, el adversario solo triunfa si el guardia seleccionado es malicioso, con probabilidad aproximada del 5\%. En ese caso, también controla la salida en alrededor del 5\% de los circuitos. Durante seis meses de uso intensivo, la probabilidad de al menos un compromiso se aproxima, por tanto, al 5\%, mientras permanece a cero para usuarios con guardias honestos en este modelo simplificado. Con un guardia aleatorio por circuito, la probabilidad por circuito es aproximadamente $0{,}05\cdot0{,}05=0{,}0025$; después de miles de circuitos, el compromiso es casi seguro. Es la razón de los guardias persistentes y puede verificarse por simulación con la clase \texttt{Adversary} del laboratorio~7.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:27-casi-rete}: casos reales de ataques contra la red}
+
+\begin{soluzione}{es:27-campo}
+En dirección al cliente, cada repetidor añade su propia capa de cifrado a la carga útil de la celda (\cref{cap:10-cifratura-relay}). El guardia recibe una carga cifrada bajo las claves de los saltos intermedios y no puede leer lo escrito por el HSDir. En cambio, el comando exterior de celda forma parte de una cabecera que todos los repetidores leen y reenvían sin alterar.
+\end{soluzione}
+
+\begin{soluzione}{es:27-uno}
+Con tres guardias, la probabilidad de que al menos uno sea adversario es aproximadamente tres veces mayor y cada guardia malicioso observa parte del tráfico del cliente. Con uno solo, el riesgo de selección es menor y una elección honesta protege al cliente durante mucho tiempo. Las desventajas son que un único guardia malicioso observa todo el tráfico de ese cliente y que uno lento o inaccesible puede perjudicar la conectividad.
+\end{soluzione}
+
+\begin{soluzione}{es:27-verso}
+El laboratorio ya utiliza celdas \texttt{DROP} en lugar de solicitudes de extensión. El contador de \file{command.c} comprueba el comando exterior antes de descifrar, así que no depende del mensaje interior. En sentido opuesto, el código registra una advertencia y cierra el circuito con razón \texttt{PROTOCOL}, independientemente de que pertenezca a un cliente o a un repetidor.
+\end{soluzione}
+
+\begin{soluzione}{es:27-segnali}
+Entre las señales posibles figuran repetidores incorporados al consenso exactamente en el mismo minuto, versiones poco comunes de tor y sistemas operativos coincidentes en descriptores, direcciones de la misma red o proveedor de alojamiento, puertos y sobrenombres parecidos y falta de contacto. Los falsos positivos incluyen operadores grandes legítimos que actualizan todos sus repetidores a la vez, proveedores populares y despliegues automatizados idénticos. Ningún indicio demuestra por sí solo una administración común: combina evidencias y contacta con el operador cuando sea posible.
+\end{soluzione}
+
+\begin{soluzione}{es:27-canali}
+Un repetidor intermedio ve metadatos exteriores en claro: CircID, que cambia en cada salto y, por tanto, no atraviesa la ruta sin modificaciones; el comando de celda, incluidos \cella{RELAY} y \cella{RELAY\_EARLY}, canal explotado en 2014, hoy cerrado en la dirección hacia el cliente y limitado a ocho celdas en el sentido opuesto; \cella{DESTROY} y su razón; así como el momento y la cantidad de celdas. Los dos últimos continúan disponibles para confirmar tráfico pasivamente sin defensa completa. Las cargas útiles están cifradas por capas, pero con tor1 un repetidor malicioso podía marcarlas para que otro las reconociera (\cref{sec:tor1-debolezze}). CGO (\cref{sec:cgo}) hace que tales modificaciones produzcan texto en claro irrecuperable en los saltos posteriores.
+\end{soluzione}

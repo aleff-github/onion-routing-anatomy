@@ -1,0 +1,60 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% ===========================================================================
+% Immagine di presentazione orizzontale (anteprima social di GitHub, Open Graph del
+% sito), con la stessa grafica della copertina. Dimensioni in pixel a 72 dpi, da
+% passare prima di \input:
+%   \def\Larghezza{1280}\def\Altezza{640}   anteprima social di GitHub
+%   \def\Larghezza{1200}\def\Altezza{630}   Open Graph
+% Build: make cover (latexmk -usepretex, poi Ghostscript a 72 dpi).
+% ===========================================================================
+\documentclass{article}
+\providecommand{\Larghezza}{1280}
+\providecommand{\Altezza}{640}
+\usepackage{fontspec}
+\usepackage[paperwidth=\Larghezza bp,paperheight=\Altezza bp,margin=0pt]{geometry}
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\setsansfont{TeX Gyre Heros}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+
+\definecolor{carta}{HTML}{F1ECE1}
+\definecolor{inchiostro}{HTML}{1B1A20}
+\definecolor{accento}{HTML}{7D4698}
+\definecolor{tenue}{HTML}{6E6A63}
+
+\begin{document}
+\begin{tikzpicture}[remember picture,overlay,x=1bp,y=1bp]
+\begin{scope}[shift={(current page.south west)}]
+  \pgfmathsetmacro{\W}{\Larghezza}
+  \pgfmathsetmacro{\H}{\Altezza}
+  \pgfmathsetmacro{\scala}{\H/640}      % unita' di scala: 1 a 640 px di altezza
+  \pgfmathsetmacro{\fTitolo}{52*\scala}\pgfmathsetmacro{\lTitolo}{58*\scala}
+  \pgfmathsetmacro{\fSotto}{27*\scala}\pgfmathsetmacro{\lSotto}{36*\scala}
+  \pgfmathsetmacro{\fPiede}{21*\scala}\pgfmathsetmacro{\lPiede}{28*\scala}
+  \fill[carta] (0,0) rectangle (\W,\H);
+
+  % Sezione della cipolla a sinistra, centrata in verticale.
+  \begin{scope}
+    \clip (0,0) rectangle (\W,\H);
+    \coordinate (O) at (0.22*\W,0.5*\H);
+    \foreach \r/\w in {22/1.4, 48/1.6, 78/1.9, 108/2.2, 138/2.6, 168/3.1}
+      \draw[inchiostro, line width=\w*\scala] (O) circle (\r*\scala);
+    \fill[carta] (O) -- ($ (O) + (66:182*\scala) $) -- ($ (O) + (80:182*\scala) $) -- cycle;
+    \draw[accento, line width=1.8*\scala] ($ (O) + (80:8*\scala) $) -- ($ (O) + (80:166*\scala) $);
+    \fill[accento] (O) circle (7.5*\scala);
+  \end{scope}
+
+  % Testi a destra.
+  \pgfmathsetmacro{\tx}{0.43*\W}
+  \node[anchor=west, text=inchiostro, font=\sffamily\bfseries\fontsize{\fTitolo}{\lTitolo}\selectfont]
+    at (\tx,0.64*\H) {Onion Routing Anatomy};
+  \draw[accento,line width=2.4*\scala] (\tx+4*\scala,0.535*\H) -- (\tx+140*\scala,0.535*\H);
+  \node[anchor=west, text=tenue, align=left, font=\sffamily\fontsize{\fSotto}{\lSotto}\selectfont]
+    at (\tx,0.42*\H) {Anatomia di Tor --- The Tor Protocol,\\Byte by Byte};
+  \node[anchor=west, text=inchiostro, align=left, font=\sffamily\fontsize{\fPiede}{\lPiede}\selectfont]
+    at (\tx,0.18*\H) {\textcolor{tenue}{Free book \textbullet{} GPL-3.0-or-later}};
+\end{scope}
+\end{tikzpicture}
+\end{document}

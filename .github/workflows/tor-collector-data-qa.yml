@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Controllo privato dei listati che richiedono il consenso pubblico storico.
+name: QA dati Tor CollecTor (privato)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/tor-collector-data-qa.yml"
+      - "scripts/verify_listings.py"
+      - "labs/it/fetch-public-data.sh"
+      - "labs/it/codice/torlab/**"
+      - "source/it/figure/fig29-compromissione.tex"
+      - "source/it/capitoli/**"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public-consensus:
+    name: Consenso storico e listati dipendenti dalla rete
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dipendenze test
+        run: python -m pip install -r requirements.txt
+      - name: Preleva il consenso microdesc storico dal Tor Project
+        run: make -C labs/it data
+      - name: Verifica che il dato usato sia presente
+        shell: bash
+        run: |
+          test -s labs/it/dati/collector/consensus-microdesc-2026-09-23-15
+          sed -n '1,2p' labs/it/dati/collector/consensus-microdesc-2026-09-23-15
+          sha256sum labs/it/dati/collector/consensus-microdesc-2026-09-23-15
+      - name: Rigenera tutti i listati e punti della figura (nessun SKIP ammesso)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_listings.py | tee /tmp/verify-listings.log
+          if grep -E '\\[--\\]|saltati|non verificati|non verificato' /tmp/verify-listings.log; then
+            echo "Il controllo ha saltato elementi pur avendo il consenso: ERRORE" >&2
+            exit 1
+          fi

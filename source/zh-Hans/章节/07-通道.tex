@@ -1,0 +1,468 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{通道与链路协议}\label{cap:07-canali}
+\aggiornatoal{2026 年 9 月 23 日}{torspec 提交 \texttt{8e1f245}；tor 0.4.9.13；Arti 2.6.0；链路协议 4--5}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 解释什么是通道，以及 Tor 为什么在 TLS 之上建立通道；
+  \item 描述构成中继身份的密钥，以及这些密钥如何被证书绑定在一起；
+  \item 按信元顺序跟踪通道握手：VERSIONS、CERTS、AUTH\_CHALLENGE、AUTHENTICATE 和 NETINFO；
+  \item 读取并验证 Tor 的 Ed25519 证书；
+  \item 理解为什么客户端不进行身份认证，以及这一选择对匿名性意味着什么；
+  \item 在实验网络中向一个中继打开经过验证的通道（实验~1）。
+\end{itemize}
+\end{obiettivi}
+
+电路是 Tor 的核心结构，本质上是一串连续的跳。然而，每一跳都建立在一个更简单的基础之上：两个相邻节点之间直接、加密的连接。规范把这种连接称为\textbf{通道（channel）}。本章将说明通道如何建立，更重要的是，通信双方如何确认自己连接到的确实是预期的对端。通道中传输的信元格式将在 \cref{cap:08-celle} 中详细介绍，本章会频繁引用那里。
+
+% ---------------------------------------------------------------------------
+\section{什么是通道？}\label{sec:canale-def}
+
+通道是两个中继之间，或客户端与中继之间的一条直接加密连接~\spec{tor-spec}{Channels}。从技术上看，它是运行在 TCP 上、用于承载信元的 TLS 会话。它具有三个关键特征。
+
+\begin{description}
+  \item[角色不对称] 任何一方都可以\emph{发起}通道，即 \termine{发起方}{initiator}；但只有中继可以\emph{接收}通道，即充当 \termine{响应方}{responder}。客户端不接受来自 Tor 网络的入站连接，因此没有面向 Tor 网络监听的端口。
+  \item[身份经过验证] 响应方必须以密码学方式证明自己掌握一个或多个中继身份。发起方通常事先已经知道应当看到哪个身份：这个身份可能来自共识、编译进源代码的目录权威列表，或者在为扩展电路而打开通道时，直接来自 \texttt{EXTEND2} 消息。如果对端展示的身份并非预期身份，就必须关闭通道。
+  \item[共享] 一个通道可以承载多条电路，不同电路用各自的 CircID 区分（\cref{sec:circid}）。节点更倾向于复用已有通道，而不是向同一中继再打开第二条。没有电路的通道会在随机选择的空闲超时后关闭；范围取决于通道用途（\file{src/core/or/channelpadding.c} 中的 \file{channelpadding\_get\_channel\_idle\_timeout}）：客户端通道为 3--4.5 分钟，中继之间的通道为 45--75 分钟，其中中心值由共识参数 \texttt{nf\_conntimeout\_relays} 指定，默认为一小时。通道正在使用时，\opt{KeepalivePeriod} 会让节点每五分钟发送一个填充信元，以避免防火墙把连接当作空闲连接关闭。
+\end{description}
+
+\begin{approfondimento}[通道还是连接？]
+较早的文档和许多研究论文把 channel 称为\emph{连接（connection）}，尤其是 \emph{OR 连接（OR connection）}。规范后来逐渐避免这一叫法，因为它容易与出口中继为外部应用流打开的 TCP 连接混淆。tor 源代码中两个术语至今都存在：\file{or\_connection\_t} 表示底层 TLS 连接，\file{channel\_t} 则是建立在它之上的通道抽象。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{中继的身份}\label{sec:canale-chiavi}
+
+在研究握手前，需要先回答：中继究竟要证明\emph{什么}？中继身份由长期密钥确定。规范采用系统化命名：\file{KP\_} 前缀表示公钥，\file{KS\_} 表示对应私钥~\spec{tor-spec}{Relay keys and identities}。与通道有关的主要密钥如下：
+
+\begin{description}
+  \item[\file{KP\_relayid\_ed}] \textbf{Ed25519 身份密钥}，也称\enquote{主身份密钥（master identity key）}。它不会过期，而且只有一个用途：给签名密钥签名，因此可以离线保存。
+  \item[\file{KP\_relayid\_rsa}] 1024 位的\textbf{旧式 RSA 身份}。Tor Metrics 中显示的 40 个十六进制字符指纹仍以它为基础，但协议安全已不再依赖这把密钥。
+  \item[\file{KP\_relaysign\_ed}] 中期使用的\textbf{签名密钥}，由身份密钥认证。中继日常在线运行时主要使用它。
+  \item[\file{KP\_link\_ed}] 短期密钥，仅在中继主动发起通道并需要认证自己时使用（\cref{sec:canale-authenticate}）。
+\end{description}
+
+\Cref{fig:chiavi-relay} 展示了证书如何把这些密钥绑定在一起。其核心是一条从长期身份出发，一直延伸到当前连接 TLS 证书的\emph{信任链}。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图07-密钥}
+\caption{把中继 Ed25519 身份绑定到当前连接 TLS 证书的证书链。每条箭头代表一个证书：起点密钥为终点处的密钥（或指纹）签名。数字表示 CERTS 信元中使用的 CertType。右侧是旧式 RSA 链，把旧 RSA 身份与 Ed25519 身份绑定起来。}
+\label{fig:chiavi-relay}
+\end{figure}
+
+在实验网络中，这些密钥位于每个中继的 \file{keys/} 目录：\file{ed25519\_master\_id\_public\_key} 及对应的私有身份密钥，签名密钥使用 \file{ed25519\_signing\_cert} 和 \file{ed25519\_signing\_secret\_key}，RSA 身份则使用 \file{secret\_id\_key}。节点目录中的 \file{fingerprint-ed25519} 保存 Base64 编码的 Ed25519 身份。
+
+\begin{storia}[从 RSA 到 Ed25519]
+直到 2015 年，中继唯一的身份还是 1024 位 RSA 密钥；如今这一长度已被认为不足。\proposta{220} 引入 Ed25519 身份以及本章介绍的证书格式，tor 0.2.7.2-alpha 开始支持。RSA 密钥为了兼容性被保留下来，并通过 cross-certificate 与 Ed25519 身份绑定。
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{握手全貌}\label{sec:canale-handshake}
+
+\Cref{fig:handshake-canale} 概括了通道的建立过程~\spec{tor-spec}{Negotiating and initializing channels}。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图07-握手}
+\caption{通道握手。TLS 建立之后，后续内容全部在加密通道中传输。响应方总是依次发送 CERTS、AUTH\_CHALLENGE 和 NETINFO。虚线框只适用于发起方是公共中继、因此必须证明自身身份的情况；客户端或网桥只发送 NETINFO。}
+\label{fig:handshake-canale}
+\end{figure}
+
+\begin{enumerate}
+  \item 发起方打开 TLS 连接。
+  \item 双方各自发送 \cella{VERSIONS} 信元，并协商链路协议版本（\cref{sec:celle-formato}）。
+  \item 响应方发送 \cella{CERTS}（证明身份的证书）、\cella{AUTH\_CHALLENGE}（如果发起方要认证自己，需要对相关上下文签名）以及 \cella{NETINFO}（时间和地址）。
+  \item 发起方验证证书。如果它是公共中继，则回复 \cella{CERTS} 与 \cella{AUTHENTICATE}；无论是否认证，最后都以 \cella{NETINFO} 结束。
+\end{enumerate}
+
+\cella{NETINFO} 标志握手结束：一方一旦发送它，就不能再发送其他握手信元。响应方正是通过这一点判断发起方是否选择不进行认证。中间可以穿插任意数量的 \cella{VPADDING}，除此之外不能出现其他类型的信元。
+
+% ---------------------------------------------------------------------------
+\section{TLS 层}\label{sec:canale-tls}
+
+Tor 使用 TLS 的方式比较特殊。在普通网站中，服务器证书由证书颁发机构签发，并包含域名；浏览器会验证这两项。中继则不同：它提供一个没有实际域名意义的\textbf{自签名}证书，而客户端不会按照普通 TLS 规则验证它。因此实验~1 的代码中会出现两行在绝大多数其他场景里都属于严重安全错误的设置：
+
+\begin{lstlisting}[language=Python,numbers=none]
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+\end{lstlisting}
+
+这里它们并不是错误，因为真正的身份认证发生在 TLS 建立\emph{之后}，由通道中的 \cella{CERTS} 完成。TLS 提供通道加密、完整性，并证明响应方掌握 TLS 证书对应的私钥；其余身份关系则由 Tor 信元建立。
+
+规范还给出几条规则~\spec{tor-spec}{The TLS handshake}：
+\begin{itemize}
+  \item 实现应支持 TLS~1.3，中继还应支持 TLS~1.2，并使用现代密码套件（AES-GCM、ChaCha20-Poly1305，以及基于 X25519 或 P-256 的密钥交换）；
+  \item 不应允许 \emph{session resumption}：它会削弱前向保密，并曾使 \emph{Triple Handshake}（2013）等攻击成为可能；
+  \item 不应使用 TLS 压缩。
+\end{itemize}
+
+在实验网络中，使用 OpenSSL~3.5 的 Python 客户端会与 tor 协商 TLS~1.3，并使用 \file{TLS\_AES\_256\_GCM\_SHA384} 套件。
+
+\begin{storia}[为什么握手如此特殊？]
+最早的链路协议直接把 Tor 证书放进 TLS 握手（版本~1）；版本~2 则通过 TLS 重新协商隐藏它们，并利用所提供的密码套件列表暗示选择了哪种变体。原因是审查：在可插拔传输出现之前（\cref{cap:16-censura}），Tor 试图让自身连接看起来像浏览器与 Web 服务器之间的普通 HTTPS。TLS~1.2 中的证书以明文传输，很容易识别。到了版本~3，证书被移到加密通道内部，以 \cella{CERTS} 信元传输。今天，抵抗审查主要交给可插拔传输，因此更早的变体已经过时；规范指出，截至 2025 年 3 月 tor 仍接受其中一些旧形式，但它们已经计划移除。
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{CERTS：证明身份}\label{sec:canale-certs}
+
+\subsection{信元}
+
+\cella{CERTS} 是变长信元（command 129），其载荷是一个证书列表：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+字段 & 字节 & 内容 \\
+\midrule
+N & 1 & 证书数量 \\
+\multicolumn{3}{l}{\emph{以下结构重复 N 次：}} \\
+\quad CertType & 1 & 证书类型 \\
+\quad CertLen & 2 & 证书长度 \\
+\quad Certificate & CertLen & 证书本身 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+一条 \cella{CERTS} 不能包含两个相同类型的证书。已定义类型见 \cref{tab:cert-types}~\spec{cert-spec}{Certificate types (CERT\_TYPE field)}。
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}cl l>{\raggedright\arraybackslash}X@{}}
+\toprule
+类型 & 名称 & 格式 & 认证内容 \\
+\midrule
+1 & \file{TLS\_LINK\_X509} & X.509 & TLS 密钥，由 RSA 身份签名（已过时） \\
+2 & \file{RSA\_ID\_X509} & X.509 & 自签名 RSA 身份 \\
+3 & \file{LINK\_AUTH\_X509} & X.509 & 用于认证的 RSA 密钥（已过时） \\
+4 & \file{IDENTITY\_V\_SIGNING} & Ed & 签名密钥，由 Ed25519 身份签名 \\
+5 & \file{SIGNING\_V\_TLS\_CERT} & Ed & TLS 证书指纹，由签名密钥签名 \\
+6 & \file{SIGNING\_V\_LINK\_AUTH} & Ed & \file{KP\_link\_ed}，由签名密钥签名 \\
+7 & \file{RSA\_ID\_V\_IDENTITY} & RSA$\to$Ed & Ed25519 身份，由 RSA 身份签名 \\
+8--12 & \multicolumn{3}{l}{洋葱服务（8、9、11）、ntor 密钥交叉证书（10）、中继家族（12）} \\
+\bottomrule
+\end{tabularx}
+\caption{证书类型。\enquote{Ed} 表示 Tor 自己的 Ed25519 证书格式。}
+\label{tab:cert-types}
+\end{table}
+
+\subsection{Tor 的 Ed25519 证书}
+
+Tor 的 Ed25519 证书不使用 X.509，而使用一种简单得多的自定义格式~\spec{cert-spec}{Tor Ed25519 Certificates}，如 \cref{fig:cert-ed} 所示。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图07-ed证书}
+\caption{Tor 的 Ed25519 证书。签名前的所有字段都受到该签名保护。过期时间以 Unix epoch 以来的\emph{小时数}表示；使用无符号四字节字段时，要经过几十万年才会溢出。}
+\label{fig:cert-ed}
+\end{figure}
+
+\begin{description}
+  \item[VERSION] 值为 1。
+  \item[CERT\_TYPE] 与 \cref{tab:cert-types} 中的 CertType 相同。
+  \item[EXPIRATION\_DATE] 表示从 1970 年 1 月 1 日起经过的小时数。
+  \item[CERT\_KEY\_TYPE] 说明下一个字段包含什么：1 表示 Ed25519 密钥，3 表示 X.509 证书的 SHA-256 指纹。直到 tor 0.4.5.1-alpha，tor 都始终写入 1，因此规范要求实现兼容这种旧行为。
+  \item[CERTIFIED\_KEY] 保存被认证的 32 字节值。
+  \item[Extensions] 每个扩展都包含长度、类型、标志位和数据。目前唯一定义的扩展是类型 4，\emph{signed-with-ed25519-key}，其中包含给该证书签名的密钥。标志位 1（\file{AFFECTS\_VALIDATION}）决定未知扩展如何处理：如果设置了该标志位，则必须拒绝证书；否则忽略未知扩展。
+  \item[SIGNATURE] 是对前面全部字段计算的 Ed25519 签名。
+\end{description}
+
+\subsection{验证过程}\label{sec:canale-verifica}
+
+响应方必须恰好发送一个类型 4 证书和一个类型 5 证书。发起方按以下步骤验证~\spec{tor-spec}{Authenticating the responder from its CERTS}：
+\begin{enumerate}
+  \item 类型 4 证书的扩展 4 中包含一个 Ed25519 密钥，即声明的身份 \file{KP\_relayid\_ed}。该证书必须由这把密钥自己签名，也就是\emph{自签名}；其 CERTIFIED\_KEY 是 \file{KP\_relaysign\_ed}。
+  \item 类型 5 证书必须由 \file{KP\_relaysign\_ed} 签名，而它认证的值必须等于 TLS 握手中收到的 TLS 证书的 SHA-256 指纹。
+  \item 两张证书都不能过期。
+  \item 最后，必须把得到的身份与\textbf{预期身份}比较。
+\end{enumerate}
+
+为什么这条链能证明身份？第 2 步把签名密钥绑定到\emph{当前连接}的 TLS 证书；TLS 握手此前已经证明响应方确实掌握该证书对应私钥。第 1 步再把签名密钥绑定到长期身份。攻击者当然可以复制真实中继的 \cella{CERTS}，因为其中没有秘密；但无法直接利用这些证书冒充中继，因为攻击者还必须在 TLS 握手中展示真实中继的 TLS 证书，并掌握与之对应的私钥。
+
+\begin{attenzione}[必须检查预期身份]
+一条完全有效的证书链只能证明响应方掌握\emph{某个}身份。如果发起方省略第~4 步，那么任何拥有合法身份的人都能冒充原本希望连接的中继。实验~1 的 \file{expected\_identity} 参数正是为此存在；测试中还专门验证“展示了不同身份的中继”会被拒绝。
+\end{attenzione}
+
+\subsection{旧式 RSA 链}
+
+发起方还可以选择验证 RSA 身份。类型 2 证书包含 1024 位 RSA 密钥（自签名，指数 65537）；类型 7 证书采用所谓 \enquote{cross-certificate} 格式，把该 RSA 密钥与已经验证的 Ed25519 身份绑定起来。cross-certificate 中的 RSA 签名，是对字符串 \texttt{"Tor TLS RSA/Ed25519 cross-certificate"} 与后续证书字段组合后所得 SHA-256 指纹进行签名。前缀用于防止同一签名被重用到其他上下文。
+
+\subsection{中继实际发送什么}
+
+在实验网络中，中继 \texttt{test003r} 发送的 \cella{CERTS} 包含五张证书：
+
+\begin{lstlisting}[numbers=none]
+ 类型 1  584 字节
+ 类型 2  442 字节
+ 类型 4  140 字节  过期 2026-10-24 16:00  key_type=1  ext=[4]
+ 类型 5  104 字节  过期 2026-09-29 11:00  key_type=3  ext=[]
+ 类型 7  165 字节
+\end{lstlisting}
+
+除了 Ed25519 链（类型 4、5）和 RSA 链（类型 2、7），中继仍会为旧客户端发送类型 1 证书。这张证书不仅和 TLS 证书长度相同，指纹也相同；逐字节比较可确认它们\emph{就是同一张证书}。
+
+证书长度并不是值得背诵的常数，理解原因更重要。tor 会构造一个虚假的通用名称（common name）：以 \texttt{www.} 开头，后接 4--25 个随机字符，再以 \texttt{.com} 结尾（\file{src/lib/tls/tortls\_openssl.c} 中的 \file{crypto\_random\_hostname}）。仅这一项就可能让不同中继之间的证书长度相差约二十字节。同一中继的长度还会随时间改变，因为 tor 每两小时更新一次 TLS 上下文，同时更新证书（\file{src/core/or/or.h} 中的 \file{MAX\_SSL\_KEY\_LIFETIME\_INTERNAL}）。我们在四十分钟后重复测量时，\cella{CERTS} 载荷从 1,451 字节变成 1,456 字节。因此你的测量值不同完全正常；真正应一致的是\emph{结构}：所有证书长度之和，加上一个计数字节和每张证书三个头部字节，应当恰好等于信元载荷长度。
+
+两张 Ed25519 证书的过期时间也反映了不同生命周期：签名密钥被认证 30 天，而与 TLS 证书的绑定只持续 2 天。这是 tor 的默认值（选项 \opt{SigningKeyLifetime} 和 \opt{TestingLinkCertLifetime}；后者只能在测试网络中配置），因此同样适用于公共网络。长期身份保持不变，而代表它在线运行的密钥频繁更新，从而限制中继一旦被攻陷时可能造成的损害。
+
+% ---------------------------------------------------------------------------
+\section{AUTH\_CHALLENGE 与 AUTHENTICATE}\label{sec:canale-authenticate}
+
+\subsection{谁需要认证？}
+
+发起方的身份认证是可选的，而“谁应该进行认证”是整个协议非常重要的设计选择之一~\spec{tor-spec}{Channels}：
+\begin{itemize}
+  \item 一个\textbf{公共中继}主动向另一个中继打开通道时，\emph{应当}认证自己；这样响应方就知道对方是网络中的中继，而不是普通客户端。
+  \item \textbf{客户端}或\textbf{网桥}\emph{不应}认证自己。
+\end{itemize}
+
+第二条规则的原因就是匿名性。客户端本来没有网络身份，而人为创建一个长期身份反而有害：守卫可能在客户端从另一个地址重新连接时仍认出它。网桥则不应向使用它的客户端暴露自己是网络中继这一事实。代价是：如果通道没有经过发起方认证，中继可能推断自己是某条电路的第一跳（\cref{cap:08-celle}, \cref{sec:relay}）。这也是中继拒绝为单跳电路充当出口的原因之一。
+
+\subsection{认证挑战}
+
+无论发起方最终是否认证，响应方都会发送 \cella{AUTH\_CHALLENGE}。它包含 32 个随机字节以及响应方接受的认证方法列表：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+字段 & 字节 & 内容 \\
+\midrule
+Challenge & 32 & 随机值，每条通道都不同 \\
+N\_Methods & 2 & 方法数量 \\
+Methods & $2 \times$ N\_Methods & 方法列表 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+已定义方法包括 1（\texttt{RSA-SHA256-TLSSecret}，已过时）、2（从未实现）和 3（\texttt{Ed25519-SHA256-RFC5705}）。实验网络中继发送的信元载荷长 36 字节，即 $32 + 2 + 2$，表示只提供一个方法：方法 3。
+
+\subsection{认证响应}
+
+需要认证自己的中继，首先返回自己的 \cella{CERTS}（使用类型 4 和 6，而不是 4 和 5，因为作为发起方的一方未必向 TLS 层提供过证书），随后发送 \cella{AUTHENTICATE}。方法 3 的 \cella{AUTHENTICATE} 载荷是一份 352 字节文档，由 \file{KP\_link\_ed} 签名：
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l c >{\raggedright\arraybackslash}X@{}}
+\toprule
+字段 & 字节 & 内容 \\
+\midrule
+TYPE & 8 & 字符串 \texttt{AUTH0003} \\
+CID, SID & 32 + 32 & 发起方与响应方的 RSA 身份 SHA-256 指纹 \\
+CID\_ED, SID\_ED & 32 + 32 & 发起方与响应方的 Ed25519 身份 \\
+SLOG & 32 & 通道上从开始到 AUTH\_CHALLENGE（含）的所有\emph{接收}字节的 SHA-256 \\
+CLOG & 32 & AUTHENTICATE 之前通道上所有\emph{发送}字节的 SHA-256 \\
+SCERT & 32 & 响应方 TLS 证书的 SHA-256 \\
+TLSSECRETS & 32 & 从 TLS 会话秘密派生的值（\emph{keying material exporter}） \\
+RAND & 24 & 随机字节 \\
+SIG & 64 & 对前面全部字段的 Ed25519 签名 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+每个字段都把签名绑定到\emph{当前这一次}连接的某个方面：参与双方的身份（CID、SID 等）、此前的通信内容（SLOG 与 CLOG，其中包含随机 challenge）、TLS 证书（SCERT），以及 TLS 会话本身（TLSSECRETS）。因此，这个签名不能被重用到另一条连接，也不能被位于两条不同 TLS 会话之间的中间人简单转发来冒充身份，因为两侧的 TLSSECRETS 和 SCERT 会不同。
+
+\begin{approfondimento}[被规范保留下来的一个实现错误]
+TLSSECRETS 通过 TLS \emph{exporter} 计算（RFC~5705；TLS~1.3 对应 RFC~8446 §\,7.5），使用标签 \texttt{"EXPORTER FOR TOR TLS CLIENT BINDING AUTH0003"} 和一个上下文。原本设计意图是把发起方的 Ed25519 身份作为上下文，但实现误用了 CID，也就是 RSA 身份指纹。由于这个错误并没有削弱安全性，规范选择记录真实实现行为，而不是修改已经广泛部署的协议。这是一个很有代表性的例子：对已经存在数千个部署实例的协议来说，真实代码行为有时会反过来成为标准。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{NETINFO：时间与地址}\label{sec:canale-netinfo}
+
+双方发送的最后一条握手信元是 \cella{NETINFO}。它是定长信元（command 8），载荷如下：
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}ll>{\raggedright\arraybackslash}X@{}}
+\toprule
+字段 & 字节 & 内容 \\
+\midrule
+TIME & 4 & Unix epoch 起的秒数，大端序 \\
+OTHERADDR & 2 + ALEN & 发送方眼中对端的地址 \\
+NMYADDR & 1 & 发送方自身地址数量 \\
+MYADDR & NMYADDR $\times$ (2 + ALEN) & 发送方自己的地址 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+每个地址编码为：一个字节的类型（IPv4 为 \texttt{0x04}，IPv6 为 \texttt{0x06}）、一个长度字节（4 或 16）以及地址值。这些字段有两个用途：
+\begin{itemize}
+  \item \textbf{时间}可以帮助发现时钟错误：如果中继发来的时间与本机相差超过一小时，tor 会记录警告（\file{src/core/or/channeltls.c} 中的 \file{NETINFO\_NOTICE\_SKEW}）。
+  \item \textbf{地址}让中继发现自己从外部看起来使用的公网地址；同时也允许发起方检查自己是否通过中继的某个\emph{规范地址}到达它，也就是描述符中发布的地址。
+\end{itemize}
+
+\begin{attenzione}[客户端不会泄露自己的时钟]
+中继会发送自己的时间和地址；客户端则应把时间写成 \texttt{00 00 00 00}，同时不发送任何自身地址。原因是\emph{指纹识别}：计算机时钟几乎总存在微小而具有一定稳定性的偏移。如果客户端把自己的时间交给每个守卫，这种偏移可能帮助守卫长期识别同一客户端。这里体现了一条贯穿全书的原则：Tor 客户端不应泄露任何非严格必需的信息。
+\end{attenzione}
+
+无符号四字节 TIME 字段将在 2106 年溢出；\proposta{338} 讨论了把它扩展到八字节。收到 \cella{NETINFO} 的一方也不应盲目信任其中的值：对端完全可以在时间或地址字段上撒谎。
+
+下面是实验~1 解码从中继 \texttt{test003r} 收到的 \cella{NETINFO}：
+
+\begin{lstlisting}[numbers=none]
+Netinfo(timestamp=1790511791, peer_address='127.0.0.1',
+        my_addresses=['127.0.0.1'])
+\end{lstlisting}
+
+这个时间对应 2026 年 9 月 27 日 12:23:11 UTC。两个地址都是 loopback，因为整张实验网络都运行在同一台计算机上。我们的回复由 \file{client\_netinfo\_cell} 构造，载荷为 \texttt{00000000 04 04 7f000001 00}：时间为零，随后是中继地址，最后表示客户端不提供自己的地址。
+
+% ---------------------------------------------------------------------------
+\section{握手之后}\label{sec:canale-dopo}
+
+到这里，通道已经\emph{打开}，可以开始承载电路。一个很简单的实验会揭示一个有趣细节：如果打开通道后不创建任何电路，只保持监听，中继什么都不会发送。在我们的实验中，连续十五秒没有收到任何信元。
+
+这看起来有些意外，因为我们可能预期出现 \cella{PADDING}。从链路协议第~5 版开始，客户端与守卫会在空闲通道上以 1.5 到 9.5 秒之间的随机间隔交换填充信元，使网络观察者——例如只记录 NetFlow 统计的路由器——难以区分“活动时段”和“静默时段”~\spec{padding-spec}{Connection-level padding}。tor 源代码解释了为什么这里没有发生。决定是否填充通道的函数 \file{channelpadding\_decide\_to\_pad\_channel}（\file{src/core/or/channelpadding.c}）只会对已经用于\emph{完整电路}或用户流量的通道启用 padding。
+
+从中继一侧看，只有真正有多跳电路经过通道之后，才会认为该通道满足这一条件：例如收到第一条用于向第二跳扩展的 \cella{RELAY\_EARLY}，或者某条仍要继续越过当前中继的电路上的 \cella{RELAY}（\file{src/core/or/relay.c}）。因此，新通道保持静默；只承载单跳电路的通道也一样，后者将在 \cref{cap:09-circuiti} 中实际观察到。等到 \cref{cap:10-cifratura-relay} 中客户端把电路扩展到多跳后，padding 才会出现。
+
+这个小实验还带来一个方法论上的教训：\emph{没有观察到某个现象，并不等于证明它不存在}。在断言 padding 没有工作之前，必须先确认触发 padding 的前提条件是否真的满足。
+
+% ---------------------------------------------------------------------------
+\section{实验：打开并验证一条通道}\label{sec:lab-canale}
+
+\begin{laboratorio}[1]{向中继打开通道并验证其身份}
+\textbf{目标。} 编写 \file{labs/zh-Hans/代码/torlab/channel.py}，让它像 Tor 客户端一样打开通道：建立 TLS，发送 \cella{VERSIONS}，验证 \cella{CERTS}，读取 \cella{AUTH\_CHALLENGE} 和 \cella{NETINFO}，最后发送自己的 \cella{NETINFO}。\\
+\textbf{前置条件。} 实验~2（\file{cells.py}，\cref{cap:08-celle}）：信元处理是通道的基础，因此实现时先写它更合理，尽管书中会在下一章才正式介绍。这里“讲解顺序”是自顶向下（先通道、后信元），而“实现顺序”则自底向上（先信元、后通道），两者相反是正常的。还需要已经运行的实验网络（\cref{cap:19-rete-privata}），以及用于 Ed25519 的 \texttt{cryptography} 库。\\
+\textbf{预计时间。} 2--3 小时。
+\end{laboratorio}
+
+\paragraph{步骤 1：解码 Ed25519 证书。} 按照 \cref{fig:cert-ed}，先读取定长头部，再解析扩展，并保留签名实际覆盖的字节：
+
+\begin{lstlisting}[language=Python]
+def decode_ed_certificate(data):
+    if len(data) < 40 + 64 or data[0] != 1:
+        raise ChannelError("证书格式错误")
+    _, kind, expiration, key_type = struct.unpack(">BBIB", data[:7])
+    key = data[7:39]
+    extension_count, pos, extensions = data[39], 40, {}
+    for _ in range(extension_count):
+        length, extension_type, flag = struct.unpack(">HBB", data[pos:pos+4])
+        body = data[pos+4:pos+4+length]
+        if extension_type != 4 and flag & 1:     # AFFECTS_VALIDATION
+            raise ChannelError("未知扩展影响证书验证")
+        extensions[extension_type] = (flag, body)
+        pos += 4 + length
+    return EdCertificate(kind, expiration, key_type, key,
+                         extensions, data[:pos], data[pos:])
+\end{lstlisting}
+
+\paragraph{步骤 2：验证证书链。} 下面的函数实现 \cref{sec:canale-verifica} 中的规则，并返回已经得到证明的身份：
+
+\begin{lstlisting}[language=Python]
+def verify_responder_identity(certificates, cert_tls_der):
+    id_v_sign = decode_ed_certificate(certificates[4])
+    sign_v_tls = decode_ed_certificate(certificates[5])
+    identity = id_v_sign.signing_key               # extension 4
+    id_v_sign.verify_signature(identity)           # self-signed
+    sign_v_tls.verify_signature(id_v_sign.certified_key)
+    if sign_v_tls.certified_key != sha256(cert_tls_der).digest():
+        raise ChannelError("TLS 证书不匹配")
+    for c in (id_v_sign, sign_v_tls):
+        if c.expired():
+            raise ChannelError("证书已过期")
+    return identity
+\end{lstlisting}
+
+使用 \file{sock.getpeercert(binary\_form=True)} 从 socket 取得 DER 格式 TLS 证书。即便这里没有采用标准 TLS CA 流程验证证书，Python 仍会返回它。
+
+\paragraph{步骤 3：执行握手。} \file{open\_channel} 发送 \cella{VERSIONS}，声明支持版本 4 和 5（与 Arti 一样，不再提供 3）。随后不断读取信元，直到收到 \cella{NETINFO}：第一条之后的 \cella{VERSIONS} 以及 \cella{VPADDING} 会被忽略，其他任何意外类型都会被拒绝。最后验证证书、把对端身份与预期身份比较，并发送客户端自己的 \cella{NETINFO}。完整代码在仓库中，核心循环如下：
+
+\begin{lstlisting}[language=Python]
+while netinfo is None:
+    cell, buffer = _read(sock, buffer, version)
+    if cell.command == CellCommand.VERSIONS:
+        if version:
+            continue
+        version = negotiate_version(SUPPORTED_VERSIONS, cell.body)
+    elif cell.command == CellCommand.CERTS:
+        certificates = decode_certs(cell.body)
+    elif cell.command == CellCommand.AUTH_CHALLENGE:
+        ...                                    # 接受的认证方法
+    elif cell.command == CellCommand.NETINFO:
+        netinfo = decode_netinfo(cell.body)
+    elif cell.command != CellCommand.VPADDING:
+        raise ChannelError("握手期间收到意外 cell")
+\end{lstlisting}
+
+\paragraph{步骤 4：不连接网络的测试。} 在 \file{labs/zh-Hans/代码/torlab/test/test\_channel.py} 中生成两把 Ed25519 密钥，构造有效证书链并确认代码接受它。然后按照规范逐一破坏证书链：篡改签名、使用未被认证的签名密钥、更换 TLS 证书、制造过期证书、重复 CertType，并确认每一种缺陷都会被检测出来。只测试“合法输入能够通过”几乎证明不了验证器的正确性：一个无条件接受任何输入的错误验证器同样能通过这种测试。
+
+\paragraph{步骤 5：连接实验网络。} 实验网络运行后执行：
+
+\begin{lstlisting}[language=Python]
+from torlab.channel import open_channel, identity_from_file
+
+expected = identity_from_file("labs/zh-Hans/实验室/net/nodes/003r/fingerprint-ed25519")
+c = open_channel("127.0.0.1", 5103, expected_identity=expected)
+print(c.version, c.ed_identity.hex(), c.netinfo, c.auth_methods)
+print(c.registry)
+\end{lstlisting}
+
+缩略输出如下：
+
+\begin{lstlisting}[numbers=none]
+5 785d3199f21d20ad...  Netinfo(time=1790511793, ...)  [3]
+['TLS TLSv1.3 TLS_AES_256_GCM_SHA384', '<- VERSIONS（6 字节）',
+ '<- CERTS（1451 字节）', '<- AUTH_CHALLENGE（36 字节）',
+ '<- NETINFO（509 字节）', '-> NETINFO：通道已打开']
+\end{lstlisting}
+
+如果改连端口 5104（中继 \texttt{test004r}），却仍期待另一个中继的身份，应得到正确错误：\texttt{中继身份与预期身份不同}。
+
+% ---------------------------------------------------------------------------
+\section*{小结}
+\begin{itemize}
+  \item 通道是两个相邻节点之间的 TLS 会话。只有中继接受通道，而一条通道可以承载多条电路。
+  \item 中继的主要身份是 Ed25519 密钥 \file{KP\_relayid\_ed}，它认证签名密钥 \file{KP\_relaysign\_ed}；RSA 身份仍为了兼容而存在。
+  \item 中继 TLS 证书是自签名的。真正的身份认证在通道内部通过 \cella{CERTS} 完成，证书链把长期身份、签名密钥和 TLS 证书指纹绑定起来。
+  \item 发起方必须验证签名、过期时间、TLS 绑定以及\textbf{预期身份}。
+  \item 主动发起通道的公共中继使用 \cella{AUTHENTICATE} 认证自己；该签名绑定 TLS 会话和此前通信。客户端和网桥不认证自己，以避免产生可长期识别的身份。
+  \item \cella{NETINFO} 结束握手。客户端发送零时间戳，并且不发送自己的地址。
+  \item 链路 padding 只有在通道已经承载过\emph{完整}电路或用户流量后才会启动。新通道或只承载单跳电路的通道保持静默。一旦越过这个门槛，即使在第一份应用数据出现前也会开始 padding（\texttt{nf\_pad\_before\_usage}，默认值 1）。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:07-ruoli}
+为什么 Tor 客户端不需要面向网络的监听端口？在什么情况下中继会主动发起通道？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:07-scadenza}
+某张 Ed25519 证书的 EXPIRATION\_DATE 为 \texttt{0x000772F7}。它会在何时过期？为什么规范选择“小时”而不是“秒”作为单位？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:07-authchallenge}
+一条 \cella{AUTH\_CHALLENGE} 的载荷长 38 字节。它提供多少种方法？如果一条 36 字节信元的 N\_Methods 等于 2，这是否合法？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-impostore}
+攻击者记录了真实中继的一条 \cella{CERTS}，然后在自己的服务器上原样重放，但 TLS 层展示自己的证书。验证过程中的哪一步会失败？如果攻击者同时展示真实中继的 TLS 证书，又会怎样？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-netinfo}
+一个中继位于 \texttt{203.0.113.5}，在 2026 年 1 月 1 日 12:00:00 UTC 向从 \texttt{198.51.100.7} 连接来的客户端发送 \cella{NETINFO}。写出该信元载荷的十六进制表示。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-client-auth}
+假设 Tor 客户端用一把只生成一次并长期保存在磁盘上的密钥向守卫认证。请描述两种这种设计会具体损害用户匿名性的方式。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-rsa}
+按照 \cref{sec:canale-certs}，为 \file{labs/zh-Hans/代码/torlab/channel.py} 增加可选的 RSA 身份验证（类型 2 和 7）。把得到的 RSA 公钥 SHA-1 指纹与中继的 \file{fingerprint} 文件比较。\emph{提示：}指纹是公钥 DER 编码的 SHA-1。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:07-padding}
+启动实验网络后，用 \file{labs/zh-Hans/代码/torlab/channel.py} 打开一条通道并保持它处于打开状态，同时让客户端 \texttt{test008c} 通过实验网络下载一个页面。\emph{你的}通道会收到 \cella{PADDING} 吗？先提出假设，再进行实验，并结合 \file{channelpadding\_decide\_to\_pad\_channel} 解释结果。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:07-mitm}
+解释为什么 \cella{AUTHENTICATE} 中的 TLSSECRETS 字段能够阻止中间人把中继 $A$ 的认证通过另一条 TLS 会话转发给中继 $B$，即使中间人忠实转发每一个信元。如果没有 TLSSECRETS，会发生什么？
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification} 中的 \enquote{Channels}、\enquote{Negotiating and initializing channels} 和 \enquote{Relay keys} 章节，以及 \titolo{Tor certificate formats}（cert-spec）~\cite{torspec}。
+  \item 提案 220，\titolo{Migrate server identity keys to Ed25519}：从 RSA 迁移的原因。
+  \item padding 规范中的 \titolo{Tor channel padding}：基于 NetFlow 的对手模型与时间间隔选择。
+  \item RFC~5705 与 RFC~8446（§\,7.5）：TLS \titolo{keying material exporter} 函数。
+\end{itemize}

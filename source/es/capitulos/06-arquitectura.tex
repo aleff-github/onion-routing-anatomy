@@ -1,0 +1,131 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Arquitectura de la red}\label{cap:06-architettura}
+\aggiornatoal{23 de septiembre de 2026}{tor 0.4.9.13; consenso público del 23 de septiembre de 2026, 15:00 UTC}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item enumerar las funciones de los nodos de la red Tor y sus responsabilidades;
+  \item describir las capas del protocolo, desde el canal TLS hasta el flujo de una aplicación;
+  \item seguir, a grandes rasgos, lo que ocurre cuando alguien abre una página web mediante Tor;
+  \item comprender cómo conviven diferentes implementaciones y versiones en una misma red.
+\end{itemize}
+\end{obiettivi}
+
+Antes de examinar los detalles de los capítulos siguientes necesitamos una visión general de la red. Este capítulo es un mapa: volveremos sobre todos sus elementos con mayor profundidad y con referencias a las secciones correspondientes.
+
+% ---------------------------------------------------------------------------
+\section{Funciones de los nodos}\label{sec:arch-ruoli}
+
+La red Tor está formada por programas que desempeñan diferentes funciones, a menudo más de una al mismo tiempo. La \cref{fig:arch-ruoli} ofrece una visión de conjunto.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig06-roles}
+\caption{Funciones dentro de la red Tor. El cliente construye un circuito a través de un guardia, un repetidor intermedio y una salida. Las autoridades de directorio publican el consenso que enumera los repetidores. Los puentes sustituyen a los guardias para quienes sufren censura. A los servicios onion se accede mediante un punto de encuentro, sin utilizar una salida.}
+\label{fig:arch-ruoli}
+\end{figure}
+
+\begin{description}
+  \item[Cliente] Programa del usuario, como el incluido en Tor Browser. Elige rutas, construye circuitos y ofrece a las aplicaciones un puerto SOCKS. No acepta conexiones entrantes desde la red ni se autentica ante ella (\cref{cap:07-canali}).
+  \item[Repetidor] Nodo que reenvía tráfico de terceros. Según los indicadores que le asignen las autoridades de directorio y su configuración, puede desempeñar las funciones siguientes:
+  \begin{itemize}
+    \item \textbf{guardia}: primer salto de los circuitos de un cliente; se selecciona y mantiene durante un período prolongado (\cref{sec:guard});
+    \item \textbf{intermedio}: salto que no conoce ni el origen ni el destino;
+    \item \textbf{salida}: último salto, que establece conexiones con Internet según su política de salida (\cref{cap:11-stream});
+    \item \textbf{HSDir}: almacena descriptores de servicios onion (\cref{sec:os-hsdir});
+    \item \textbf{caché de directorio}: redistribuye el consenso y los descriptores (\cref{cap:12-directory}).
+  \end{itemize}
+  \item[Autoridad de directorio] Nueve servidores de confianza que votan cada hora sobre el estado de la red y firman el consenso; algunos también miden el ancho de banda de los repetidores.
+  \item[Puente] Repetidor no publicado, utilizado como primer salto por personas que no pueden acceder a los repetidores públicos, a menudo mediante un transporte conectable (\cref{cap:16-censura}).
+  \item[Servicio onion] Servicio accesible únicamente a través de Tor, sin revelar su ubicación (\cref{cap:14-onion-services}).
+\end{description}
+
+En el consenso público del 23 de septiembre de 2026 aparecen 9358 repetidores: 5306 con el indicador \texttt{Guard} y 3177 con el indicador \texttt{Exit} (1615 tienen ambos). Los guardias representan el 70\,\% del ancho de banda total, mientras que las salidas concentran el 33\,\% (\cref{cap:13-percorso}).
+
+% ---------------------------------------------------------------------------
+\section{Capas del protocolo}\label{sec:arch-livelli}
+
+El protocolo Tor puede describirse como una pila de capas, cada una construida sobre la inferior (\cref{fig:arch-livelli}).
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig06-niveles}
+\caption{Capas del protocolo Tor y capítulos que las explican. Cada capa utiliza la inferior: los flujos viajan como mensajes relay, estos mensajes se transportan dentro de celdas cifradas por capas y las celdas circulan por canales TLS.}
+\label{fig:arch-livelli}
+\end{figure}
+
+\begin{description}
+  \item[Canal] Conexión TLS entre dos nodos adyacentes, mediante la que se verifica la identidad del repetidor (\cref{cap:07-canali}).
+  \item[Celdas] Unidades de transmisión de 514 bytes transportadas por un canal (\cref{cap:08-celle}).
+  \item[Circuito] Ruta de múltiples saltos construida uno a uno mediante intercambios que derivan claves distintas para cada salto (\cref{cap:09-circuiti}).
+  \item[Cifrado por capas] Mensajes relay envueltos en una capa de cifrado por cada salto (\cref{cap:10-cifratura-relay}).
+  \item[Flujo] Conexión TCP de aplicación abierta por la salida y gestionada mediante ventanas y control de congestión (\cref{cap:11-stream}).
+\end{description}
+
+Junto a esta pila están el sistema de directorios, que proporciona a los clientes la lista de repetidores, y el protocolo de servicios onion, que utiliza circuitos para reunirse en un punto de encuentro.
+
+% ---------------------------------------------------------------------------
+\section{Una página web, de principio a fin}\label{sec:arch-percorso}
+
+Sigamos, en términos generales, lo que sucede cuando alguien inicia Tor Browser por primera vez y abre una página.
+
+\begin{enumerate}
+  \item \textbf{Inicio.} \texttt{tor} contacta con una autoridad de directorio o con uno de los aproximadamente doscientos \emph{directorios de reserva} (\emph{fallback directories}) incluidos en su código fuente y descarga el consenso, cuyas firmas verifica. A continuación descarga los microdescriptores de los repetidores (\cref{cap:12-directory}).
+  \item \textbf{Selección de guardias.} Selecciona al azar una pequeña muestra de guardias, con probabilidades ponderadas por ancho de banda, y utiliza dos de ellos (\cref{sec:guard}).
+  \item \textbf{Canal.} Abre una conexión TLS con un guardia y verifica su identidad mediante celdas \cella{CERTS} (\cref{cap:07-canali}).
+  \item \textbf{Circuito.} Selecciona una salida apropiada para el destino y un repetidor intermedio, y construye un circuito de tres saltos con \cella{CREATE2} y \texttt{EXTEND2} (\cref{cap:09-circuiti,cap:13-percorso}). En la práctica, \texttt{tor} construye algunos circuitos por adelantado para tenerlos listos cuando hagan falta.
+  \item \textbf{Flujo.} A través del puerto SOCKS, el navegador solicita una conexión a \texttt{www.\allowbreak example.\allowbreak com:443}. \texttt{tor} envía un mensaje \texttt{BEGIN} a la salida, que resuelve el nombre y abre una conexión TCP (\cref{cap:11-stream}).
+  \item \textbf{Datos.} El navegador se comunica con el sitio web mediante HTTPS a través del flujo. La salida conoce el nombre del sitio y ve el tráfico TLS, pero no quién lo solicitó. El guardia sabe quién hizo la solicitud, pero no qué se pidió. El repetidor intermedio no conoce ninguno de los extremos.
+\end{enumerate}
+
+El proceso completo de inicio normalmente tarda solo unos segundos. Muchos de los mecanismos descritos más adelante, entre ellos el relleno, el control de congestión y los Vanguards, funcionan discretamente alrededor de esta secuencia.
+
+% ---------------------------------------------------------------------------
+\section{Implementaciones y versiones}\label{sec:arch-versioni}
+
+\subsection{Dos implementaciones}
+
+La implementación histórica es \textbf{tor}, escrita en C, y desempeña todas las funciones: cliente, repetidor, autoridad y servicio onion. Junto a ella, el Tor Project desarrolla \textbf{Arti}, una reimplementación en Rust (\cref{cap:30-arti}), que actualmente se utiliza como cliente y para servicios onion. En el consenso público del 23 de septiembre de 2026, ningún repetidor utiliza Arti: 6027 ejecutan tor 0.4.9.12, 2520 ejecutan 0.4.9.11 y la mayoría de las versiones restantes corresponden a versiones anteriores de la serie 0.4.9. Cuarenta y siete repetidores ejecutan la versión de desarrollo 0.5.0.0-alpha-dev.
+
+\subsection{Subprotocolos}
+
+¿Cómo puede una red de miles de nodos, actualizados en momentos diferentes, introducir nuevas funcionalidades? Tor no se basa en los números de versión del programa para resolverlo. En su lugar, utiliza \textbf{subprotocolos}: cada funcionalidad pertenece a un subprotocolo con su propio número de versión y cada repetidor declara los números que admite en la línea \texttt{pr} del consenso~\spec{tor-spec}{Subprotocol-based versioning}. Por ejemplo, un repetidor de la red pública declara:
+\begin{lstlisting}[numbers=none]
+pr Conflux=1 Cons=1-2 Desc=1-4 DirCache=2 FlowCtrl=1-2 HSDir=2 HSIntro=4-5
+   HSRend=1-2 Link=3-5 LinkAuth=3 Microdesc=1-3 Padding=2 Relay=2-6
+\end{lstlisting}
+
+Un cliente que quiera utilizar ntor-v3 con un repetidor comprueba si anuncia \texttt{Relay=4}; CGO exige \texttt{Relay=6} y el control de congestión requiere \texttt{FlowCtrl=2}. Estos números identifican \emph{capacidades} independientes, no versiones acumulativas: \texttt{Relay=6} no implica formalmente \texttt{Relay=4} (\proposta{346}, que prefiere por ello la expresión \enquote{capacidades de subprotocolo}). En la práctica, \texttt{tor} las anuncia como un intervalo continuo porque implementa las funcionalidades en orden. El consenso también enumera los subprotocolos \emph{obligatorios}: si una versión de \texttt{tor} no los admite, reconoce que es demasiado antigua y se niega a funcionar, en lugar de poner en peligro a sus usuarios.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item La red consta de clientes, repetidores (guardias, intermedios, salidas, HSDir y cachés de directorio), autoridades de directorio, puentes y servicios onion.
+  \item El protocolo se organiza por capas: canales TLS, celdas, circuitos, cifrado por capas y flujos.
+  \item Un guardia conoce al usuario, pero no el destino; una salida conoce el destino, pero no al usuario.
+  \item \texttt{tor} (C) y Arti (Rust) conviven. Las funcionalidades se negocian mediante subprotocolos anunciados en la línea \texttt{pr} del consenso.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:06-vista}
+Para cada función (guardia, intermedio, salida, HSDir y autoridad de directorio), indica qué sabe sobre un usuario que visita un sitio web mediante Tor.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:06-pr}
+Según la línea \texttt{pr} mostrada en este capítulo, ¿qué funcionalidades de los capítulos 9--11 admite el repetidor? ¿Podría utilizarse como salida con CGO?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:06-livelli}
+Se descarga mediante Tor una página web de 100\,KB. Estima, capa por capa, cuántos bytes atraviesan el enlace entre el cliente y el guardia, teniendo en cuenta las celdas, los encabezados de los mensajes relay y SENDME.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item R.~Dingledine, N.~Mathewson y P.~Syverson, \titolo{Tor: The Second-Generation Onion Router}~\cite{dingledine2004tor}: la arquitectura original, que en gran parte sigue siendo válida.
+  \item Tor Metrics, \url{https://metrics.torproject.org/}: cifras actualizadas de repetidores, usuarios y versiones.
+\end{itemize}

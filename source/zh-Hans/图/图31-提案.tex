@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% EPUB 无障碍替代文本。
+\altfig{根据 Tor 提案 001 制作的非穷尽教学状态图。上方展示一条可能但非必经的路径：Draft、Open、Accepted、Finished（已实现）、Closed（已纳入规范）。下方另列 Needs-Revision（需要修订）、Needs-Research（尚需研究）、Dead（长期停滞，可重新开启）、Rejected（不采纳所述方案）及 Informational（最终的信息性文档，本身不构成规范）。还存在 Meta、Reserve、Obsolete 等未绘出的状态。英文状态名称保留为官方标识符。}
+% Tor 提案生命周期（001-process）
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.55cm,
+  st/.style={draw=torviola,fill=torviola!8,rounded corners=2pt,minimum width=1.6cm,minimum height=0.6cm},
+  lat/.style={draw=torgrigio,fill=torgrigio!8,rounded corners=2pt,minimum width=1.6cm,minimum height=0.55cm}]
+  \node[st] (d) {Draft};
+  \node[st,right=of d] (o) {Open};
+  \node[st,right=of o] (a) {Accepted};
+  \node[st,right=of a] (f) {Finished};
+  \node[st,right=of f] (c) {Closed};
+  \node[above=0.25cm of a,text=torgrigio] {可能路径，并非必经};
+  \draw[->] (d) -- (o); \draw[->] (o) -- (a); \draw[->] (a) -- (f); \draw[->] (f) -- node[above] {纳入规范 } (c);
+  \node[lat,below=0.8cm of o,xshift=-1.2cm] (nr) {Needs-Revision};
+  \node[lat,right=0.3cm of nr] (ns) {Needs-Research};
+  \node[lat,right=0.3cm of ns] (dead) {Dead};
+  \node[lat,right=0.3cm of dead] (rej) {Rejected};
+  \node[below=0.22cm of ns,text=torgrigio,align=center] {其他状态，并非连续流程};
+  \node[lat,below=0.85cm of nr] (inf) {Informational};
+  \node[below=0.1cm of inf,text=torgrigio,align=center] {信息性文档\\本身并非规范};
+\end{tikzpicture}

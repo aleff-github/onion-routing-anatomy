@@ -1,0 +1,39 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Prefacio}
+
+Millones de personas utilizan Tor cada día y, sin embargo, casi siempre se habla de él en función de sus usos, reales o supuestos: eludir la censura, proteger las fuentes de información o acceder a la \enquote{web oscura}. Este libro adopta otro enfoque: explica cómo funciona Tor. Parte de los bytes que intercambian dos repetidores y avanza, capítulo a capítulo, hasta las decisiones de diseño, los ataques, los casos reales y las preguntas que siguen abiertas. Además, no pide al lector que acepte sus afirmaciones sin comprobarlas: cada mecanismo descrito en la parte técnica se construye y se pone a prueba en un laboratorio, dentro de una red Tor privada que puede ejecutarse en un ordenador corriente.
+
+\section*{Origen, método e invitación a revisar}
+
+Este libro parte de apuntes y documentos de estudio que he elaborado a lo largo de los años, desde mi trabajo de fin de grado. Para convertir esos materiales en una obra técnica coherente, dirigí el uso de herramientas de inteligencia artificial que contribuyeron de forma sustancial a desarrollar las explicaciones, argumentar y redactar el texto, y crear figuras, ejercicios, código y laboratorios. La IA no se utilizó solo para pulir mi redacción ni sustituye una revisión independiente de expertos.
+
+A pesar de las comprobaciones técnicas y de mi propia revisión, puede haber errores, simplificaciones o información desactualizada. Invito a quien lea el libro a señalarlos y proponer correcciones mediante el repositorio del proyecto. He decidido ofrecer gratuitamente la obra por los canales oficiales, junto con sus fuentes bajo la licencia GNU GPL-3.0-or-later, para favorecer la \enquote{diffusione dei saperi senza fondare poteri}: difundir conocimientos sin instaurar poderes. La licencia regula también la redistribución comercial.
+
+\section*{A quién va dirigido este libro}
+
+Este libro está pensado para estudiantes de informática y ciberseguridad, profesionales que encuentran Tor en su trabajo, personas que administran o desean administrar un repetidor e investigadores. Para seguirlo conviene contar con conocimientos básicos de redes (TCP/IP y los fundamentos de TLS), cierta familiaridad con la línea de comandos y, para realizar los laboratorios, Python. La criptografía necesaria se presenta en \cref{cap:05-crittografia}, con explicaciones adicionales en \cref{cap:B-crittografia}.
+
+\section*{Cómo leer este libro}
+
+La obra está dividida en cinco partes. Puede leerse de principio a fin o siguiendo uno de estos recorridos:
+\begin{description}
+  \item[Recorrido histórico y conceptual] Parte I (capítulos 1--4) y parte V (capítulos 29--31): qué significa el anonimato, de dónde procede Tor, frente a qué adversarios ofrece protección y hacia dónde evoluciona.
+  \item[Recorrido por el protocolo] Parte II (capítulos 5--16), que conviene leer en orden y acompañar con los laboratorios: constituye el núcleo de la obra.
+  \item[Recorrido práctico] Parte III (capítulos 17--25): configurar \texttt{tor}, observar su tráfico, publicar un servicio onion, administrar un repetidor, utilizar Tor Browser, medir la red y comprender sus implicaciones jurídicas. El \cref{cap:19-rete-privata} es un requisito previo para todos los laboratorios.
+  \item[Recorrido de seguridad] Parte IV (capítulos 26--28), precedida del \cref{cap:04-modello-minaccia}: ataques examinados a través de investigaciones, casos reales y errores operativos.
+\end{description}
+
+\section*{Convenciones}
+
+Cada capítulo comienza con sus objetivos de aprendizaje y una indicación de \emph{Última verificación}, que especifica la fecha y las versiones del software y de las especificaciones utilizadas para comprobar el contenido. Tor evoluciona, y el lector debe saber a qué versión se refiere el texto. A lo largo del libro, \emph{Tor} designa la red y el proyecto; \emph{tor}, el programa escrito en C; y \emph{Arti}, la implementación en Rust. Las referencias a las especificaciones se presentan como \spec{document}{section}; las propuestas de modificación del protocolo se identifican por su número. Los términos técnicos empleados en esta edición se definen en el \cref{cap:A-glossario}.
+
+Los recuadros separan el hilo principal de las digresiones: \emph{explicaciones en profundidad}, \emph{notas históricas} y \emph{advertencias}. Los ejercicios se clasifican mediante estrellas: una para comprensión, dos para aplicación y tres para una actividad de laboratorio o un pequeño proyecto de investigación. Sus soluciones aparecen en el \cref{cap:D-soluzioni}. Los laboratorios están numerados del 1 al 20. En la parte II se construye progresivamente un pequeño cliente Tor en Python (\texttt{torlab}); el código y la red de laboratorio acompañan al libro, y las pruebas automatizadas pueden volver a ejecutarse tras las actualizaciones. Todos estos recursos ---el paquete \texttt{torlab}, los veinte laboratorios, la red de pruebas con Docker y las herramientas de verificación--- se encuentran en el repositorio del libro: \repolibro.
+
+\section*{Nota ética}
+
+Todos los experimentos de este libro se realizan en la red Tor privada del laboratorio o utilizan la red pública únicamente como lo haría un cliente ordinario, sin observar ni modificar el tráfico ajeno. Este es el principio recomendado a los investigadores por el Tor Research Safety Board y también tiene implicaciones jurídicas (\cref{cap:25-legale}). Los capítulos sobre ataques adoptan una perspectiva analítica y defensiva: explican qué se ha hecho y cómo protegerse, no cómo atacar a otras personas.
+
+\section*{Agradecimientos}
+
+Este libro se apoya en el trabajo del Tor Project y de su comunidad. Las especificaciones abiertas, el código fuente de \texttt{tor} y Arti, las propuestas de modificación del protocolo y la documentación son la base de las afirmaciones técnicas que siguen. Su disponibilidad pública permite contrastarlas con las fuentes en lugar de exigir al lector un acto de confianza. También merecen reconocimiento quienes desarrollan y mantienen las herramientas libres empleadas para escribir el libro y comprobar sus laboratorios: \LaTeX{}, Python, Docker, Chutney, Wireshark y los demás proyectos citados a lo largo de la obra.

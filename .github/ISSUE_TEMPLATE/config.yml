@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Security problem · Problema di sicurezza"
+    url: https://github.com/aleff-github/onion-routing-anatomy/blob/main/SECURITY.md
+    about: "Do not open a public issue: report it privately. · Non aprire una issue pubblica: segnalalo in privato."
+  - name: "How to contribute · Come contribuire"
+    url: https://github.com/aleff-github/onion-routing-anatomy/blob/main/CONTRIBUTING.md
+    about: "Pull requests, translation review, checks. · Pull request, revisione delle traduzioni, controlli."
+  - name: "Problems in tor, Arti or the Tor specifications · Problemi in tor, Arti o nelle specifiche"
+    url: https://gitlab.torproject.org/
+    about: "This project is independent: report those to the Tor Project. · Questo progetto è indipendente: vanno segnalati al Tor Project."

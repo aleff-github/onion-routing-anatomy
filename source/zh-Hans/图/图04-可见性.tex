@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% 简体中文版 EPUB 替代文本。
+\altfig{Tor 电路从客户端依次经过守卫、中间和出口中继到达目标网站。中继及网站下方的方框表示在没有应用层信息泄露时的网络层可见性：守卫看到客户端的来源 IP，出口知道目的地，中间中继不知道任何一个端点。网站看到的是出口 IP，而不是客户端 IP；同时观察入口和出口仍可能关联流量。}
+% 电路路径上的每个观察点分别知道什么。
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  sa/.style={fill=avviso!15,draw=avviso!60,rounded corners=1pt,minimum height=0.5cm,minimum width=1.5cm},
+  no/.style={fill=torverde!12,draw=torverde!50!black,rounded corners=1pt,minimum height=0.5cm,minimum width=1.5cm}]
+  \node[client,minimum width=1.5cm,minimum height=0.7cm] (c) at (0,0) {客户端};
+  \node[relay,minimum size=0.9cm] (g) at (2.6,0) {守卫};
+  \node[relay,minimum size=0.9cm] (m) at (5.2,0) {中间中继};
+  \node[relay,minimum size=0.9cm,fill=torverde!30] (e) at (7.8,0) {出口};
+  \node[server,minimum width=1.5cm,minimum height=0.7cm] (s) at (10.4,0) {网站};
+  \draw[cellaf] (c) -- (g); \draw[cellaf] (g) -- (m); \draw[cellaf] (m) -- (e);
+  \draw[->,thick,torgrigio] (e) -- (s);
+  \node[font=\sffamily\tiny,anchor=east,align=right] at (-1.0,-1.1) {知道\\客户端};
+  \node[font=\sffamily\tiny,anchor=east,align=right] at (-1.0,-1.9) {知道\\目的地};
+  \node[sa] at (2.6,-1.1) {是};
+  \node[no] at (5.2,-1.1) {否}; \node[no] at (7.8,-1.1) {否}; \node[no] at (10.4,-1.1) {否};
+  \node[no] at (2.6,-1.9) {否}; \node[no] at (5.2,-1.9) {否};
+  \node[sa] at (7.8,-1.9) {是}; \node[sa] at (10.4,-1.9) {是};
+  \node[align=center,font=\sffamily\tiny,text=avviso] at (5.2,-2.8) {单个 Tor 中继无法同时知道两个端点：\\同时观察入口与出口仍可能关联流量（第 26 章）};
+\end{tikzpicture}

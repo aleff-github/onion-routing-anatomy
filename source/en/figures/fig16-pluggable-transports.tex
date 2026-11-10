@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Simplified pluggable transport architecture: tor connects to the client PT's local SOCKS proxy, which transforms traffic. At the bridge, the server PT reverses the transformation and forwards it to tor via ORPort or, when configured, Extended ORPort. Snowflake uses volunteer intermediary proxies not drawn here. A censor observes transformed traffic on the monitored link, but might still detect it. Examples: obfs4 resembles random bytes, Snowflake uses WebRTC, and WebTunnel resembles HTTPS.}
+% Pluggable transport architecture (pt-spec)
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  proc/.style={draw,rounded corners=2pt,align=center,minimum height=0.8cm,minimum width=1.7cm},
+  mac/.style={draw=torgrigio,dashed,rounded corners=4pt,inner sep=6pt}]
+  \node[proc,fill=torviola!12] (tc) at (0,0) {tor\\(client)};
+  \node[proc,fill=torverde!15] (pc) at (2.6,0) {client PT};
+  \node[proc,fill=torverde!15] (ps) at (8.2,0) {server PT};
+  \node[proc,fill=torviola!12] (tb) at (10.8,0) {tor\\(bridge)};
+  \node[mac,fit=(tc)(pc),label={[font=\sffamily\scriptsize]above:user's computer}] {};
+  \node[mac,fit=(ps)(tb),label={[font=\sffamily\scriptsize]above:bridge}] {};
+  \draw[->] (tc) -- node[above,font=\sffamily\tiny] {SOCKS} (pc);
+  \draw[->] (ps) -- node[above,align=center,font=\sffamily\tiny] {ORPort /\\Extended ORPort} (tb);
+  \draw[->,thick,decorate,decoration={snake,amplitude=1.2pt,segment length=6pt}] (pc) -- node[above] {transformed traffic} (ps);
+  \node[server,minimum width=1.4cm,fill=avviso!10,draw=avviso] (cen) at (5.4,-1.5) {censor};
+  \draw[dotted,avviso] (cen) -- (5.4,-0.15);
+  \node[text=torgrigio,align=center] at (5.4,-2.3) {random-looking bytes (obfs4),\\WebRTC (Snowflake), HTTPS (WebTunnel)};
+  \node[text=torgrigio,font=\sffamily\tiny,align=center,text width=10.5cm] at (5.4,-3.05) {Simplified: Snowflake uses intermediary volunteer proxies not shown};
+\end{tikzpicture}

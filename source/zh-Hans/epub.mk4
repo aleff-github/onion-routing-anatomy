@@ -1,0 +1,14 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
+-- Copyright (C) 2026 Alessandro Greco
+-- tex4ebook/make4ht 构建文件：为 biblatex 参考文献运行 biber。
+Make:add("biber", "biber ${input}")
+Make:htlatex {}
+Make:biber {}
+Make:htlatex {}
+Make:htlatex {}
+Make:htlatex {}
+
+-- 行间公式的替代文本：../shared/epub/display-math-alt.lua。
+local filters = dofile("../shared/epub/epub-filters.lua")
+Make:match("html$", filters.display_math_alt("zh-Hans"))
+Make:match("opf$", filters.without_build_date)

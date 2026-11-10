@@ -1,0 +1,29 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible para el EPUB.
+\altfig{Secuencia ilustrativa del canal TLS cliente–guardia. Tras TLS ambas partes envían VERSIONS con CircID 0; la flecha del guardia agrupa cuatro celdas independientes: VERSIONS, CERTS, AUTH\_CHALLENGE y NETINFO. El cliente envía NETINFO, establece el primer salto mediante CREATE2/CREATED2 y amplía el circuito al intermedio y a la salida con dos RELAY\_EARLY [EXTEND2] y respuestas RELAY [EXTENDED2]. BEGIN aparece dentro de RELAY\_EARLY como ejemplo permitido, no obligatorio; siguen CONNECTED, DATA de solicitud y respuesta, SENDME si procede y DESTROY. El guardia ve las celdas del canal, pero no el texto destinado a saltos posteriores. Los nombres entre corchetes explican los comandos lógicos.}
+% Secuencia de celdas en el canal cliente-guardia.
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth]
+  \node[client] (c) at (0,0) {Cliente};
+  \node[relay] (g) at (7,0) {Guardia};
+  \draw[torgrigio] (c.south) -- ++(0,-12.2);
+  \draw[torgrigio] (g.south) -- ++(0,-12.2);
+  \newcommand{\av}[3]{\draw[cellaf] (0,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (7,#1);
+    \node[font=\scriptsize,text=torgrigio,anchor=west] at (7.4,#1) {#3};}
+  \newcommand{\ind}[3]{\draw[risposta] (7,#1) -- node[above,font=\ttfamily\footnotesize]{#2} (0,#1);
+    \node[font=\scriptsize,text=torgrigio,anchor=west] at (7.4,#1) {#3};}
+  \av{-1.1}{VERSIONS}{CircID 0}
+  \ind{-1.8}{VERSIONS, CERTS, AUTH\_CHALLENGE, NETINFO}{CircID 0}
+  \av{-2.5}{NETINFO}{canal listo}
+  \av{-3.5}{CREATE2}{CircID 0x8\ldots, salto 1}
+  \ind{-4.2}{CREATED2}{}
+  \av{-5.2}{RELAY\_EARLY [EXTEND2]}{hacia intermedio}
+  \ind{-5.9}{RELAY [EXTENDED2]}{}
+  \av{-6.9}{RELAY\_EARLY [EXTEND2]}{hacia salida}
+  \ind{-7.6}{RELAY [EXTENDED2]}{}
+  \av{-8.6}{RELAY\_EARLY [BEGIN]}{flujo al sitio web}
+  \ind{-9.3}{RELAY [CONNECTED]}{}
+  \av{-10.1}{RELAY [DATA]}{solicitud HTTP}
+  \ind{-10.8}{RELAY [DATA] \ldots}{respuesta, SENDME}
+  \av{-11.7}{DESTROY}{fin del circuito}
+\end{tikzpicture}

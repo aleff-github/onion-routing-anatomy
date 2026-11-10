@@ -1,0 +1,411 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{私有 Tor 网络：Chutney 与 Shadow}\label{cap:19-rete-privata}
+\aggiornatoal{2026 年 9 月 23 日}{tor 0.4.9.13；Chutney 提交 \texttt{6cc1588}；Shadow 3.3.0}
+
+\begin{obiettivi}
+学完本章后，你将能够：
+\begin{itemize}[nosep]
+  \item 解释为什么 Tor 实验应在私有网络中运行，而不是在公共网络上进行；
+  \item 使用两条独立命令构建并启动本书所有实验使用的网络；
+  \item 找出测试网络与真实网络之间不同的配置选项；
+  \item 浏览节点状态文件，包括密钥、共识文档和日志；
+  \item 利用 Stem 检查客户端电路，并通过实验网络发送普通 Web 流量和洋葱服务流量；
+  \item 理解什么时候应选用 Shadow 等模拟器，而不是 Chutney 这样的仿真网络。
+\end{itemize}
+\end{obiettivi}
+
+本章虽然放在第三部分，但建议提前阅读：本书所有实验——从 \cref{cap:07-canali} 的实验~1 开始——都运行在这里搭建的网络中。按照第二部分的顺序学习时，可以先阅读 \cref{sec:rp-perche,sec:rp-avvio}，以后再回来学习本章的其他内容。
+
+% ---------------------------------------------------------------------------
+\section{为什么需要私有网络？}\label{sec:rp-perche}
+
+公共 Tor 网络由数千台志愿者运营的中继构成，每天有数百万人使用，其中不少用户依靠它保障自身安全。在该网络上开展实验会产生两个问题：一个涉及伦理，另一个涉及实验方法。
+
+\paragraph{伦理问题。}任何测量、改变，甚至仅仅观察公共网络真实流量的实验，都可能涉及没有同意参与研究的用户，并给他们带来风险。即使看似无害的实验，例如让中继记录超过必要范围的信息，也可能生成一旦泄露就能用于识别某位用户的数据。因此，Tor Project 设立了\emph{Tor Research Safety Board}（Tor 研究安全委员会），审查研究人员的实验计划，并倡导一项基本原则：如果研究问题可以在不涉及真实用户的情况下得到解答，就应当这样做。我们将在 \cref{cap:29-ricerca} 中再次讨论这些原则。
+
+\paragraph{实践问题。}研究人员几乎无法控制公共网络：无法预测会选择哪些中继，电路不断变化，共识每小时更新，实验也难以在完全相同的条件下重复。私有网络则不同：我们能够选择节点数量、读取详细日志，在几分钟内停止和重新启动整个网络，并反复执行实验，直到理解结果。
+
+\begin{attenzione}[实验规则]
+本书凡涉及自行构造 cell、改变节点行为或捕获流量的实践操作，都必须\textbf{仅在私有网络中}进行。教学用的 \file{torlab} 代码不能提供实际的匿名保护，绝不可用于公共 Tor 网络。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{仿真还是模拟？}\label{sec:rp-strumenti}
+
+Tor Project 使用两种方法构建实验网络。
+
+\begin{description}
+  \item[仿真（emulation）] 在同一台计算机上运行多个真正的 \texttt{tor} 进程，进程之间通过环回接口通信。时间是真实时间，运行的是真实代码，网络通信由操作系统负责。这就是 \textbf{Chutney} 的工作方式。Chutney 是 Tor Project 用于 tor 与 Arti 集成测试的工具。
+  \item[模拟（simulation）] 在离散事件模拟器中运行真实程序，由模拟器拦截系统调用，并提供虚拟网络和虚拟时钟。这是为大规模研究 Tor 而开发的 \textbf{Shadow} 所采用的方法~\cite{jansen2012shadow}。
+\end{description}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+ & Chutney（仿真） & Shadow（模拟） \\
+\midrule
+典型规模 & 几个到几十个节点 & 数百到数千个节点 \\
+时间 & 真实时间 & 虚拟时间、可确定性复现 \\
+网络 & 环回接口，没有真实延迟或丢包 & 可配置延迟和带宽的拓扑 \\
+可重复性 & 受操作系统调度影响 & 相同随机种子下可以完整复现 \\
+典型用途 & 开发、测试、教学 & 性能与攻击研究 \\
+本书用途 & 所有实验 & \cref{sec:rp-shadow} 与第五部分 \\
+\bottomrule
+\end{tabularx}
+\caption{Chutney 与 Shadow 的比较。}
+\label{tab:chutney-shadow}
+\end{table}
+
+对于学习协议而言，Chutney 是自然的选择：它轻量、几分钟内便能启动，还允许我们直接与运行中的节点交互。因此本章将重点介绍 Chutney，并在最后简要讨论 Shadow。
+
+% ---------------------------------------------------------------------------
+\section{本书的实验环境}\label{sec:rp-avvio}
+
+为了避免操作系统之间的差异，整个实验环境被封装进一个 Docker 镜像，定义文件位于仓库中的 \file{labs/zh-Hans/实验室/Dockerfile}。镜像会：
+\begin{itemize}
+  \item 从\textbf{官方源代码}编译本书的参考版本 tor 0.4.9.13，并使用 \texttt{--enable-gpl} 启用洋葱服务工作量证明模块（\cref{cap:15-dos}）；
+  \item 安装固定提交版本的 Chutney、Stem，以及 \cref{cap:20-traffico} 使用的流量捕获工具（\cmd{tcpdump}、\cmd{tshark}）。
+\end{itemize}
+固定版本非常重要：一本逐字节解释协议消息的书，应尽量确保读者能观察到与书中相同的字节。
+
+\begin{approfondimento}[tor 发布新版本时怎么办？]
+本章和第二部分展示的输出，来自运行 tor 0.4.9.13（本书参考版本）的实验网络。其中一部分最初在仅早几天发布的上一版本 0.4.9.12 上记录，随后又重新复现：脚本 \file{scripts/verify\_labs.py} 会在实时网络中重新运行全部实验并检查结果，在两个版本上得到相同结论（目前共 53 项检查，网桥实验另有 14 项）。该脚本运行的是意大利语原版的实验，位于 \file{labs/it}；本版的实验代码译自其中，列表中的名称和消息与本版代码一致。只有与单次运行相关的元素会变化：密钥、指纹、\texttt{.onion} 地址、时间戳和证书长度，后者甚至在不同中继之间也不相同。借助同一脚本，你可以在自己使用的版本上验证书中描述的内容是否仍然成立。
+\end{approfondimento}
+
+\subsection{运行要求}
+
+你需要一台安装了 Docker 的 Linux 计算机，以及大约 \SI{1}{\giga\byte} 的可用磁盘空间。macOS 和 Windows 上的 Docker Desktop 也可使用，不过本实验采用的主机网络模式在这些系统上的行为不同；此时请在容器内部执行实验（\cref{sec:rp-shell}）。实验网络会占用以 5100、7100、8000 和 9000 开头的主机端口，请先确认相关端口没有被占用。
+
+\subsection{构建镜像并启动网络}
+
+从\textbf{仓库根目录}执行（不要先切换到 \file{labs/zh-Hans/实验室}）：
+\begin{lstlisting}[language=bash,numbers=none]
+$ make -C labs/zh-Hans/实验室 image        # 编译 tor 并准备 Chutney（只需首次执行）
+$ make -C labs/zh-Hans/实验室 start        # 配置并启动网络，等待引导完成
+\end{lstlisting}
+
+构建镜像需要几分钟。编写本章时使用的计算机，网络启动大约耗时两分半钟，最后得到以下摘要（已简化）：
+\begin{lstlisting}[numbers=none]
+  test006e:
+    bootstrap progress: 100 (SUCCESS), done, Done
+    desc publishing: 100 (SUCCESS), all nodes, DESC MD MD_CONS NS_CONS
+  test008c:
+    bootstrap progress: 100 (SUCCESS), done, Done
+  test009h:
+    bootstrap progress: 100 (SUCCESS), done, Done
+    oniondesc publishing: 200 (ONIONDESC_PUBLISHED), hidden service v3
+\end{lstlisting}
+
+所有节点均已完成引导；各中继的描述符已经发布，并被网络共识收录；洋葱服务也发布了自身的描述符。接下来使用 \cmd{make -C labs/zh-Hans/实验室 verify} 运行 Chutney 的检查：分别通过出口和洋葱服务传输数据，并验证内容未发生改变：
+\begin{lstlisting}[numbers=none]
+  not-done:0 successes:4 failures:0
+Transmission: Success
+\end{lstlisting}
+
+\cmd{make -C labs/zh-Hans/实验室 status} 用于查看节点状态；\cmd{make -C labs/zh-Hans/实验室 shell} 打开容器中的命令行；\cmd{make -C labs/zh-Hans/实验室 stop} 停止网络；\cmd{make -C labs/zh-Hans/实验室 clean} 则会一并删除生成的数据。
+
+% ---------------------------------------------------------------------------
+\section{网络拓扑}\label{sec:rp-topologia}
+
+本书实验网络的配置写在一个简短的 Python 文件 \file{labs/zh-Hans/实验室/chutney/networks/book} 中，使用 Chutney 的配置语言：
+\begin{lstlisting}[language=Python]
+Authority = Node(tag="a", authority=1, relay=1)
+Middle    = Node(tag="r", relay=1)
+Exit      = Node(tag="e", relay=1, exit=1)
+Client    = Node(tag="c", client=1, launch_phase=2)
+Onion     = Node(tag="h", hs=1, launch_phase=2)
+
+NODES = (Authority.getN(3) + Middle.getN(3) + Exit.getN(2)
+         + Client.getN(1) + Onion.getN(1))
+ConfigureNodes(NODES)
+\end{lstlisting}
+
+每个 \texttt{Node} 都是一种模板，\texttt{getN} 创建相应数量的实例。客户端和洋葱服务在第二阶段启动（\file{launch\_phase=2}），因为此时目录权威节点已生成共识。Chutney 按顺序为节点编号，组合编号和标记形成名称：\texttt{test000a}、\ldots、\texttt{test009h}。节点编号还决定端口分配，如 \cref{fig:rete-privata} 所示。
+
+\begin{figure}[htbp]
+\centering
+\input{图/图19-网络}
+\caption{Chutney 实验室在 \texttt{127.0.0.1} 上的拓扑：三台兼任中继的目录权威节点、三台中间中继、两台出口中继、客户端和洋葱服务。只有权威节点及其他中继（包括出口）使用 ORPort $5100+n$；所有节点都有 ControlPort $8000+n$。权威节点另有 DirPort $7100+n$，客户端使用 SocksPort $9008$，洋葱服务将虚拟端口 $5858$ 映射到 \texttt{127.0.0.1:4747}。图中的 HTTP 出口电路与洋葱服务不同；洋葱服务不经过出口中继。绑定环回地址不代表容器网络隔离。}
+\label{fig:rete-privata}
+\end{figure}
+
+\begin{center}\small
+\begin{tabular}{lllll}
+\toprule
+节点 & 角色 & ORPort & ControlPort & 其他 \\
+\midrule
+\texttt{test000a}--\texttt{002a} & 目录权威 & 5100--5102 & 8000--8002 & DirPort 7100--7102 \\
+\texttt{test003r}--\texttt{005r} & 中间中继 & 5103--5105 & 8003--8005 & \\
+\texttt{test006e}--\texttt{007e} & 出口 & 5106--5107 & 8006--8007 & \\
+\texttt{test008c} & 客户端 & --- & 8008 & SocksPort 9008 \\
+\texttt{test009h} & 洋葱服务 & --- & 8009 & 虚拟端口 5858 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{approfondimento}[为什么需要三台目录权威节点？]
+一份共识必须获得过半数目录权威节点的签名（\cref{cap:12-directory}）。如果只有一台权威节点，我们就无法观察投票过程；有了三台，不仅可以观察投票，还能在练习中了解其中一台停止工作后会发生什么。公共网络有九台目录权威节点，此外还有独立的网桥权威节点。它们的列表被编译进 tor 本身（\file{src/app/config/auth\_dirs.inc}）。
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{测试网络不等于真实网络}\label{sec:rp-opzioni}
+
+Chutney 为每个节点生成独立的 \file{torrc}。这些文件清楚地展示了，为使微型 Tor 网络正常运行，必须修改哪些配置，因此也揭示了公共网络中的哪些前提不再适用。下面是一台目录权威节点配置文件 \file{net/nodes/000a/torrc} 中最重要的选项：
+\begin{lstlisting}[language=torrc,numbers=none]
+TestingTorNetwork 1
+AuthoritativeDirectory 1
+V3AuthoritativeDirectory 1
+AssumeReachable 1
+V3AuthVotingInterval 20 seconds
+V3AuthVoteDelay 4
+V3AuthDistDelay 4
+TestingDirAuthVoteGuard *
+TestingDirAuthVoteHSDir *
+\end{lstlisting}
+
+\begin{description}
+  \item[\opt{TestingTorNetwork}] 启用测试模式。该选项只能与显式指定的目录权威列表（\opt{DirAuthority}）一起使用，防止测试节点意外加入公共网络。它还会修改许多默认值，以加快运行速度。
+  \item[\opt{V3AuthVotingInterval}] 在真实网络中，目录权威节点每小时为新共识投一次票。而在这里，每 20 秒就投一次；共识本身也反映了这一点：
+\begin{lstlisting}[numbers=none]
+valid-after 2026-09-23 14:37:40
+fresh-until 2026-09-23 14:38:00
+valid-until 2026-09-23 14:38:20
+\end{lstlisting}
+  \item[\opt{AssumeReachable}] 中继通常要验证自己能从外部访问，才会公布自身信息。在环回接口上，这项测试没有意义，因此被跳过。
+  \item[\opt{TestingDirAuthVoteGuard} \texttt{*}] 在真实网络中，中继需要连续数周稳定运行，并具备足够带宽，才会获得 Guard 标志；而这里，权威节点会给所有中继分配该标志。因此，\textbf{本实验共识中的每台中继都是潜在入口守卫}，与公共网络不同。
+\end{description}
+
+出口中继的 \file{torrc} 还包含：
+\begin{lstlisting}[language=torrc,numbers=none]
+ExitPolicyRejectPrivate 0
+ExitPolicy accept private:*
+\end{lstlisting}
+出口默认拒绝连接私有地址和环回地址，以免使所在的本地网络暴露于风险之中。但在本实验里，\texttt{127.0.0.1} 就是唯一可用的\enquote{互联网}，因此必须反转这条策略。
+
+\begin{attenzione}[不要在其他环境中照搬这些选项]
+\texttt{Testing\ldots} 类选项、\opt{AssumeReachable}，尤其是 \texttt{ExitPolicy accept private:*}，只能用于测试网络。在公共中继上采用这些设置，不仅配置不当，还可能危及宿主机所在的网络。
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{节点目录内部有什么？}\label{sec:rp-file}
+
+每个节点都有自己的数据目录，位于 \file{labs/zh-Hans/实验室/net/nodes/NNNx/}。以目录权威节点为例，目录中包括：
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+文件或目录 & 内容 \\
+\midrule
+\file{torrc} & Chutney 生成的配置文件 \\
+\file{keys/} & 节点身份密钥和洋葱密钥（\cref{cap:05-crittografia,cap:06-architettura}） \\
+\file{fingerprint}、\file{fingerprint-ed25519} & RSA 和 Ed25519 身份指纹 \\
+\file{cached-consensus}、\file{cached-microdesc-consensus} & 两种共识格式（\cref{cap:12-directory}） \\
+\file{cached-microdescs.new} & 已下载的微描述符 \\
+\file{v3-status-votes} & 目录权威节点的投票（仅权威节点） \\
+\file{sr-state} & 共享随机性协议的状态（仅权威节点） \\
+\file{notice.log}、\file{info.log} & \emph{notice} 和 \emph{info} 级别的日志 \\
+\file{control\_auth\_cookie} & 控制端口认证 cookie \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+洋葱服务的数据目录还包含 \file{hidden\_service/}，其中存储私钥及名为 \file{hostname} 的文件。该文件中记录服务的 \texttt{.onion} 地址，例如：
+\begin{lstlisting}[numbers=none]
+rpns2r36zn5u46wctlgnvtwjotxaf7iflsc3k5eas3lqoxeesv4zwyad.onion
+\end{lstlisting}
+每次重新生成配置时都会创建新密钥，因此地址也会改变（\cref{cap:14-onion-services}）。
+
+共识本身是人类可阅读的文本文件。提取其中的 \texttt{r} 行（中继身份与地址）和 \texttt{s} 行（标志），可以看到以下两个中继：
+\begin{lstlisting}[numbers=none]
+r test000a H+9DDHx4rEo6I6Jdn8gIyKyi3jk ... 127.0.0.1 5100 7100
+s Authority Fast Guard HSDir Running Stable V2Dir Valid
+r test006e dEPHoFFHamQyy6pRzlsLB9/ilzU ... 127.0.0.1 5106 0
+s Exit Fast Guard HSDir Running Stable V2Dir Valid
+\end{lstlisting}
+可以看到，如预期一样，所有中继都拥有 Guard 标志，而只有两台出口中继拥有 Exit 标志。各字段的含义已在 \cref{cap:12-directory} 中说明。
+
+% ---------------------------------------------------------------------------
+\section{使用实验网络}\label{sec:rp-uso}
+
+\subsection{通过私有网络浏览网页}
+
+以下两个 HTTP 示例都应在\emph{实验容器内部}的 \file{/lab} 目录执行。可从另一台宿主终端运行 \cmd{make -C labs/zh-Hans/实验室 shell} 进入容器。curl 的 \texttt{--noproxy} 使用空字符串，可在设置了 \texttt{NO\_PROXY} 的情况下，仍强制通过 SOCKS 代理访问 \texttt{127.0.0.1}。4747 端口的服务器提供第一个示例所创建的同一个 \file{index.html}。
+
+客户端 \texttt{test008c} 在端口 9008 提供 SOCKS 服务。任何支持 SOCKS5 的程序都能使用它。先启动一个简单的本地 Web 服务器，再通过 Tor 访问：
+\begin{lstlisting}[language=bash,numbers=none]
+$ echo "来自私有实验网络的问候" > index.html
+$ python3 -m http.server 8080 --bind 127.0.0.1 &
+$ curl --noproxy "" --socks5-hostname 127.0.0.1:9008 http://127.0.0.1:8080/index.html
+来自私有实验网络的问候
+\end{lstlisting}
+这次请求经过三跳中继电路，之后由其中一台出口中继连接到服务器。使用 \texttt{--socks5-hostname} 而不是 \texttt{--socks5}，可以让出口中继解析目的域名，而不是让本地操作系统执行解析。在真实网络中，这对避免访问目标泄露给本地 DNS 解析器十分重要（\cref{cap:11-stream}）。
+
+\subsection{访问洋葱服务}
+
+Chutney 为洋葱服务生成以下配置：
+\begin{lstlisting}[language=torrc,numbers=none]
+HiddenServicePort 5858 127.0.0.1:4747
+\end{lstlisting}
+这将 \texttt{.onion} 地址的虚拟端口 5858 映射到本机的 4747 端口。我们只需让服务器监听该端口：
+\begin{lstlisting}[language=bash,numbers=none]
+$ python3 -m http.server 4747 --bind 127.0.0.1 &
+$ curl --noproxy "" --socks5-hostname 127.0.0.1:9008 \
+    http://$(cat net/nodes/009h/hidden_service/hostname):5858/index.html
+来自私有实验网络的问候
+\end{lstlisting}
+这次不再涉及出口中继。客户端与服务在网络内部的汇合点相遇（\cref{cap:14-onion-services}）。
+
+\subsection{用 Stem 观察电路}\label{sec:rp-stem}
+
+控制端口允许我们检查运行中的节点。利用镜像中安装的 Stem（\cref{cap:18-stem}），可以列出客户端的电路：
+\begin{lstlisting}[language=Python]
+from stem.control import Controller
+
+with Controller.from_port(port=8008) as c:
+    c.authenticate()                    # 自动使用 cookie 进行认证
+    print(c.get_version())
+    for circ in c.get_circuits():
+        print(circ.id, circ.status, circ.purpose,
+              [name for _, name in circ.path])
+\end{lstlisting}
+执行 \cmd{make -C labs/zh-Hans/实验室 verify} 后的部分输出如下：
+\begin{lstlisting}[numbers=none]
+0.4.9.13 (git-3c575400909efe65)
+10 BUILT GENERAL ['test004r', 'test005r', 'test007e']
+124 BUILT CONFLUX_LINKED ['test006e', 'test004r', 'test007e']
+114 BUILT CONFLUX_UNLINKED ['test007e', 'test004r', 'test006e']
+128 BUILT CIRCUIT_PADDING ['test004r', 'test001a', 'test007e', 'test006e']
+163 BUILT HS_CLIENT_REND ['test004r', 'test001a', 'test006e']
+166 BUILT HS_CLIENT_HSDIR ['test004r', 'test006e', 'test007e', 'test003r']
+181 BUILT HS_VANGUARDS ['test004r', 'test007e', 'test006e']
+\end{lstlisting}
+
+即使在这样小的网络中，这份列表也汇集了本书介绍的多种机制：
+\begin{itemize}
+  \item 几乎所有电路都从 \texttt{test004r} 开始：它是客户端选择一次、随后重复使用的\textbf{入口守卫}（\cref{cap:13-percorso}）。例外是某些 Conflux 隧道的分支，它们从第二个守卫开始（\cref{cap:18-stem}）。
+  \item 三跳的 \texttt{GENERAL} 电路承载普通流量；此处未列出的单跳电路用于获取目录信息。
+  \item \file{CONFLUX\_LINKED} 电路成对出现，共同承载同一份流量：这就是 Conflux 功能（\proposta{329}，\cref{cap:31-futuro}）。
+  \item \file{HS\_VANGUARDS}、\file{HS\_CLIENT\_HSDIR} 和 \file{HS\_CLIENT\_REND} 标识访问洋葱服务时使用的电路（\cref{cap:14-onion-services}）。
+  \item 按照控制协议规范，\file{CIRCUIT\_PADDING} 表示为了掩盖电路实际停止使用的时间而保留的电路。因此，它的关闭并不一定能说明用户活动何时结束。
+\end{itemize}
+
+\subsection{在容器内部操作}\label{sec:rp-shell}
+
+容器使用主机网络模式，因此主机上的程序可以直接访问所有节点的端口。如果这种模式不可用（例如某些 Docker Desktop 环境），可以执行 \cmd{make -C labs/zh-Hans/实验室 shell}，进入已安装 tor、Chutney、Stem、Python 和抓包工具的容器。实验文件在容器内位于 \file{/lab}。
+
+% ---------------------------------------------------------------------------
+\section{第一次与中继通信}\label{sec:rp-contatto}
+
+下面的 Python 代码依赖位于 \file{labs/zh-Hans/代码/} 的教学包 \file{torlab}。Chutney 容器只将 \file{labs/zh-Hans/实验室/} 挂载到 \file{/lab}，因此该包\emph{不会自动出现在容器中}。在采用宿主网络的 Linux 系统上，可将代码保存为文件，然后从仓库根目录执行 \texttt{PYTHONPATH=labs/zh-Hans/代码 python3 script.py}；也可先明确地将代码包提供给容器。该示例仅适用于私有实验网络。
+
+现在回到 \cref{cap:08-celle}。使用实验~2 提供的 \file{labs/zh-Hans/代码/torlab/cells.py}，我们可以向实验中继的 ORPort 建立 TLS 连接、发送一条 \cella{VERSIONS} cell，再解码回应。完整的证书验证代码见 \cref{cap:07-canali} 的实验~1；这里仅观察初次交换的报文：
+\begin{lstlisting}[language=Python]
+import socket, ssl
+from torlab.cells import *
+
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE   # 仅用于私有实验网；不验证 TLS 证书
+s = ctx.wrap_socket(socket.create_connection(("127.0.0.1", 5103)))
+s.sendall(encode(versions_cell([3, 4, 5]), 0))
+
+buf, version, received = b"", 0, 0
+while received < 4:
+    chunk = s.recv(4096)
+    if not chunk:
+        raise ConnectionError("TLS channel closed early")
+    buf += chunk
+    while (r := decode(buf, version)) is not None:
+        cell, buf = r
+        received += 1
+        print(describe(cell, version))
+        if cell.command == CellCommand.VERSIONS:
+            version = negotiate_version([3, 4, 5], cell.body)
+s.close()
+\end{lstlisting}
+
+\textbf{注意：}这个简短示例通过 \texttt{ssl.CERT\_NONE} 有意关闭 TLS 证书验证，并\emph{没有}真正根据 CERTS 信元验证中继身份。不要用它连接公共中继。完整的身份验证步骤见实验~1。
+
+以下输出来自此前一次参考实验：电路编号、指纹、洋葱地址、时间戳及证书长度都可能因运行而异。
+
+中继 \texttt{test003r} 的回应为：
+\begin{lstlisting}[numbers=none]
+CircID=0x0000 VERSIONS 消息体=6 字节
+CircID=0x00000000 CERTS 消息体=1451 字节
+CircID=0x00000000 AUTH_CHALLENGE 消息体=36 字节
+CircID=0x00000000 NETINFO 消息体=509 字节
+\end{lstlisting}
+
+这恰好对应 \cref{sec:sessione} 描述的序列：首先，\cella{VERSIONS} 使用两字节 CircID；协商到版本 5 后，后续 cell 则使用四字节 CircID。\cella{CERTS} 和 \cella{AUTH\_CHALLENGE} 是变长消息，会保留其消息体的真实长度；\cella{NETINFO} 是固定长度消息，其主体包含全部 509 字节。注意，收到 \cella{VERSIONS} 后立即更新 \texttt{version = ...}：后续 cell 能否被正确解码，取决于刚刚协商出的协议版本。
+
+% ---------------------------------------------------------------------------
+\section{Shadow：模拟器中的网络}\label{sec:rp-shadow}
+
+当我们想研究\emph{整个网络}的行为时，Chutney 就不够了。例如，不同拥塞控制算法会怎样影响延迟？攻击者需要多少流量才能完成某种攻击？要回答这些问题，需要数千个节点、跨洲的真实延迟特征，最重要的是还需要可复现的实验。
+
+Shadow 最初由 Rob Jansen 和 Nicholas Hopper 开发~\cite{jansen2012shadow}，能够满足这些需求。当前版本让包括 tor 在内的真实程序作为普通 Linux 进程运行，同时拦截网络与时间相关的系统调用。虚拟网络图提供由研究者定义的延迟和带宽，时间只在模拟器安排时推进。因此，模拟中的一小时可能比现实中的一小时更快，也可能更慢，具体取决于处理能力；用相同随机种子重新执行，便能得到相同的结果。
+
+研究人员通常使用 \textbf{tornettools} 在 Shadow 中构建贴近现实的 Tor 网络。该工具根据公开的 Tor Metrics 数据（\cref{cap:24-metrics}），生成规模较小的网络，同时让其带宽、标志和节点角色分布接近真实网络。
+
+在 \cref{cap:29-ricerca} 中，我们会通过一个引导实验使用 Shadow。现在只需要了解什么时候应选择模拟器即可。
+
+% ---------------------------------------------------------------------------
+\section*{本章小结}
+\begin{itemize}
+  \item Tor 实验应在私有网络中进行。在公共网络上做实验可能涉及未同意的用户，而且通常难以复现。
+  \item Chutney 使用运行在环回接口上的真实 \texttt{tor} 进程仿真 Tor 网络。Shadow 则在离散事件模拟器中运行真实软件，适合大规模且需要重复实验的研究。
+  \item 本书的实验环境（\file{labs/zh-Hans/实验室/}）从源码构建 tor 0.4.9.13。\cmd{make -C labs/zh-Hans/实验室 start} 启动由三台权威节点、三台中间中继、两台出口、一台客户端和一台洋葱服务组成的十节点网络。
+  \item 编号为 $n$ 的节点分别使用 ORPort $5100+n$、ControlPort $8000+n$；客户端另有 SocksPort $9000+n$。
+  \item \opt{TestingTorNetwork}、每 20 秒一次的投票、对所有中继分配 Guard 标志以及允许连接私有地址等设置，让微型网络得以运行，但也使它不同于真实网络。把实验测量结果推广到公共网络时必须谨慎。
+  \item SocksPort 9008 用于通过网络传送应用程序流量；Stem 可以观察电路；\file{torlab} 则直接与中继通信。
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{练习}
+
+\begin{esercizio}[1]\label{es:19-porte}
+不查看 \file{torrc}，请给出 \texttt{test006e} 的 ORPort 和 ControlPort。\texttt{test009h} 有 ORPort 吗？为什么？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:19-guard}
+私有网络中的所有中继都有 Guard 标志。哪个选项导致这种现象？为什么真实网络不会这样？它会如何影响实验室中的路径选择测量结果？
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:19-socks}
+重复 \cref{sec:rp-uso} 的 \texttt{curl} 请求，但用 \texttt{--socks5} 代替 \texttt{--socks5-hostname}，并用 \texttt{localhost} 代替 \texttt{127.0.0.1}。出口实际收到的内容有什么不同？为什么这在公共网络中很重要？
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-consenso}
+在几分钟内观察客户端共识的 \texttt{valid-after} 字段（\cmd{grep valid-after net/nodes/008c/cached-microdesc-consensus}）。它多久变化一次？计算实验网络和真实网络每天分别生成多少份共识。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-autorita}
+停止三台目录权威节点中的一台（先运行 \cmd{make -C labs/zh-Hans/实验室 shell}，再根据该进程的 \file{pid} 文件使用 \cmd{kill} 终止进程）。网络还能继续生成共识吗？如果停止两台又会怎样？请解释，基本原因见 \cref{cap:12-directory}。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-stem}
+修改 \cref{sec:rp-stem} 中的 Stem 脚本，使它能打印每条三跳电路上所有中继的 ORPort，并通过 \file{get\_network\_status} 从共识中获取这些端口。
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:19-rete}
+创建文件 \file{labs/zh-Hans/实验室/chutney/networks/book-large}，配置五台目录权威节点、十台中间中继和四台出口，然后在 \texttt{make} 命令中设置 \texttt{NETWORK=book-large} 启动它。与本书原来的实验网络相比，引导时间有什么变化？
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:19-log}
+在客户端的 \file{info.log} 中找到与电路建立有关的日志，从选择节点直到构建完成。把每条日志与 \cref{fig:sessione} 中的一种 cell 对应起来。
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:19-cattura}
+在容器中运行 \cref{sec:rp-contatto} 的脚本，同时用 \cmd{tcpdump -i lo} 捕获发往 5103 端口的流量。能直接看到 Tor cell 吗？为什么不能？哪些信息仍然可以观察到——数据大小、时间特征？\cref{cap:20-traffico} 将介绍进一步分析的方法。
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{延伸阅读}
+\begin{itemize}
+  \item Chutney：\url{https://gitlab.torproject.org/tpo/core/chutney}。项目的 README 和 \file{networks/} 目录提供大量网络配置示例，包括网桥和 Arti。
+  \item R.~Jansen、N.~Hopper，\titolo{Shadow: Running Tor in a Box for Accurate and Efficient Experimentation}~\cite{jansen2012shadow}。
+  \item Shadow 与 tornettools 文档：\url{https://shadow.github.io/}。
+  \item Tor Research Safety Board：\url{https://research.torproject.org/safetyboard/}，介绍 Tor 研究的伦理与安全指南。
+\end{itemize}

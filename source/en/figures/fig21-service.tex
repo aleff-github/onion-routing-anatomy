@@ -1,0 +1,24 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Accessibility alternative text, used only in EPUB.
+\altfig{Configuration of a public version 3 onion service. Tor uses HiddenServiceDir /var/lib/tor/my\_service/ and HiddenServicePort 80 127.0.0.1:8080. It creates hostname, hs\_ed25519\_public\_key and hs\_ed25519\_secret\_key inside the service directory; protect the secret identity key because its theft permits impersonation. A v3 address contains 56 base32 characters encoding the Ed25519 public key, a checksum and a version byte; [v3].onion in the picture is only a placeholder. Connections to the onion address on virtual port 80 use Tor and are forwarded to a web server bound only to 127.0.0.1:8080. This public service does not need an alice.auth file; client authorization is configured separately.}
+% Public v3 onion service: configuration, identity and local forwarding
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  file/.style={draw,rounded corners=1pt,fill=torgrigio!8,minimum height=0.55cm,minimum width=3.4cm,font=\ttfamily\scriptsize},
+  box/.style={draw,rounded corners=2pt,align=center,minimum height=0.8cm}]
+  \node[box,fill=torviola!10,text width=4.6cm,align=left,font=\ttfamily\scriptsize] (conf) at (0,1.6)
+    {HiddenServiceDir /var/lib/tor/my\_service/\\HiddenServicePort 80 127.0.0.1:8080};
+  \node[font=\sffamily\tiny,text=torgrigio,above=1pt of conf] {torrc};
+  \node[file] (h) at (0,0.1) {hostname};
+  \node[file] (pk) at (0,-0.6) {hs\_ed25519\_public\_key};
+  \node[file] (sk) at (0,-1.3) {hs\_ed25519\_secret\_key};
+  \node[font=\sffamily\tiny,text=torgrigio,align=center] at (0,-1.95) {restrict access to directory and secret key};
+  \draw[->] (conf) -- (h);
+  \node[box,fill=torverde!12,minimum width=2.4cm] (srv) at (6.4,-0.6) {web server\\127.0.0.1:8080};
+  \node[box,fill=torviola!15,minimum width=2.4cm] (onion) at (6.4,1.2) {\texttt{[v3].onion}\\port 80};
+  \draw[->,torviola] (onion) -- node[right,font=\sffamily\tiny,align=left] {local\\forwarding} (srv);
+  \node[font=\sffamily\tiny,text=torgrigio] at (6.4,2.2) {v3: 56 base32};
+  \draw[dashed,torgrigio,->] (pk.east) to[bend left=12] (onion.west);
+  \node[anchor=west,font=\sffamily\tiny,text=avviso,align=left] at (4.4,-1.9) {a stolen secret key allows\\service impersonation};
+  \draw[avviso,->] (sk.east) to[bend right=10] (4.3,-1.9);
+\end{tikzpicture}

@@ -1,0 +1,194 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Control port e Stem}\label{cap:18-stem}
+\aggiornatoal{23 settembre 2026}{tor 0.4.9.13; control-spec; Stem 1.8.2}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item parlare con tor attraverso la porta di controllo, anche a mano;
+  \item usare i comandi principali: \texttt{GETINFO}, \texttt{SETCONF}, \texttt{SIGNAL}, \file{ADD\_ONION} e gli eventi;
+  \item scrivere programmi Python con la libreria Stem;
+  \item osservare dal vivo l'isolamento degli stream e l'effetto di una nuova identità (Laboratorio~11).
+\end{itemize}
+\end{obiettivi}
+
+Tor Browser mostra il circuito della pagina corrente; strumenti come Nyx visualizzano la banda e le connessioni di un relay; i sistemi di misura della rete costruiscono circuiti su richiesta. Tutti usano la stessa interfaccia: il \textbf{protocollo di controllo} di tor, raggiungibile dalla \opt{ControlPort} (\cref{sec:torrc-controllo}).
+
+% ---------------------------------------------------------------------------
+\section{Il protocollo di controllo}\label{sec:stem-protocollo}
+
+Il protocollo è testuale, simile a quelli della posta elettronica~\spec{control-spec}{Message format}: il client invia un comando per riga, tor risponde con righe che iniziano con un codice di tre cifre. Il codice \texttt{250} indica successo; un trattino dopo il codice (\texttt{250-}) indica che la risposta continua, uno spazio (\texttt{250 }) che è l'ultima riga; un \texttt{+} introduce un blocco di più righe, terminato da una riga con un solo punto. I codici \texttt{5xx} indicano errori, e \texttt{650} gli eventi asincroni.
+
+Proviamolo sul client della rete di laboratorio, con una semplice connessione TCP alla porta 8008:
+\begin{lstlisting}[numbers=none]
+> PROTOCOLINFO 1
+250-PROTOCOLINFO 1
+250-AUTH METHODS=COOKIE,SAFECOOKIE COOKIEFILE="/lab/net/.../008c/control_auth_cookie"
+250-VERSION Tor="0.4.9.13"
+250 OK
+> AUTHENTICATE <COOKIE_HEX>
+250 OK
+> GETINFO status/bootstrap-phase
+250-status/bootstrap-phase=NOTICE BOOTSTRAP PROGRESS=100 TAG=done SUMMARY="Done"
+250 OK
+\end{lstlisting}
+La trascrizione è un esempio \textbf{schematico}, non da incollare letteralmente: \texttt{<COOKIE\_HEX>} va sostituito con i \textbf{64 caratteri esadecimali} dei 32 byte letti dal file \texttt{control\_auth\_cookie} della propria istanza. La directory e la versione dipendono dalla configurazione. Non pubblicare mai il cookie: chi lo conosce può autenticarsi, finché rimane valido. In un programma preferisci \texttt{SAFECOOKIE}, che dimostra il possesso del cookie senza inviarlo a un possibile falso server~\spec{control-spec}{Authentication}.
+\texttt{PROTOCOLINFO} è uno dei pochi comandi ammessi prima dell'autenticazione (gli altri sono \texttt{AUTHCHALLENGE}, \texttt{AUTHENTICATE} e \texttt{QUIT}) e indica quali metodi di autenticazione sono accettati e dove si trova il file del cookie. Con il metodo \texttt{COOKIE} il client invia il contenuto del file in esadecimale. Il metodo \texttt{SAFECOOKIE} evita di trasmettere il cookie stesso: client e tor si scambiano valori casuali e dimostrano di conoscere il cookie con un HMAC, così che un programma che si finge tor non possa rubarlo.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig18-controllo}
+\caption{Sessione semplificata del protocollo di controllo: dopo l'autenticazione COOKIE (rappresentata da un segnaposto), GETINFO circuit-status può restituire dati multilinea, un punto isolato e 250 OK finale. SETEVENTS conferma la sottoscrizione con 250 OK; gli eventi 650 arrivano asincronicamente e possono intercalarsi ad altre risposte. ID e dati sono illustrativi.}
+\label{fig:controllo}
+\end{figure}
+
+\subsection{I circuiti visti da tor}
+
+\texttt{GETINFO circuit-status} elenca i circuiti del client. Una riga, abbreviata:
+\begin{lstlisting}[numbers=none]
+3 BUILT $50160F8F...~test004r,$12415FEB...~test005r,$9449F36E...~test007e
+  BUILD_FLAGS=NEED_CAPACITY,NEED_UPTIME PURPOSE=CONFLUX_LINKED
+  CONFLUX_ID=DE224696F58F72950D70DDA2D7981726 CONFLUX_RTT=42538
+\end{lstlisting}
+Ogni relay è indicato dall'impronta della sua identità RSA e dal nome. In un tunnel Conflux le due \enquote{gambe} sono circuiti collegati con lo stesso \file{CONFLUX\_ID}: la \proposta{329} raccomanda di non riutilizzare lo stesso guard o middle \emph{quando possibile}, ma non garantisce in assoluto guard distinti. Tor ne misura il tempo di andata e ritorno (\file{CONFLUX\_RTT}, in microsecondi) per decidere su quale inviare i dati (\cref{cap:31-futuro}). Un dettaglio del codice di tor (\file{src/feature/control/control\_fmt.c}): \file{CONFLUX\_ID} mostra solo \emph{metà} dell'identificativo segreto della coppia, perché chi lo conoscesse per intero potrebbe aggiungere \enquote{gambe} alla coppia da un exit e iniettare dati.
+
+\subsection{I comandi principali}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+Comando & Uso \\
+\midrule
+\texttt{GETINFO} & legge informazioni: versione, stato del bootstrap, circuiti, stream, consenso, descrittori\ldots \\
+\texttt{GETCONF}, \texttt{SETCONF} & legge e modifica la configurazione in esecuzione \\
+\texttt{SIGNAL} & invia segnali: \texttt{NEWNYM} (nuova identità), \texttt{RELOAD}, \texttt{SHUTDOWN}\ldots \\
+\texttt{SETEVENTS} & chiede di ricevere eventi: \texttt{CIRC}, \texttt{STREAM}, \texttt{BW}, \file{HS\_DESC}\ldots \\
+\texttt{EXTENDCIRCUIT} & costruisce un circuito con un percorso scelto dal controllore \\
+\texttt{ATTACHSTREAM} & assegna uno stream a un circuito (con \opt{\_\_LeaveStreamsUnattached}) \\
+\file{ADD\_ONION}, \file{DEL\_ONION} & crea e rimuove onion service senza toccare il \file{torrc} \\
+\texttt{HSFETCH} & scarica il descrittore di un onion service (usato nella \cref{sec:lab-onion}) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{attenzione}[Chi controlla la porta controlla tor]
+Con la porta di controllo si può dire a tor quali relay usare, fargli costruire circuiti di un salto, leggere tutte le destinazioni degli stream. Un programma malevolo con accesso alla porta di controllo può annullare l'anonimato dell'utente. Per questo sistemi come Tails e Whonix mettono un filtro (onion-grater) tra le applicazioni e la porta di controllo, e lasciano passare solo i comandi strettamente necessari.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Stem}\label{sec:stem-libreria}
+
+\textbf{Stem} è la libreria Python del Tor Project per il protocollo di controllo. Nasconde i dettagli del formato, interpreta le risposte e gli eventi e offre oggetti comodi da usare. La versione più recente, la 1.8.2, risale al giugno 2023: la libreria funziona con le versioni attuali di tor e viene usata da molti strumenti, ma non riceve nuove versioni da tempo, e per le funzionalità più recenti bisogna a volte ricorrere ai comandi grezzi (\texttt{Controller.msg}). Per Arti esiste un'interfaccia diversa, l'RPC di Arti (\cref{cap:30-arti}).
+
+Un esempio minimo, che abbiamo già usato nella \cref{sec:rp-stem}:
+\begin{lstlisting}[language=Python]
+from stem.control import Controller
+
+with Controller.from_port(port=8008) as c:
+    c.authenticate()                   # trova il cookie o chiede la password
+    print(c.get_version())
+    for circ in c.get_circuits():
+        print(circ.id, circ.purpose, [nome for _, nome in circ.path])
+\end{lstlisting}
+
+Gli eventi si ricevono registrando una funzione. Il seguente è un \emph{programma autonomo}: registra il listener mentre il controller è aperto e lo mantiene attivo per dieci secondi; la durata è solo dimostrativa.
+\begin{lstlisting}[language=Python]
+import time
+from stem.control import Controller, EventType
+
+def su_circuito(evento):
+    print(evento.id, evento.status, evento.purpose)
+
+with Controller.from_port(port=8008) as c:
+    c.authenticate()
+    c.add_event_listener(su_circuito, EventType.CIRC)
+    time.sleep(10)
+\end{lstlisting}
+La funzione viene chiamata dal thread degli eventi di Stem: ce n'è uno solo, che chiama in sequenza tutti i listener registrati. Un callback lento ritarda quindi la consegna degli eventi successivi, e se serve un'elaborazione pesante conviene delegarla a un thread a parte.
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: l'isolamento degli stream dal vivo}\label{sec:lab-stem}
+
+\begin{laboratorio}[11]{Isolamento degli stream e nuova identità}
+\textbf{Obiettivo.} Verificare con Stem, sul client della rete di laboratorio, quali richieste condividono un circuito a seconda delle credenziali SOCKS, e che cosa cambia dopo \texttt{SIGNAL NEWNYM}.\\
+\textbf{Prerequisiti.} La rete di laboratorio avviata; un server web locale sulla porta 8080. Lo script è \file{labs/it/laboratorio/isolamento.py}, da eseguire nel container (che include Stem e \cmd{curl}).\\
+\textbf{Tempo stimato.} 1 ora.
+\end{laboratorio}
+
+\paragraph{Passo 1: registrare gli stream.} Ascoltiamo gli eventi \texttt{STREAM}; quando uno stream riesce, annotiamo su quale circuito è stato attaccato. Il filtro sulla destinazione è necessario: tor apre stream anche per conto proprio, per esempio per scaricare i documenti di directory.
+\begin{lstlisting}[language=Python]
+assegnati = []
+def su_stream(ev):
+    if ev.status == StreamStatus.SUCCEEDED and ev.target == DESTINAZIONE:
+        assegnati.append((ev.id, ev.circ_id, ev.target))
+
+c.add_event_listener(su_stream, EventType.STREAM)
+\end{lstlisting}
+Il frammento mostra soltanto il callback: nel programma completo \file{labs/it/laboratorio/isolamento.py} sono già definiti \texttt{DESTINAZIONE}, \texttt{StreamStatus}, la lista \texttt{assegnati} e il controller \texttt{c} mantenuto aperto. Non eseguire il frammento isolatamente.
+
+\paragraph{Passo 2: richieste con credenziali diverse.} Facciamo quattro richieste con \cmd{curl}: due con le credenziali SOCKS \texttt{sito-a.example:x1}, una con \texttt{sito-b.example:x2}, una senza. Il principio riproduce l'isolamento per sito di Tor Browser: l'applicazione usa credenziali SOCKS differenziate secondo il contesto del sito principale. Non significa che \emph{ogni scheda} abbia sempre un circuito distinto, né che due tunnel indipendenti debbano avere exit differenti.
+\begin{lstlisting}[language=bash,numbers=none]
+$ curl --proxy-user sito-a.example:x1 --socks5-hostname 127.0.0.1:9008 http://127.0.0.1:8080/
+\end{lstlisting}
+
+\paragraph{Passo 3: il risultato.} Il seguente è un output di una precedente sessione di riferimento: identificatori Conflux, percorsi e ritardo NEWNYM non sono valori fissi.
+\begin{lstlisting}[numbers=none]
+credenziali sito-a.example  -> conflux AADCE71E  ['test003r', 'test004r', 'test007e']
+credenziali sito-a.example  -> conflux AADCE71E  ['test003r', 'test004r', 'test007e']
+credenziali sito-b.example  -> conflux 31B1E3E0  ['test003r', 'test004r', 'test007e']
+credenziali -               -> conflux 35FD16D0  ['test003r', 'test004r', 'test007e']
+(NEWNYM rinviato di 6 s)
+dopo NEWNYM, sito-a.example  -> conflux F7011ABE
+\end{lstlisting}
+Le due richieste per \enquote{sito A} usano lo stesso tunnel, anche se sono state fatte in momenti diversi; quella per \enquote{sito B} e quella senza credenziali ne usano altri. Il percorso stampato è quello di una delle due gambe del tunnel, e qui coincide perché la rete di laboratorio ha pochi relay; l'approfondimento che segue spiega perché conviene guardare il tunnel e non il singolo circuito.
+
+\begin{approfondimento}[Il circuito non basta: i tunnel Conflux]
+Ripetendo il laboratorio molte volte si scopre che le due richieste con le stesse credenziali, ogni tanto, compaiono su circuiti con numeri diversi. Non è un difetto dell'isolamento. Chiedendo a tor l'elenco completo, si vede che quasi tutti i circuiti del client hanno scopo \file{CONFLUX\_LINKED} e che compaiono \emph{a coppie} con lo stesso \file{CONFLUX\_ID}: sono le due \enquote{gambe} di un unico tunnel (\cref{sec:fut-conflux}), e un evento \texttt{STREAM} può riportare l'una o l'altra. Ciò che l'isolamento tiene separato è dunque il \emph{tunnel}, non la singola gamba: lo script del libro raggruppa infatti per \file{CONFLUX\_ID}, quando c'è.
+
+Restano due accorgimenti, entrambi verificabili nei log:
+\begin{itemize}
+  \item \texttt{SIGNAL NEWNYM} è onorato al massimo una volta ogni dieci secondi (\file{MAX\_SIGNEWNYM\_RATE} in \file{src/core/mainloop/mainloop.c}); se arriva prima, tor lo rinvia e lo scrive nel log (\enquote{Rate limiting NEWNYM request: delaying by N second(s)}). Chi non aspetta rischia di vedere il NEWNYM della prova precedente arrivare a metà di quella nuova. \textbf{NEWNYM non chiude automaticamente le connessioni già aperte}: impedisce invece ai nuovi stream di condividere i circuiti associati all'identità precedente.
+  \item gli eventi \texttt{STREAM} riguardano anche gli stream che tor apre per conto proprio, per esempio per scaricare i documenti di directory: vanno filtrati per destinazione.
+\end{itemize}
+Anche così, su una rete piccola e molto sollecitata può capitare che tor preferisca per la seconda richiesta un tunnel appena costruito. È il motivo per cui la verifica automatica del libro ripete la prova.
+\end{approfondimento}
+
+\begin{attenzione}[Un errore nel laboratorio]
+Nella prima esecuzione tutte e quattro le richieste avevano usato lo stesso circuito, come se l'isolamento non funzionasse. Il problema era nel nostro script: avevamo inserito \texttt{--proxy-user} subito dopo l'opzione \texttt{-o} di \cmd{curl}, che l'aveva presa come nome del file di uscita, e le credenziali non erano mai state inviate. Prima di concludere che un sistema non si comporta come dichiarato, bisogna verificare che l'esperimento stia davvero facendo ciò che crediamo.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item Il protocollo di controllo è testuale: comandi su una riga, risposte con codici a tre cifre, eventi asincroni con il codice 650.
+  \item Ci si autentica con cookie (meglio \texttt{SAFECOOKIE}) o password; chi controlla la porta controlla tor.
+  \item Stem offre un'interfaccia Python a comandi ed eventi; è stabile ma non riceve nuove versioni dal 2023.
+  \item L'isolamento per credenziali SOCKS impedisce la condivisione dello stesso circuito fra contesti distinti; con Conflux occorre osservare il tunnel e non una singola gamba. \texttt{NEWNYM} influisce sui \emph{nuovi} stream, con un limite di frequenza di circa dieci secondi. Non garantisce exit differenti né interrompe gli stream in corso.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:18-codici}
+Interpreta la risposta \texttt{552 Unrecognized key "pippo"} a un comando \texttt{GETINFO pippo}. Che cosa distingue un codice \texttt{5xx} da un evento \texttt{650}?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:18-onion}
+Con Stem, crea un onion service temporaneo con \file{create\_ephemeral\_hidden\_service} sul client della rete di laboratorio, che inoltri la porta 80 al server locale sulla 8080. Raggiungilo con \cmd{curl}. Dove sono conservate le sue chiavi?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:18-banda}
+Scrivi un programma che mostri ogni secondo la banda in ingresso e in uscita del client, usando gli eventi \texttt{BW}, mentre scarichi un file grande attraverso la rete di laboratorio.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:18-percorso}
+Con \opt{\_\_LeaveStreamsUnattached} 1, \texttt{EXTENDCIRCUIT} e \texttt{ATTACHSTREAM}, fai passare una richiesta attraverso un percorso scelto da te (per esempio \texttt{test004r}, \texttt{test005r}, \texttt{test006e}). Perché in un uso reale questa possibilità è pericolosa per l'anonimato?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item \titolo{Tor's control protocol} (control-spec)~\cite{torspec}: tutti i comandi e gli eventi.
+  \item La documentazione di Stem, \url{https://stem.torproject.org/}.
+\end{itemize}

@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% English EPUB alternative description.
+\altfig{A Tor circuit from the client through guard, middle, and exit relays to the destination website. The boxes below the relays and website show network-layer visibility, assuming no application leaks: the guard sees the client's source IP, the exit knows the destination, and the middle sees neither endpoint. The website sees the exit IP instead of the client's IP; an observer at both ends may correlate traffic.}
+% What each observer along a circuit knows.
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  sa/.style={fill=avviso!15,draw=avviso!60,rounded corners=1pt,minimum height=0.5cm,minimum width=1.5cm},
+  no/.style={fill=torverde!12,draw=torverde!50!black,rounded corners=1pt,minimum height=0.5cm,minimum width=1.5cm}]
+  \node[client,minimum width=1.5cm,minimum height=0.7cm] (c) at (0,0) {client};
+  \node[relay,minimum size=0.9cm] (g) at (2.6,0) {guard};
+  \node[relay,minimum size=0.9cm] (m) at (5.2,0) {middle};
+  \node[relay,minimum size=0.9cm,fill=torverde!30] (e) at (7.8,0) {exit};
+  \node[server,minimum width=1.5cm,minimum height=0.7cm] (s) at (10.4,0) {website};
+  \draw[cellaf] (c) -- (g); \draw[cellaf] (g) -- (m); \draw[cellaf] (m) -- (e);
+  \draw[->,thick,torgrigio] (e) -- (s);
+  \node[font=\sffamily\tiny,anchor=east,align=right] at (-1.0,-1.1) {knows\\the client};
+  \node[font=\sffamily\tiny,anchor=east,align=right] at (-1.0,-1.9) {knows\\the destination};
+  \node[sa] at (2.6,-1.1) {yes};
+  \node[no] at (5.2,-1.1) {no}; \node[no] at (7.8,-1.1) {no}; \node[no] at (10.4,-1.1) {no};
+  \node[no] at (2.6,-1.9) {no}; \node[no] at (5.2,-1.9) {no};
+  \node[sa] at (7.8,-1.9) {yes}; \node[sa] at (10.4,-1.9) {yes};
+  \node[align=center,font=\sffamily\tiny,text=avviso] at (5.2,-2.8) {no single Tor relay knows both endpoints:\\an observer at entry and exit may correlate (Ch.~26)};
+\end{tikzpicture}

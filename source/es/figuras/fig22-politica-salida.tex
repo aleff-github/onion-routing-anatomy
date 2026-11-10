@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible, solo para EPUB.
+\altfig{Política de salida del laboratorio Chutney: ExitPolicyRejectPrivate 0 desactiva el rechazo previo de destinos privados solo en la red de pruebas. Dos solicitudes BEGIN a 127.0.0.1 en los puertos 8080 y 8081 se examinan por orden. El puerto 8080 coincide con reject 127.0.0.1:8080 y recibe END EXITPOLICY; 8081 no coincide con ese rechazo, pero sí con accept 127.0.0.0/8:*, que permite intentar una conexión TCP. CONNECTED requiere un servidor escuchando. Si accept precediera a reject, el rechazo específico sería ineficaz. Nunca desactives ExitPolicyRejectPrivate en una salida pública.}
+% Política de salida solo en laboratorio
+\begin{tikzpicture}[font=\sffamily\scriptsize,node distance=0.45cm,
+  reg/.style={draw,rounded corners=1pt,minimum height=0.6cm,text width=4.6cm,font=\ttfamily\scriptsize},
+  esito/.style={draw,rounded corners=2pt,minimum height=0.6cm,text width=2.5cm,align=center}]
+  \node[font=\sffamily\scriptsize] (top) at (0,1.25) {dos BEGIN: 127.0.0.1:8080 / :8081};
+  \node[draw,rounded corners=2pt,fill=torviola!10,font=\ttfamily\tiny] (r0) at (0,0.15) {ExitPolicyRejectPrivate 0};
+  \node[reg,fill=avviso!12,below=of r0] (r1) {reject 127.0.0.1:8080};
+  \node[reg,fill=torverde!12,below=of r1] (r2) {accept 127.0.0.0/8:*};
+  \node[reg,fill=torgrigio!10,below=of r2] (r3) {(otras reglas predeterminadas)};
+  \draw[->] (top) -- (r0); \draw[->] (r0) -- (r1); \draw[->] (r1) -- node[right,font=\sffamily\tiny] {8081: no coincide} (r2); \draw[->] (r2) -- node[right,font=\sffamily\tiny] {otros casos} (r3);
+  \node[esito,fill=avviso!15,draw=avviso,right=1.2cm of r1] (e1) {\texttt{END} motivo\\\texttt{EXITPOLICY}};
+  \draw[->,avviso,thick] (r1) -- node[above,font=\sffamily\tiny] {8080 coincide} (e1);
+  \node[esito,fill=torverde!15,draw=torverde!60!black,right=1.2cm of r2] (e2) {intento TCP\\CONNECTED solo\\si escucha};
+  \draw[->,torverde!60!black,dashed] (r2) -- node[above,font=\sffamily\tiny] {8081 coincide} (e2);
+  \node[anchor=west,font=\sffamily\tiny,text=torgrigio,align=left] at (-5.9,-0.55) {prevalece la primera\\regla coincidente};
+  \node[anchor=west,font=\sffamily\tiny,text=avviso] at (-5.9,-1.95) {nunca en salida pública};
+  \node[font=\sffamily\tiny,text=torgrigio,anchor=south] at (r0.north) {solo laboratorio: ExitPolicyRejectPrivate 0};
+\end{tikzpicture}

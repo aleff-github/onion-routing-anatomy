@@ -1,0 +1,34 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Testo alternativo per l'accessibilita' (usato solo nell'EPUB).
+\altfig{Costruzione telescopica di un circuito Tor a tre salti: quattro colonne rappresentano client, R1 guard, R2 middle e R3 exit. Il client scambia CREATE2/CREATED2 con R1 e ottiene le chiavi K1. Poi invia EXTEND2 attraverso il circuito esistente: R1 elabora la richiesta e invia CREATE2 a R2; le risposte CREATED2/EXTENDED2 riportano al client il materiale necessario a derivare K2. Per il terzo salto, EXTEND2 attraversa il guard nel circuito cifrato e viene elaborato da R2, che apre CREATE2 verso R3; le risposte consentono al client di derivare K3. Ogni handshake stabilisce chiavi separate fra client e relay destinatario, mentre i relay precedenti inoltrano i messaggi per i salti successivi dopo aver trattato il proprio livello. Le frecce tratteggiate indicano un tragitto logico attraverso i relay intermedi, non link fisici diretti. I tre link tra nodi adiacenti usano ciascuno un canale TLS.}
+% Costruzione telescopica di un circuito
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  msg/.style={font=\ttfamily\scriptsize,fill=white,inner sep=1pt},
+  indietro/.style={-{Stealth[length=2.5mm]},thick,torverde!60!black},
+  circav/.style={cellaf,dashed},
+  circind/.style={indietro,dashed}]
+  \foreach \n/\x/\t in {c/0/Client,r1/3.4/$R_1$ guard,r2/6.8/$R_2$ middle,r3/10.2/$R_3$ exit}
+    \node[font=\sffamily\small] (\n) at (\x,0) {\t};
+  \foreach \x in {0,3.4,6.8,10.2} \draw[torgrigio] (\x,-0.3) -- (\x,-5.5);
+  % primo salto
+  \draw[cellaf] (0,-0.9) -- node[msg,above]{CREATE2} (3.4,-0.9);
+  \draw[indietro] (3.4,-1.5) -- node[msg,above]{CREATED2} (0,-1.5);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-1.2) {chiavi $K_1$};
+  % secondo salto
+  \draw[circav] (0,-2.5) -- node[msg,above]{EXTEND2} (3.4,-2.5);
+  \draw[cellaf] (3.4,-2.5) -- node[msg,above]{CREATE2} (6.8,-2.5);
+  \draw[indietro] (6.8,-3.1) -- node[msg,above]{CREATED2} (3.4,-3.1);
+  \draw[circind] (3.4,-3.1) -- node[msg,above]{EXTENDED2} (0,-3.1);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-2.8) {chiavi $K_2$};
+  % terzo salto
+  \draw[circav] (0,-4.2) -- node[msg,above]{EXTEND2} (6.8,-4.2);
+  \draw[cellaf] (6.8,-4.2) -- node[msg,above]{CREATE2} (10.2,-4.2);
+  \draw[indietro] (10.2,-4.8) -- node[msg,above]{CREATED2} (6.8,-4.8);
+  \draw[circind] (6.8,-4.8) -- node[msg,above]{EXTENDED2} (0,-4.8);
+  \node[anchor=east,font=\scriptsize,text=torgrigio] at (-0.2,-4.5) {chiavi $K_3$};
+  % canali
+  \foreach \a/\b/\y in {0/3.4/-5.8,3.4/6.8/-5.8,6.8/10.2/-5.8}
+    \draw[thick,torgrigio!60,{Bar}-{Bar}] (\a,\y) -- node[below,font=\scriptsize]{canale TLS} (\b,\y);
+  \node[font=\scriptsize,text=torgrigio,align=center] at (5.1,-6.6) {ogni handshake è tra il client e un solo relay};
+\end{tikzpicture}

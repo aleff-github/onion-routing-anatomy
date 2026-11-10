@@ -1,0 +1,107 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Le radici: mix network, remailer, Crowds, Freedom}\label{cap:02-radici}
+\aggiornatoal{23 settembre 2026}{fonti storiche citate nel capitolo}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item spiegare l'idea della \emph{mix} di David Chaum e perché è alla base di tutti i sistemi di anonimato;
+  \item distinguere i sistemi ad alta latenza, per la posta, da quelli a bassa latenza, per la navigazione;
+  \item ricostruire l'evoluzione dei remailer, da anon.penet.fi a Mixminion;
+  \item collocare Crowds, PipeNet e Freedom nella storia che porta a Tor.
+\end{itemize}
+\end{obiettivi}
+
+Tor non è nato dal nulla. È il punto d'arrivo, per ora, di quarant'anni di ricerca e di sistemi reali, alcuni riusciti e molti falliti, ciascuno dei quali ha insegnato qualcosa. Questo capitolo ripercorre le tappe principali, fino alla soglia dell'onion routing.
+
+% ---------------------------------------------------------------------------
+\section{La mix di Chaum (1981)}\label{sec:radici-chaum}
+
+Nel 1981 David Chaum pubblicò un articolo di cinque pagine destinato a fondare un intero campo di ricerca: \titolo{Untraceable Electronic Mail, Return Addresses, and Digital Pseudonyms}~\cite{chaum1981untraceable}. Il problema era la posta elettronica: come inviare un messaggio senza che chi osserva la rete possa collegare mittente e destinatario, anche se la rete intera è sotto osservazione?
+
+La soluzione è la \textbf{mix}: un server che riceve messaggi cifrati con la propria chiave pubblica, li decifra, ne raccoglie un gruppo (un \emph{lotto}) e li rispedisce tutti insieme, in ordine diverso da quello di arrivo. Tre accorgimenti rendono impossibile collegare un messaggio in ingresso a uno in uscita:
+\begin{itemize}
+  \item il messaggio in uscita ha un aspetto completamente diverso da quello in ingresso, perché la mix ha tolto uno strato di cifratura;
+  \item tutti i messaggi hanno la stessa lunghezza;
+  \item l'ordine viene rimescolato, e i messaggi escono insieme, così che nemmeno i tempi li collegano.
+\end{itemize}
+\begin{figure}[htbp]
+\centering
+\input{figure/fig02-mix}
+\caption{Una mix di Chaum. Chi osserva l'ingresso e l'uscita non può collegare i messaggi: sono tutti della stessa lunghezza, cambiano aspetto perché la mix toglie uno strato di cifratura, ed escono insieme in ordine diverso.}
+\label{fig:mix}
+\end{figure}
+
+Per non dover fidarsi di una sola mix, il mittente può farne attraversare al messaggio una \textbf{catena}, cifrandolo a strati con le chiavi di ciascuna: ogni mix toglie il proprio strato e scopre solo la mix successiva. Basta che una sola mix della catena sia onesta perché il collegamento resti nascosto. È, in germe, l'idea della cipolla.
+
+Chaum propose nello stesso articolo gli \emph{indirizzi di ritorno anonimi}, con cui il destinatario può rispondere senza conoscere il mittente, e l'uso di pseudonimi digitali. Nel 1988 aggiunse un secondo meccanismo, le \emph{DC-net}~\cite{chaum1988dining}, che offrono un anonimato incondizionato al prezzo di costi molto alti e che hanno avuto un'influenza soprattutto teorica.
+
+% ---------------------------------------------------------------------------
+\section{Alta e bassa latenza}\label{sec:radici-latenza}
+
+La mix di Chaum protegge molto bene, ma è \textbf{lenta}: un messaggio attende in ogni mix che si formi un lotto, e può impiegare minuti o ore ad arrivare. Per la posta elettronica è accettabile. Per la navigazione web, dove una pagina deve arrivare in pochi secondi, no.
+
+È la grande divisione di questo campo:
+\begin{description}
+  \item[Sistemi ad alta latenza] (mix, remailer): ritardano e rimescolano i messaggi, e resistono anche a un osservatore che vede tutta la rete, ma sono adatti solo a comunicazioni che possono aspettare.
+  \item[Sistemi a bassa latenza] (onion routing, Tor): inoltrano i dati appena arrivano, e sono quindi usabili per il web, la chat e le connessioni interattive; ma chi osserva entrambi gli estremi può correlare i tempi e i volumi del traffico.
+\end{description}
+Tor sceglie consapevolmente la seconda strada: un sistema che quasi nessuno usa perché troppo lento non protegge nessuno (\cref{sec:anon-utenti}).
+
+% ---------------------------------------------------------------------------
+\section{I remailer}\label{sec:radici-remailer}
+
+Negli anni Novanta le idee di Chaum diventarono servizi reali, i \textbf{remailer}: server che ricevono un messaggio di posta e lo inoltrano togliendo le informazioni sul mittente.
+
+\paragraph{anon.penet.fi (1993--1996).} Il remailer più famoso fu gestito in Finlandia da Johan \enquote{Julf} Helsingius dal 1993 al 1996. Non era una mix: assegnava a ogni utente uno \emph{pseudonimo} e conservava la tabella che collegava gli pseudonimi agli indirizzi reali, per poter inoltrare le risposte. Arrivò a gestire migliaia di messaggi al giorno. Proprio quella tabella ne decretò la fine: nel 1995 e nel 1996 la Chiesa di Scientology, con l'aiuto della polizia finlandese, ottenne l'identità di alcuni utenti che avevano diffuso documenti della chiesa, e nel 1996 Helsingius chiuse il servizio, citando l'incertezza legale su Internet in Finlandia. La lezione, ripresa esplicitamente dai progettisti dell'onion routing~\cite{syverson2011peel}, è che un sistema che conserva il collegamento tra utenti e identità è un punto unico di fallimento: chi lo gestisce può essere costretto a consegnarlo.
+
+\paragraph{Cypherpunk, Mixmaster, Mixminion.} In parallelo, la comunità dei \emph{cypherpunk} sviluppò remailer senza tabelle, in cui il mittente cifra a strati il messaggio per una catena di server. Le generazioni successive, Mixmaster e poi Mixminion~\cite{danezis2003mixminion}, introdussero messaggi di lunghezza fissa, veri lotti e protezioni contro la ripetizione dei messaggi. Mixminion, del 2003, ha tra i suoi autori Roger Dingledine e Nick Mathewson: le stesse persone che nello stesso periodo stavano progettando Tor.
+
+% ---------------------------------------------------------------------------
+\section{Verso la bassa latenza}\label{sec:radici-bassa}
+
+\paragraph{PipeNet (1995).} In un messaggio alla lista dei cypherpunk del febbraio 1995, Wei Dai propose PipeNet, un sistema a bassa latenza in cui tutti i partecipanti inviano sempre traffico a velocità costante, così che non ci sia nulla da correlare. È sicuro contro l'analisi dei tempi, ma a un prezzo inaccettabile: se un solo partecipante smette di trasmettere, l'intera rete deve fermarsi~\cite{syverson2011peel}. Non fu mai realizzato, ma resta il riferimento di ciò che servirebbe per battere la correlazione del traffico.
+
+\paragraph{Onion routing (1996).} Nello stesso anno al Naval Research Laboratory nasceva l'onion routing, che racconteremo nel \cref{cap:03-nascita-tor}.
+
+\paragraph{Crowds (1998).} Michael Reiter e Aviel Rubin proposero Crowds~\cite{reiter1998crowds}: gli utenti formano una \enquote{folla}, e ogni richiesta web viene inoltrata a un membro a caso, che con una certa probabilità la invia al sito e altrimenti la passa a un altro membro. Il sito vede la richiesta arrivare da un membro qualsiasi, e ogni membro non sa se chi gli passa la richiesta ne sia l'autore. Crowds non usa cifratura a strati e protegge soltanto dal sito e dagli altri membri, non da chi osserva la rete; ma ha introdotto un modo rigoroso di ragionare sull'anonimato come probabilità, e un'analisi degli attacchi dei membri complici che anticipa quella dei guard.
+
+\paragraph{Freedom (1999--2001).} La rete più importante prima di Tor per dimensioni fu Freedom, dell'azienda canadese Zero-Knowledge Systems: annunciata alla fine del 1998, funzionò dalla fine del 1999 alla fine del 2001~\cite{syverson2011peel}. Era un servizio commerciale, in cui gli utenti pagavano un abbonamento e i server erano gestiti dall'azienda e da partner. Chiuse perché gli abbonamenti non bastavano a sostenerla. La sua storia si presta a due lezioni, che Tor, come vedremo, ha di fatto seguito: una rete di anonimato è più solida se è gestita da molti soggetti indipendenti anziché da un'azienda sola, e il modello di finanziamento conta quanto la crittografia (\cref{sec:nascita-comunita}).
+
+\begin{approfondimento}[Molte cipolle]
+Negli stessi anni furono proposti molti altri sistemi di onion routing, come Tarzan e MorphMix, completamente decentralizzati, o Cebolla, da cui Tor ha preso l'idea di costruire i circuiti un salto alla volta con uno scambio Diffie-Hellman per ogni salto~\cite{syverson2011peel}. Altri progetti sono nati in parallelo a Tor seguendo strade diverse: I2P, una rete pensata soprattutto per servizi interni e tuttora attiva, e AN.ON, nato all'Università di Dresda con il client JAP (e offerto anche come servizio commerciale con il nome JonDonym), basato su catene fisse di mix gestite da operatori noti. Ciascuno sceglie un diverso equilibrio tra decentramento, fiducia e prestazioni.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item La mix di Chaum (1981) nasconde il legame tra messaggi in ingresso e in uscita cambiandone l'aspetto, uniformandone la lunghezza e rimescolandone l'ordine; una catena di mix cifrata a strati anticipa la cipolla.
+  \item I sistemi ad alta latenza resistono a osservatori molto potenti ma sono lenti; quelli a bassa latenza sono usabili, ma vulnerabili alla correlazione dei tempi.
+  \item anon.penet.fi mostrò il rischio di un sistema che conserva l'identità degli utenti; Mixmaster e Mixminion svilupparono le mix per la posta.
+  \item PipeNet, Crowds e Freedom esplorarono la bassa latenza con compromessi diversi; Freedom mostrò l'importanza di una rete gestita da molti e di un modello sostenibile.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:02-mix}
+Una mix raccoglie lotti di 100 messaggi. Un osservatore vede entrare i 100 messaggi e uscire i 100 messaggi. Se conosce il mittente di un messaggio in ingresso, qual è la probabilità di indovinare il corrispondente in uscita tirando a caso? Che cosa succederebbe se 99 dei 100 messaggi fossero stati inviati dall'osservatore stesso?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:02-penet}
+Progetta, a grandi linee, un remailer che permetta di rispondere agli utenti senza conservare una tabella pseudonimo--indirizzo. Quale idea di Chaum ti serve?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:02-crowds}
+In Crowds, con probabilità di inoltro $p_f = 3/4$, quanti membri attraversa in media una richiesta prima di arrivare al sito? Perché un membro che riceve una richiesta non può essere sicuro che chi gliela passa ne sia l'autore?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item D.~Chaum, \titolo{Untraceable Electronic Mail, Return Addresses, and Digital Pseudonyms}~\cite{chaum1981untraceable}.
+  \item M.~Reiter, A.~Rubin, \titolo{Crowds: Anonymity for Web Transactions}~\cite{reiter1998crowds}.
+  \item G.~Danezis, R.~Dingledine, N.~Mathewson, \titolo{Mixminion: Design of a Type III Anonymous Remailer Protocol}~\cite{danezis2003mixminion}.
+  \item La \emph{Anonymity Bibliography} di Free Haven, \url{https://www.freehaven.net/anonbib/}: la raccolta di riferimento degli articoli del settore.
+\end{itemize}

@@ -1,0 +1,153 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Capítulo \ref{cap:07-canali}: canales y protocolo de enlace}
+
+\begin{soluzione}{es:07-ruoli}
+Un cliente siempre inicia sus conexiones: con su guardia y con los repetidores que ofrecen información de directorio. Nadie necesita contactar directamente con él y escuchar en un puerto facilitaría identificarlo. Un repetidor inicia canales principalmente cuando recibe una solicitud \texttt{EXTEND2} y debe alcanzar el siguiente salto del circuito, o cuando, como cualquier nodo, crea circuitos propios para descargar documentos de directorio o comprobar su accesibilidad.
+\end{soluzione}
+
+\begin{soluzione}{es:07-scadenza}
+$\texttt{0x000772F7}=488183$ horas, correspondientes al 9 de septiembre de 2025 a las 23:00 UTC. Un contador sin signo de 32 bits en segundos se desbordaría en 2106. Contar horas, en cambio, ofrece cientos de miles de años y basta para certificados cuya duración se mide en días o semanas. Una nota de la especificación exige precaución: \texttt{cert-spec} afirma que cuatro bytes bastan hasta el año 10136. Es un error identificado explícitamente en \proposta{338}, causado por interpretar el contador como si midiera \emph{minutos}, ya que $2^{32}$ minutos equivalen aproximadamente a 8166 años.
+\end{soluzione}
+
+\begin{soluzione}{es:07-authchallenge}
+$38=32+2+2\times2$ describe un desafío con dos métodos. Si N\_Methods vale 2, el cuerpo debe contener $32+2+4=38$ bytes. Un cuerpo de 36 bytes declara más métodos de los que incluye y está mal formado: debe rechazarse. La especificación permite ignorar bytes \emph{adicionales}, no bytes ausentes.
+\end{soluzione}
+
+\begin{soluzione}{es:07-impostore}
+Falla la comparación entre la clave certificada por el certificado de tipo 5 y la huella SHA-256 del certificado TLS del adversario: es diferente del certificado del repetidor auténtico. Si el adversario presentara exactamente el certificado TLS legítimo, no podría completar el intercambio TLS sin la correspondiente clave privada.
+\end{soluzione}
+
+\begin{soluzione}{es:07-netinfo}
+\texttt{695661c0} (1 de enero de 2026, 12:00:00 UTC); \texttt{04 04 c6336407} (dirección del cliente, 198.51.100.7); \texttt{01}; y \texttt{04 04 cb007105} (dirección del repetidor, 203.0.113.5), seguidos de relleno de ceros hasta alcanzar 509 bytes.
+\end{soluzione}
+
+\begin{soluzione}{es:07-client-auth}
+En primer lugar, el guardia vería la misma identidad cuando el usuario cambiara entre las redes doméstica, laboral y móvil, relacionando sesiones y direcciones IP de todos esos entornos. En segundo lugar, la identidad también se facilitaría a los repetidores de los que el cliente obtuviera información de directorio. Repetidores que colaboraran, o un adversario que los observara, podrían vincular la actividad del usuario en distintos nodos. En ambos casos, un identificador persistente destruiría la desvinculación pretendida por Tor.
+\end{soluzione}
+
+\begin{soluzione}{es:07-rsa}
+Esquema de solución: analiza el certificado de tipo 2 con una biblioteca X.509, como \texttt{cryptography.x509}. Extrae su clave pública RSA, verifica la autofirma y comprueba que su exponente sea 65537. Después analiza el certificado cruzado de tipo 7 conforme a su formato. Asegúrate de que la clave Ed25519 certificada coincide con la identidad ya verificada y comprueba la firma RSA mediante PKCS\#1 v1.5 sin identificador OID del algoritmo hash, aplicada al SHA-256 del prefijo y los campos prescritos. La huella del repetidor es el resumen SHA-1 de la representación PKCS\#1 de la clave pública RSA codificada en DER.
+\end{soluzione}
+
+\begin{soluzione}{es:07-padding}
+No. El tráfico del cliente \texttt{test008c} atraviesa \emph{su propio} canal con el guardia, no nuestro canal. Este último no se ha utilizado para ningún circuito, por lo que \file{channelpadding\_decide\_to\_pad\_channel} decide no añadir relleno. Para observarlo debemos transportar un circuito de varios saltos por nuestro propio canal, como en \cref{cap:10-cifratura-relay}.
+\end{soluzione}
+
+\begin{soluzione}{es:07-mitm}
+TLSSECRETS se deriva de los secretos de la sesión TLS entre $A$ y el intermediario, y la firma de $A$ lo cubre. $B$ recalcula TLSSECRETS a partir de los secretos de \emph{su propia} sesión con el intermediario. Los secretos son distintos, así que la verificación falla aunque el intermediario reenvíe fielmente todas las celdas y SLOG y CLOG coincidan. Sin TLSSECRETS y SCERT, el intermediario podría presentarse a $B$ como $A$ y reenviar la firma de $A$, haciendo creer a $B$ que estableció un canal autenticado con $A$.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:08-celle}: celdas}
+
+\begin{soluzione}{es:08-lunghezze}
+\cella{CREATE2} es una celda de longitud fija: 512 bytes con protocolo de enlace 3 y CircID de dos bytes, o 514 bytes con versión 5 y CircID de cuatro bytes. \cella{VERSIONS} utiliza siempre un CircID de dos bytes, por lo que ocupa $2+1+2+4=9$ bytes.
+\end{soluzione}
+
+\begin{soluzione}{es:08-formato}
+0 (\cella{PADDING}) es de longitud fija; 7 (\cella{VERSIONS}) es variable; 9 (\cella{RELAY\_EARLY}) es fija; 12 (\cella{PADDING\_NEGOTIATE}) es fija; y 129 (\cella{CERTS}) es variable. El comando 200 tendría longitud variable según la regla $\ge128$, pero no está definido y, por tanto, no está permitido. El receptor puede descartarlo y cerrar el canal.
+\end{soluzione}
+
+\begin{soluzione}{es:08-circid}
+Solo \texttt{0x92345678}. El CircID cero queda reservado a celdas ajenas a circuitos. Con protocolo de enlace $\ge4$, la parte que inicia el canal, aquí el cliente, debe elegir CircID con el bit más significativo igual a 1; en \texttt{0x12345678} ese bit vale 0.
+\end{soluzione}
+
+\begin{soluzione}{es:08-hex}
+Primera celda: CircID \texttt{00000000}, comando \texttt{0x81}=129 (\cella{CERTS}), por lo que es variable; longitud \texttt{0003}, cuerpo \texttt{aa bb cc}. Segunda celda: CircID \texttt{0x80000007}, comando \texttt{0x04} (\cella{DESTROY}), de longitud fija, con un cuerpo de 509 bytes. El primer byte del cuerpo, \texttt{00}, significa razón NONE. El cuerpo \texttt{aabbcc} no constituye por sí mismo un objeto CERTS válido: el ejercicio se refiere únicamente al encuadre de celdas.
+\end{soluzione}
+
+\begin{soluzione}{es:08-relay}
+\texttt{02 0000 0005 00000000 012c}: comando DATA (2), Recognized 0, StreamID 5, Digest provisionalmente cero y longitud $300=\texttt{0x012c}$. Los $509-11-300=198$ bytes restantes son relleno: los cuatro primeros son ceros y los otros 194 son aleatorios.
+\end{soluzione}
+
+\begin{soluzione}{es:08-recognized}
+Para una celda todavía cifrada con otra capa, Recognized vale cero con probabilidad $2^{-16}$: de un millón de celdas, aproximadamente $10^6/65536\approx15$ cumplirían esa condición. Recognized no basta porque hay falsos positivos. Solo la comparación con el resumen acumulativo, que un repetidor no destinatario no puede hacer coincidir salvo por azar (otro factor de $2^{-32}$), confirma que la celda está destinada a ese salto.
+\end{soluzione}
+
+\begin{soluzione}{es:08-destroy}
+Supongamos que un adversario controla el guardia y la salida. Cuando la salida desea marcar un circuito, lo cierra con una razón poco frecuente, como \texttt{NOSUCHSERVICE}. Si el intermedio y el guardia reenviaran sin cambios esa razón hacia el cliente, el guardia podría observar el valor inusual en uno de sus circuitos al mismo tiempo y vincular al cliente conocido por el guardia con el destino conocido por la salida. Si todos los repetidores transmiten y propagan únicamente NONE, el byte de razón no puede transportar esa señal. Sigue siendo posible correlacionar el momento del cierre, pero ese canal es mucho más ruidoso.
+\end{soluzione}
+
+\begin{soluzione}{es:08-efficienza}
+Formato tradicional: $\lceil1048576/498\rceil=2106$ celdas, que ocupan $2106\times514=\num{1082484}$ bytes en el canal, un 3,2\% de sobrecarga. CGO: $\lceil1048576/488\rceil=2149$ celdas, que ocupan \num{1104586} bytes, un 5,3\% de sobrecarga. No se cuentan SENDME ni los mensajes de apertura de flujo.
+\end{soluzione}
+
+\begin{soluzione}{es:08-lab-fuzz}
+Esquema: utiliza Hypothesis para generar listas de tuplas con CircID, comando y cuerpo. Elige comandos de \texttt{CellCommand} y limita a 509 bytes los cuerpos de celdas de longitud fija. Concatena los resultados de \texttt{encode}, divídelos en fragmentos de longitud aleatoria e introdúcelos progresivamente en un búfer. Llama repetidamente a \texttt{decode} para extraer celdas hasta que no quede ninguna completa. Compara las celdas fijas con cuerpos rellenados con ceros hasta 509 bytes.
+\end{soluzione}
+
+\begin{soluzione}{es:08-arti}
+En Arti 2.6.0, el códec de canal es \texttt{ChannelCodec}, situado en \file{crates/tor-cell/src/chancell/codec.rs}, inicializado con la versión del protocolo mediante \texttt{ChannelCodec::new}. Sus métodos \file{write\_cell} y \file{decode\_cell} serializan y extraen celdas. Como nuestro \texttt{decode}, \file{decode\_cell} acepta celdas incompletas sin generar un error, devuelve \texttt{Ok(None)} hasta disponer de bytes suficientes y consume datos del búfer solo para celdas completas. Arti, en cambio, opera sobre un búfer mutable \texttt{BytesMut} y es genérico respecto al tipo de mensaje de canal (\texttt{M: ChanMsg}), lo que permite restringir los mensajes aceptados. Otra diferencia es que \file{decode\_cell} lee el comando en el desplazamiento 4 y presupone celdas fijas de 514 bytes, con CircID de cuatro bytes. Arti solo admite protocolos de enlace 4 y 5, según \file{LINK\_PROTOCOLS} en \file{crates/tor-proto/src/channel/handshake.rs}; la celda inicial \cella{VERSIONS}, con CircID de dos bytes, se procesa separadamente durante el intercambio inicial.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:09-circuiti}: construcción de circuitos}
+
+\begin{soluzione}{es:09-dimensioni}
+ntor requiere $20+32+32=84$ bytes. ntor-v3 con un mensaje de tres bytes requiere $32+32+32+3+32=131$ bytes. HDATA puede contener como máximo $509-4=505$ bytes, así que $CM$ puede ocupar como máximo $505-128=377$ bytes.
+\end{soluzione}
+
+\begin{soluzione}{es:09-fast}
+El secreto de \cella{CREATE\_FAST} es $X\|Y$, transmitido en claro dentro del canal. Para un segundo salto, $X$ e $Y$ atravesarían el circuito por el primer repetidor. Este conoce las claves de su propia capa, podría leer esos valores, derivar las claves del segundo salto y descifrar todo lo intercambiado entre el cliente y aquel, destruyendo la separación entre saltos.
+\end{soluzione}
+
+\begin{soluzione}{es:09-direzioni}
+AES-CTR cifra aplicando XOR entre texto claro y una secuencia que depende únicamente de clave y contador. Con la misma clave en ambos sentidos, la celda número $n$ del cliente y la celda número $n$ del repetidor utilizarían la misma secuencia. Un repetidor intermedio que observara ambos textos cifrados podría aplicarles XOR para obtener el XOR de sus textos claros, lo que a menudo permitiría recuperar ambos mensajes.
+\end{soluzione}
+
+\begin{soluzione}{es:09-extend2}
+El repetidor \texttt{test004r} utiliza ORPort 5104 = \texttt{0x13f0}: \texttt{03} indica tres especificadores de enlace; el especificador de dirección IPv4 y puerto es \texttt{00 06 7f000001 13f0}. El mensaje completo contiene $1+(2+6)+(2+20)+(2+32)=65$ bytes de especificadores, más $2+2=4$ bytes para HTYPE y HLEN y $32\cdot3+1+32=129$ bytes de HDATA. El total es 198 bytes, muy por debajo de los 498 bytes disponibles en un mensaje relay.
+\end{soluzione}
+
+\begin{soluzione}{es:09-ds}
+Sin $\mathrm{EXP}(B,x)$, el repetidor no está autenticado. Un intermedio que reenvíe el intercambio podría generar sus propios $Y$ y $\mathit{AUTH}$ con su $y$, suplantar al siguiente salto y leer el tráfico posterior destinado a él: un ataque de intermediario (\emph{man-in-the-middle}). Sin $\mathrm{EXP}(Y,x)$ se pierde el secreto hacia adelante. Cualquiera que consiga posteriormente la clave onion permanente $b$ podría recalcular $\mathrm{EXP}(X,b)$ a partir de intercambios grabados y derivar todas las claves de sesión.
+\end{soluzione}
+
+\begin{soluzione}{es:09-ver}
+\texttt{VER} vincula el intercambio a su contexto, \texttt{"circuit extend"} para Tor. Al entrar en todas las derivaciones, un intercambio generado en un contexto no produce claves ni valores $\mathit{AUTH}$ válidos en otro. Sin \texttt{VER}, un adversario podría reutilizar un mensaje de intercambio de otro protocolo contra un repetidor Tor, o viceversa, si ambos aceptaran los mismos cálculos. Son ataques \emph{entre protocolos}.
+\end{soluzione}
+
+\begin{soluzione}{es:09-cc}
+En la red de laboratorio, \texttt{test003r}, que admite \texttt{Relay=2-6}, rechaza una solicitud compuesta solo por \texttt{[02 06]} mediante una celda \cella{DESTROY} con razón \texttt{PROTOCOL}. Acepta una solicitud combinada que incluya \file{CC\_FIELD\_REQUEST} y responde con \file{CC\_FIELD\_RESPONSE}. El código de tor activa CGO en un salto únicamente cuando está habilitado también el control de congestión: \file{enable\_cgo = supports\_cgo \&\& use\_congestion\_control}, en \file{src/core/or/extendinfo.c}. \proposta{359} explica por qué el nuevo formato de mensajes relay, en el que solo ciertos comandos tienen StreamID, es incompatible con el mecanismo anterior de control de flujo SENDME por flujo. Exige el control de flujo de \proposta{324}, es decir \texttt{FlowCtrl=2}.
+\end{soluzione}
+
+\begin{soluzione}{es:09-ntor-ref}
+Es un ejercicio práctico. \file{ntor\_ref.py} contiene las funciones de cliente y servidor. Utilizar claves fijas en lugar de generar nuevas aleatoriamente produce valores reproducibles que pueden compararse con \file{ntor.py}.
+\end{soluzione}
+
+\begin{soluzione}{es:09-relay}
+Esquema: \file{server\_part1} recibe HDATA, verifica \texttt{ID} y $B$, calcula $X_b=\mathrm{EXP}(X,b)$, deriva las claves de la primera fase, verifica la MAC y descifra $CM$. Después \file{server\_part2} genera $(y,Y)$, calcula $\mathit{key\_seed}$ y $\mathit{verify}$, deriva la clave de $SM$ y calcula $\mathit{AUTH}$. Si se fija $y$ al valor del vector de prueba de la propuesta, la respuesta debe coincidir con \file{server\_handshake}.
+\end{soluzione}
+
+\section*{Capítulo \ref{cap:10-cifratura-relay}: la cebolla}
+
+\begin{soluzione}{es:10-ordine}
+El cliente actualiza el resumen acumulativo hacia delante del segundo salto, cifra con Kf$_2$ y después con Kf$_1$. El tercer salto no ve nada: el segundo reconoce la celda y no la reenvía.
+\end{soluzione}
+
+\begin{soluzione}{es:10-contatore}
+Cada celda consume 509 bytes de secuencia de cifrado. Después de \num{1000} celdas, la posición es $509\times1000=\num{509000}$ bytes, después del bloque AES \num{31812}, cuyos bloques son de 16 bytes. Reutilizar la clave en un circuito nuevo cuyo contador volviera a cero reutilizaría la secuencia; aplicar XOR a dos textos cifrados con ella revelaría el XOR de sus textos claros. Cada circuito deriva, por tanto, claves nuevas mediante un intercambio con valores efímeros.
+\end{soluzione}
+
+\begin{soluzione}{es:10-falso}
+El resumen acumulativo del repetidor incluiría una celda que el cliente no había contado para ese salto. Desde ese momento, sus estados divergirían, ninguna celda posterior sería reconocida y el circuito quedaría inutilizable. El problema ocurre con probabilidad $2^{-16}$ para cada celda en tránsito no destinada al repetidor: una de cada \num{65536} de media, equivalente a unos 33\,MB de tráfico.
+\end{soluzione}
+
+\begin{soluzione}{es:10-tag}
+El adversario debería alterar bytes cuyo texto claro esperado se conoce o puede predecirse, para que un cómplice en la salida detecte una modificación concreta: por ejemplo, el comando relay, \texttt{02} para \texttt{DATA}, StreamID o los cuatro bytes a cero al principio del relleno. Antes de comprobar el resumen, la salida cómplice examina si esos bytes coinciden con la modificación esperada. Una salida honesta solo ve una celda con resumen inválido y destruye el circuito.
+\end{soluzione}
+
+\begin{soluzione}{es:10-cgo-tag}
+Con CGO, después de quitar la capa de cifrado de la salida, una celda alterada produce una etiqueta y un contenido seudoaleatorios. No hay una marca reconocible: la modificación se propaga impredeciblemente por toda la celda. Como la etiqueta interviene en el procesamiento de la siguiente celda, las posteriores también quedan imposibles de descifrar y el circuito debe descartarse. Por tanto, el adversario solo puede destruir circuitos, algo que ya podía hacer.
+\end{soluzione}
+
+\begin{soluzione}{es:10-padding}
+Los intervalos observados son 4,1; 3,0; 5,7; 8,7 y 6,8 segundos, con una media de 5,7. Para el máximo de dos variables uniformes independientes en $[a,b]$, el valor esperado es $a+\tfrac{2}{3}(b-a)=1{,}5+\tfrac{2}{3}\cdot8\approx6{,}8$ segundos. Cinco muestras son insuficientes para que sorprenda la diferencia observada. Además, el temporizador se reinicia cuando cruza el canal \emph{cualquier} celda, no solo las de relleno.
+\end{soluzione}
+
+\begin{soluzione}{es:10-drop}
+En la red de laboratorio, el repetidor intermedio no responde a \texttt{DROP}; reconoce el mensaje y lo descarta silenciosamente. La evidencia indirecta es que el circuito sigue funcionando: después de dos \texttt{DROP}, el cliente todavía puede extenderlo hasta la salida. Si el intermedio no hubiera reconocido las celdas, como último salto del circuito en ese momento lo habría destruido. Si cliente e intermedio hubieran contado celdas de forma diferente, sus resúmenes acumulativos se habrían desincronizado y la extensión posterior habría fallado.
+\end{soluzione}
+
+\begin{soluzione}{es:10-alterazione}
+En la prueba de red privada, cambiar un bit de una celda \texttt{EXTEND2} destinada al guardia, entonces único salto del circuito, provoca el fallo de la comprobación del resumen. Como extremo de ese circuito, el guardia responde con una celda \cella{DESTROY} de razón 1 (\texttt{PROTOCOL}). En un circuito más largo, una modificación realizada por el cliente en una celda destinada al tercer salto atravesaría los dos primeros y solo sería detectada por el tercero.
+\end{soluzione}

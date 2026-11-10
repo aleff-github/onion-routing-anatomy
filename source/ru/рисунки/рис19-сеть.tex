@@ -1,0 +1,29 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Альтернативное описание (EPUB).
+\altfig{Топология тестовой сети Chutney на интерфейсе 127.0.0.1: три авторитетных сервера каталогов 000a–002a, одновременно являющиеся реле, с ORPort 5100–5102 и DirPort 7100–7102; три промежуточных реле 003r–005r, два выходных реле 006e и 007e, клиент 008c с SOCKS 9008 и onion-сервис 009h с виртуальным портом 5858, перенаправленным на 127.0.0.1:4747. В лаборатории серверы каталогов голосуют каждые 20 секунд. Пример HTTP-цепи идёт от клиента через 003r и 005r к выходному реле 006e и тестовому серверу 127.0.0.1:8080; специальная политика тестовых выходных реле разрешает локальные адреса. Onion-сервис не использует выходное реле. Схема показывает лишь часть портов, остальные приведены в таблице главы. Использование loopback не означает сетевую изоляцию от хоста.}
+% Приватная лабораторная сеть: упрощённая топология
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  aut/.style={relay,fill=torviola!15,draw=torviola},
+  ex/.style={relay,fill=torverde!30}]
+  \foreach \i/\x in {0/0,1/2,2/4} \node[aut] (a\i) at (\x,3.2) {00\i a};
+  \node[above=1pt of a1,font=\sffamily\scriptsize,align=center] {серверы каталогов\\ORPort 5100--5102, DirPort 7100--7102};
+  \node[font=\sffamily\scriptsize,text=torgrigio,align=center] at (6.6,3.2) {голосование каждые 20 с\\подписанный консенсус};
+  \foreach \i/\x in {3/0,4/2,5/4} \node[relay] (r\i) at (\x,1.2) {00\i r};
+  \node[ex] (e6) at (6.6,1.2) {006e};
+  \node[ex] (e7) at (6.6,-0.6) {007e};
+  \node[client] (c) at (-2.4,1.2) {008c клиент};
+  \node[font=\ttfamily\scriptsize,below=1pt of c] {SOCKS 9008};
+  \node[client,fill=torverde!10,draw=torverde!60!black] (h) at (2,-1.2) {009h onion-сервис};
+  \node[font=\ttfamily\scriptsize,below=1pt of h] {5858 $\to$ 127.0.0.1:4747};
+  \node[server] (w) at (9.4,1.2) {\texttt{127.0.0.1:8080}};
+  \begin{scope}[on background layer]
+    \foreach \n in {r3,r4,r5,e6,e7} \draw[dotted,torgrigio] (\n) -- (a1);
+  \end{scope}
+  \draw[cellaf] (c) -- (r3);
+  \draw[cellaf] (r3) to[bend right=40] (r5);
+  \draw[cellaf] (r5) -- (e6);
+  \draw[cellaf] (e6) -- (w);
+  \node[font=\sffamily\scriptsize,text=torviola] at (2,-0.05) {пример HTTP-цепи};
+  \node[font=\sffamily\tiny,text=torgrigio] at (4,-2.4) {onion: без exit};
+\end{tikzpicture}

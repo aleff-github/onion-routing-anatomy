@@ -1,0 +1,121 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Anonymity, Surveillance, and Metadata}\label{cap:01-anonimato}
+\aggiornatoal{23 September 2026}{Tor Metrics data through 20 September 2026}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item distinguish confidentiality, anonymity, pseudonymity, unlinkability, and unobservability;
+  \item explain why communication metadata can reveal as much as, and sometimes more than, content;
+  \item describe traffic analysis and explain why encryption alone cannot prevent it;
+  \item identify who uses Tor and why diversity among its users is itself a form of protection.
+\end{itemize}
+\end{obiettivi}
+
+This book is about a system designed to protect a particular kind of information: not \emph{what} we say online, but \emph{whom} we communicate with. Before examining how the system works, we need to understand the problem it solves, and why that problem differs from the more familiar one addressed by encryption.
+
+% ---------------------------------------------------------------------------
+\section{Content and Metadata}\label{sec:anon-metadati}
+
+When two computers communicate over the Internet, each packet carries two kinds of information. The \textbf{content} is what applications exchange: the text of a message or the contents of a web page. \textbf{Metadata} describes the communication \emph{itself}: who sends it, to whom, when, how often, and how much data it carries. Some metadata is essential to the network's operation because routers must know where to deliver packets. The destination IP address, and the source IP address to which replies should be sent, travel in plaintext in every packet.
+
+Encryption, now widespread thanks to HTTPS, protects content but leaves metadata visible. Anyone observing the network, from a user's Internet service provider to an operator of a major Internet exchange, can still see that the user connects to a particular website, when the connection occurs, how long it lasts, and how much traffic it generates.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig01-metadata}
+\caption{What an observer can see on an HTTPS connection. The content is encrypted, but metadata remains visible; protecting this information is precisely what Tor attempts to do.}
+\label{fig:metadati}
+\end{figure}
+
+\subsection{What Metadata Reveals}
+
+It is tempting to regard metadata as harmless: \enquote{They only know whom I talk to, not what I say.} That impression is misleading. A few examples show why:
+\begin{itemize}
+  \item someone visits a domestic violence support center's website at two in the morning, then visits the site of a divorce lawyer;
+  \item in the days before an investigation is published, a journalist exchanges messages with an employee of the ministry the investigation concerns;
+  \item an employee regularly visits a trade union's website, or the site of a patient association for a particular illness.
+\end{itemize}
+In none of these cases does anyone need to read the content to learn a great deal. Metadata also has an advantage for those collecting it: it is structured, easy to store and analyze at scale, and can be cross-referenced. General Michael Hayden, a former director of both the NSA and CIA, summarized the point in a remark that became famous during a debate at Johns Hopkins University on April 1, 2014: \enquote{We kill people based on metadata}, before immediately qualifying it with \enquote{but that's not what we do with this metadata}~\cite{hayden2014metadata}. The qualification does not alter the central point: those collecting metadata regard it as sufficient to inform decisions of that gravity.
+
+% ---------------------------------------------------------------------------
+\section{Traffic Analysis}\label{sec:anon-traffico}
+
+\textbf{Traffic analysis} studies communication metadata to infer information without having to read the content. It is as old as telecommunications. Even during twentieth-century wars, observing how often an enemy radio station transmitted, to whom, and at what pace could reveal the structure of an army without anyone decrypting its messages.
+
+On the Internet, traffic analysis has two main forms:
+\begin{description}
+  \item[Address analysis] An observer of a link sees the source and destination IP addresses. This is the simplest form, and the one Tor addresses most directly: no single point in the network sees both endpoints.
+  \item[Volume and timing analysis] Even without seeing complete address information, an observer can compare traffic flows by size and timing. If a user downloads 3\,MB at 10:15:02 and a server elsewhere in the network sends 3\,MB at 10:15:02, the two observations are likely to concern the same communication. This \textbf{traffic correlation} is Tor's principal limitation, and we will return to it repeatedly (\cref{cap:04-modello-minaccia,cap:26-attacchi}).
+\end{description}
+
+% ---------------------------------------------------------------------------
+\section{A Precise Vocabulary}\label{sec:anon-termini}
+
+The word \enquote{anonymity} is used in several senses, and confusion among them has led to design errors throughout the history of these systems. The scientific literature, particularly the terminology proposed by Pfitzmann and Hansen~\cite{pfitzmann2010terminology}, distinguishes several concepts:
+\begin{description}
+  \item[Confidentiality] An unauthorized party cannot read the content. This is what encryption provides.
+  \item[Anonymity] A subject cannot be identified within a group of subjects, called the \textbf{anonymity set}. Anonymity is never absolute: it exists \enquote{among} other people. The larger and more diverse the set, the greater the protection.
+  \item[Pseudonymity] A person acts under an identifier other than their own name, potentially a stable one. An account using an invented name is a pseudonym, not a form of anonymity: all its actions can be linked together.
+  \item[Unlinkability] An observer cannot determine whether two items of interest (two messages, a user and a website, or two visits) are related. This is the property Tor tries to provide between users and their destinations.
+  \item[Unobservability] An observer cannot even determine \emph{whether} communication is taking place. This is a much stronger property, which Tor does not provide: an observer watching the user can see Tor being used unless a pluggable transport is employed (\cref{cap:16-censura}).
+\end{description}
+
+\begin{storia}[Separating identification from routing]
+The three Naval Research Laboratory researchers who invented onion routing in 1995---David Goldschlag, Michael Reed, and Paul Syverson---preferred not to speak of anonymity. Their goal, as they wrote in a 1996 paper that Syverson later revisited when recalling that period, was to \enquote{separate identification from routing}~\cite{syverson2011peel}. A user may want to prove their identity to the system they are communicating with, such as their office computer, without every intermediate point in the network learning that someone at the user's location is connecting to that office.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{Who Needs Anonymity?}\label{sec:anon-utenti}
+
+According to Tor Metrics estimates, between 2.8 and 3.5 million users connected to the Tor network each day in August and September 2026 without using bridges, averaging approximately 3.2 million. From Italy, the estimated daily figure ranged from \num{44000} to \num{83000}, averaging around \num{60000}. These estimates carry substantial uncertainty because the network estimates users rather than counting them (\cref{cap:24-metrics}). Who are these users? They belong to very different groups:
+\begin{itemize}
+  \item ordinary people who do not want advertisers, Internet service providers, or operators of the networks they use to track them;
+  \item journalists and their sources, activists, and human rights defenders, particularly in countries with authoritarian governments;
+  \item people living under censorship who use Tor to reach blocked websites (\cref{cap:16-censura});
+  \item victims of violence or persecution who need to conceal their location;
+  \item companies that do not want to reveal their research interests to competitors;
+  \item law enforcement and military personnel who need to visit websites or gather information without disclosing their identity: onion routing originated in a US Navy laboratory for precisely this purpose.
+\end{itemize}
+A small share of users employ Tor for illegal activities, as happens with any communication tool. Public debate tends to focus on this group. We will examine the subject using evidence and specific cases in Part~IV and \cref{cap:25-legale}.
+
+\subsection{Anonymity Loves Company}
+
+There is a deeper reason why user diversity matters. An anonymity system used by only one group---the military, for example---would not protect anyone in that group: an observer seeing someone connect to the network would immediately know they were in the military, and anyone observing outgoing traffic would know it came from the military. Syverson makes exactly this point about a network the US Navy could have built exclusively for itself: everything emerging from it would have been recognizable as Navy traffic~\cite{syverson2011peel}. Each person's anonymity depends on how many other users there are and how diverse they are. A phrase summarizing this principle, also the title of a paper by Dingledine and Mathewson, is \enquote{anonymity loves company}~\cite{dingledine2006company}. This is why Tor is designed to be available to everyone, free of charge and open: the more people use it, the better it protects everyone.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item Encryption protects content; metadata (who, with whom, when, and how much) remains visible and can reveal a great deal.
+  \item Traffic analysis infers information from communication addresses, volumes, and timing.
+  \item Anonymity means not being identifiable within a set; it must be distinguished from pseudonymity, unlinkability, and unobservability.
+  \item Tor serves millions of very different users, and that diversity is part of its protection.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:01-metadati}
+List the metadata an Internet service provider can observe when one of its customers reads an article on an HTTPS news website. Which data remains visible if the customer uses a VPN? What if they use Tor?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:01-termini}
+Classify each of the following as anonymity, pseudonymity, or neither: a social media account under an invented name; an unsigned message left on a public noticeboard; a letter signed with initials; a cash donation placed in a collection box.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:01-insieme}
+Over the course of an hour, a website receives visits from 50 different Tor users. One of them posts a comment containing a spelling mistake typical of Italian speakers, and the comment is published at 3:00 a.m. Italian time. How does this change the user's anonymity set? What does this example teach us about the role of user behavior?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:01-vpn}
+Compare a commercial VPN with Tor in terms of who can link users to their destinations. Where is trust concentrated in each case?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item A.~Pfitzmann, M.~Hansen, \titolo{A terminology for talking about privacy by data minimization}~\cite{pfitzmann2010terminology}: the reference vocabulary.
+  \item P.~Syverson, \titolo{A Peel of Onion}~\cite{syverson2011peel}: the history of onion routing, told by one of its inventors.
+  \item Tor Metrics, \url{https://metrics.torproject.org/}: estimated user numbers by country.
+\end{itemize}

@@ -1,0 +1,21 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Альтернативное описание для EPUB.
+\altfig{Упрощённая схема Tor поверх TCP и TLS. Внешний наблюдатель видит IP-адреса, порты, объём трафика, временные характеристики и длины TLS-записей, но без сессионных ключей TLS не видит ячейки. В одной TLS-записи могут находиться несколько ячеек, а одна ячейка может быть разделена между записями; их границы не обязаны совпадать. При протоколе канала версии 4 и выше ячейка фиксированной длины составляет 514 байт: заголовок 5 байт и тело 509 байт; существуют также ячейки переменной длины. Послойное шифрование ключами цепи применяется к телу ячеек RELAY, а не ко всем типам, например PADDING и VPADDING. Ключи TLS позволяют увидеть структуру ячеек, но не расшифровывают автоматически тело RELAY.}
+% Схема инкапсуляции: границы TLS records и Tor cells не обязаны совпадать.
+\begin{tikzpicture}[font=\sffamily\scriptsize,
+  liv/.style={draw,rounded corners=2pt,minimum height=0.85cm,align=center},
+  cel/.style={draw,fill=torviola!12,minimum height=0.7cm,minimum width=1.5cm,font=\sffamily\tiny}]
+  \node[liv,fill=torgrigio!10,minimum width=10.6cm] (tcp) at (0,2.6) {TCP: сегменты переменной длины};
+  \node[liv,fill=torverde!12,minimum width=9.4cm] (tls) at (0,1.35) {TLS: границы не равны границам cells};
+  \foreach \i/\x in {1/-3.6,2/-1.8,3/0,4/1.8,5/3.6} \node[cel] (c\i) at (\x,0) {514\,B};
+  \node[anchor=west,font=\sffamily\tiny,text=torgrigio] at (4.6,0) {фикс. v4+};
+  \node[liv,fill=avviso!10,minimum width=4.6cm] (rel) at (-1.7,-1.4) {RELAY: тело 509\,Б\\послойно зашифровано};
+  \node[liv,fill=torgrigio!8,minimum width=4.6cm] (pad) at (3.3,-1.4) {PADDING / VPADDING\\не RELAY};
+  \draw[torgrigio] (c1.south west) -- (rel.north west); \draw[torgrigio] (c3.south east) -- (rel.north east);
+  \node[anchor=west,align=left,font=\sffamily\tiny,text=torgrigio] at (5.8,2.6) {IP, порты, объём\\и время видимы};
+  \node[anchor=west,align=left,font=\sffamily\tiny,text=torgrigio] at (5.8,1.35) {длина TLS-записей\\видна на канале};
+  \node[anchor=west,align=left,font=\sffamily\tiny,text=torgrigio] at (5.8,0) {ячейки видны после\\расшифрования TLS};
+  \node[anchor=west,align=left,font=\sffamily\tiny,text=torgrigio] at (5.8,-1.4) {RELAY: нужны\\ключи цепи};
+  \node[font=\sffamily\tiny,text=torgrigio,align=center] at (0,-2.55) {Схема условна: границы TLS-записей и ячеек могут не совпадать.};
+\end{tikzpicture}

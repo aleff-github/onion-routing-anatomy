@@ -1,0 +1,93 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Chapter \ref{cap:01-anonimato}: Anonymity, Surveillance, and Metadata}
+
+\begin{soluzione}{es:01-metadati}
+With HTTPS, the Internet provider sees the website's IP address and potentially its domain name, from DNS resolution and often from the TLS SNI field. It also sees timing, connection duration, and traffic volume. With a VPN, the provider sees only the connection to the VPN server; the VPN provider, however, can see everything the Internet provider could previously see. With Tor, the provider sees a connection to a Tor relay or bridge, along with its timing and volume. No single point within the Tor network can see both the user and the destination.
+\end{soluzione}
+
+\begin{soluzione}{es:01-termini}
+An account under a fictional name is pseudonymity. An unsigned message on a noticeboard is anonymity, provided nothing else identifies its author. A letter signed with initials is weak pseudonymity and may often permit identification. An anonymous cash donation is an example of anonymity.
+\end{soluzione}
+
+\begin{soluzione}{es:01-insieme}
+The anonymity set shrinks from fifty Tor users to those speaking Italian who are also awake at 3 a.m., potentially only a handful. Tor hides an IP address, not behavior. Language, timing, writing style, and personal information can identify a user even when network traffic cannot.
+\end{soluzione}
+
+\begin{soluzione}{es:01-vpn}
+A VPN provider sees both the user and their destinations. All trust is concentrated in one operator, which may log activity, be legally compelled to hand over data, or be compromised. Tor distributes trust across three independently operated relays, none of which sees both endpoints. Linking the user and destination would require compromising or simultaneously observing both the first and last hops.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:02-radici}: The Roots}
+
+\begin{soluzione}{es:02-mix}
+Randomly, the probability is 1 in 100. If an observer supplied 99 of the 100 messages in a batch, they could recognize their own outgoing messages and identify the only remaining message as the victim's. Anonymity disappears. This is the \emph{$n-1$ attack}, which real mix networks address using more sophisticated batches, dummy traffic, and controls on incoming messages.
+\end{soluzione}
+
+\begin{soluzione}{es:02-penet}
+Use an \emph{anonymous return address} in Chaum's sense. The user prepares an encrypted, layered \enquote{return onion} for a chain of mixes. Its innermost layer contains the user's address and a key for encrypting the reply. The respondent attaches their message to the onion; each mix removes one layer, and no individual mix learns the final destination. No central routing table is required.
+\end{soluzione}
+
+\begin{soluzione}{es:02-crowds}
+At each step, the request is forwarded to another crowd member with probability $3/4$ and sent to the website with probability $1/4$. The number of members traversed follows a geometric distribution with mean $1/(1/4) = 4$, counting the first forwarding step. A member cannot know whether the member forwarding the request originated it, because intermediate forwarding follows the same rule.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:03-nascita-tor}: From NRL Onion Routing to the Tor Project}
+
+\begin{soluzione}{es:03-cinque}
+With three hops, a malicious central node immediately knew the two organizational networks at the endpoints, because entry and exit nodes were located within those organizations' networks. With four hops, someone compromising a node near one endpoint knew which additional node to attack to reconstruct the circuit; with five hops, one more compromise was needed. Tor uses three hops because its relays do not reside in the users' networks, and because every additional hop increases latency without greatly reducing the principal threat of entry--exit correlation. Guards instead help address that threat.
+\end{soluzione}
+
+\begin{soluzione}{es:03-cipolla}
+A single onion encrypted under the nodes' long-term public keys provides no forward secrecy. Someone obtaining those keys later can decrypt recorded onions. With telescoping construction, each hop performs an ephemeral key exchange and the ephemeral secrets are discarded after use. The client also builds the circuit one hop at a time and can immediately identify an unresponsive relay and replace it. With a single onion, the failure becomes apparent only after attempting the full route.
+\end{soluzione}
+
+\begin{soluzione}{es:03-fiducia}
+This is an open-ended argumentation exercise. Verifiable elements include published code and specifications, reproducible builds, independent analysis in the scientific literature, and a network run by independent operators. Elements requiring trust include whether distributed builds match the published source, although this can partly be verified; whether directory authorities collude; and whether unknown vulnerabilities exist. Security should be evaluated through verifiability and distributed trust, not presumed from a project's funding sources.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:04-modello-minaccia}: The Threat Model}
+
+\begin{soluzione}{es:04-casi}
+(a) Yes: the network operator sees only a connection to a Tor relay. (b) Yes: the website sees the exit's address. (c) No, with respect to identity: the user identifies themselves by signing into the account. Tor hides only where they connect from. (d) Probably not: an adversary observing both endpoints, the user and the newspaper, could attempt timing correlation, precisely the scenario excluded from Tor's threat model.
+\end{soluzione}
+
+\begin{soluzione}{es:04-usabilita}
+A difficult system attracts only a few highly motivated users, often precisely those most in need of protection. Merely using it distinguishes them, leaving a small anonymity set. An easy-to-use system adopted by millions for ordinary reasons helps conceal those with more sensitive needs.
+\end{soluzione}
+
+\begin{soluzione}{es:04-modello}
+This is an open-ended exercise. Possible adversaries include the source's government or employer observing the local network, the email or messaging provider, and entities controlling networks in either country. Tor prevents the local network from learning whom the journalist communicates with and prevents the service from seeing the journalist's IP address. It does not protect message content without end-to-end encryption, metadata visible to the service such as accounts and timestamps, compromised devices, or traffic correlation by an adversary observing both ends. An onion service such as SecureDrop reduces several of these risks.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:05-crittografia}: Essential Cryptography}
+
+\begin{soluzione}{es:05-xor}
+$C_1 \oplus C_2 = P_1 \oplus P_2$, because the reused keystream cancels out. Given $P_1$, recover $P_2 = C_1 \oplus C_2 \oplus P_1$.
+\end{soluzione}
+
+\begin{soluzione}{es:05-shake}
+The 16-byte output equals the first 16 bytes of the 32-byte output: SHAKE generates one stream that can be read to any desired length. A KDF can therefore request a long stream and divide it into parts. However, requesting different lengths for different purposes does \emph{not} provide domain separation; distinct domain labels are still needed.
+\end{soluzione}
+
+\begin{soluzione}{es:05-dh}
+Both shared secrets match. An all-zero public key represents a small-order point and would produce an all-zero shared secret regardless of the private key: a secret known to everyone. The \texttt{cryptography} library refuses to return it. ntor explicitly requires this check (\cref{sec:ntor}); otherwise, an adversary could force a predictable shared secret.
+\end{soluzione}
+
+\begin{soluzione}{es:05-etichette}
+Without domain separation, a value calculated in one context might be accepted in another. For example, a MAC generated to authenticate a handshake message might be presented as a key or proof in another phase, or in a different protocol using the same function and keys. Domain labels make inputs for different uses disjoint by construction.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:06-architettura}: Network Architecture}
+
+\begin{soluzione}{es:06-vista}
+Guard: the user's IP address, traffic timing, and volume, but not the destination. Middle: neither the user nor the destination. Exit: the destination and any content not encrypted by the application, but not the user. HSDir: no information about a user visiting an ordinary website. Directory authority: normally no information about a particular website visit. It may see the IP address of a client fetching directory documents \emph{directly}, especially during bootstrap. If the client fetches them from a fallback directory or cache, that server rather than the authority sees the request.
+\end{soluzione}
+
+\begin{soluzione}{es:06-pr}
+\texttt{Link=3-5} announces link protocols up to version 5 (\cref{cap:07-canali}). \texttt{Relay=2-6} includes ntor, ntor-v3 (\texttt{Relay=4}), and CGO (\texttt{Relay=6}). \texttt{FlowCtrl=1-2} means authenticated SENDME and congestion control. The relay can serve as a CGO exit provided it also carries the \texttt{Exit} flag and negotiates congestion control together with CGO (\cref{sec:ntor3}).
+\end{soluzione}
+
+\begin{soluzione}{es:06-livelli}
+100\,KB of application data requires approximately $102400/498 \approx 206$ DATA cells, or roughly $206 \times 514 \approx 106$\,KB on the link. Add a few cells for the request, opening the stream, and SENDME messages (about seven, one for every 31 data cells), plus TLS-record overhead. Overall, this is roughly 5--7\% above the useful payload, excluding initial handshakes.
+\end{soluzione}

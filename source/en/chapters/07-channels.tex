@@ -1,0 +1,450 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Channels and the Link Protocol}\label{cap:07-canali}
+\aggiornatoal{23 September 2026}{torspec commit \texttt{8e1f245}; tor 0.4.9.13; Arti 2.6.0; link protocol 4--5}
+
+\begin{obiettivi}
+By the end of this chapter, you will be able to:
+\begin{itemize}[nosep]
+  \item explain what a channel is and why Tor builds it over TLS;
+  \item describe the keys that make up a relay's identity and how they are bound together;
+  \item follow the channel handshake cell by cell: VERSIONS, CERTS, AUTH\_CHALLENGE, AUTHENTICATE, and NETINFO;
+  \item read and verify a Tor Ed25519 certificate;
+  \item understand why a client does not authenticate and what this means for anonymity;
+  \item open a verified channel to a relay on the laboratory network (Laboratory~1).
+\end{itemize}
+\end{obiettivi}
+
+The circuit, Tor's central construct, is a chain of hops. Each hop, however, rests on something simpler: a direct, encrypted connection between two adjacent nodes. The specification calls this connection a \textbf{channel}. In this chapter we will see how a channel is established and, above all, how each side verifies the identity of the peer it intended to reach. The format of the cells exchanged over the channel is the subject of \cref{cap:08-celle}, to which we will refer frequently.
+
+% ---------------------------------------------------------------------------
+\section{What Is a Channel?}\label{sec:canale-def}
+
+A channel links two relays, or a client and a relay, through a direct encrypted connection~\spec{tor-spec}{Channels}. Technically, it is a TLS session over TCP that carries cells. Three properties characterize it.
+
+\begin{description}
+  \item[Asymmetric roles] Anyone may \emph{open} a channel (the \emph{initiator}\index{initiator}), but only a relay may \emph{receive} one (the \emph{responder}\index{responder}). A client does not accept connections: it has no port listening for connections from the Tor network.
+  \item[Verified identity] The responder always proves cryptographically that it possesses one or more relay identities. The initiator usually already knows which identity to expect: it reads it from the consensus, from the list of authorities compiled into the source code, or, when the channel is opened to extend a circuit, from the \texttt{EXTEND2} message itself. If the identity presented is not the expected one, the channel must be closed.
+  \item[Sharing] A channel carries many circuits, distinguished by their CircIDs (\cref{sec:circid}). Nodes prefer to reuse an existing channel rather than open a second one to the same relay. A channel with no circuits is closed after a randomly selected idle period whose range depends on how the channel is used (\file{channelpadding\_get\_channel\_idle\_timeout} in \file{src/core/or/channelpadding.c}): 3--4.5 minutes for client channels, and 45--75 minutes for channels between two relays, where the central value is the consensus parameter \texttt{nf\_conntimeout\_relays} (one hour). While a channel is in use, \opt{KeepalivePeriod} instead causes a padding cell to be sent every five minutes to prevent firewalls from closing it.
+\end{description}
+
+\begin{approfondimento}[Channel or connection?]
+Older documentation and many research papers call channels \emph{connections} (\emph{OR connections}). The specification moved away from this term because it could be confused with the TCP connections opened by exit relays for outgoing streams. Both terms survive in the tor source code: \file{or\_connection\_t} is the TLS connection, while \file{channel\_t} is the abstraction that uses it.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{A Relay's Identity}\label{sec:canale-chiavi}
+
+Before examining the handshake, we need to know \emph{what} must be proved. A relay is identified by long-term keys. The specification gives them systematic names: the \file{KP\_} prefix denotes a public key and \file{KS\_} the corresponding secret key~\spec{tor-spec}{Relay keys and identities}. The keys relevant to the channel are:
+
+\begin{description}
+  \item[\file{KP\_relayid\_ed}] the \textbf{Ed25519 identity}, or \enquote{master identity key}. It never expires and has just one purpose: to sign the signing key. It can be kept offline.
+  \item[\file{KP\_relayid\_rsa}] the 1,024-bit \textbf{legacy RSA identity}. It is still the basis of the 40-hexadecimal-digit fingerprints shown on Tor Metrics, but protocol security no longer depends on it.
+  \item[\file{KP\_relaysign\_ed}] the medium-term \textbf{signing key}, certified by the identity. This is the key the relay uses in everyday operation, online.
+  \item[\file{KP\_link\_ed}] a short-term key used only when a relay initiates a channel and must authenticate (\cref{sec:canale-authenticate}).
+\end{description}
+
+\Cref{fig:chiavi-relay} shows how certificates bind these keys together. The idea is a \emph{chain of trust} that starts at the identity and extends to the TLS certificate used for the connection.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig07-keys}
+\caption{The certificate chain binding a relay's Ed25519 identity to the connection's TLS certificate. Each arrow represents a certificate: the key at its origin signs the key (or fingerprint) at its destination. The number identifies the CertType used in the CERTS cell. On the right is the legacy RSA chain, linking the old RSA identity to the Ed25519 identity.}
+\label{fig:chiavi-relay}
+\end{figure}
+
+In the laboratory, these keys are files in each relay's \file{keys/} directory: \file{ed25519\_master\_id\_public\_key} and its corresponding secret identity key, \file{ed25519\_signing\_cert} and \file{ed25519\_signing\_secret\_key} for the signing key, and \file{secret\_id\_key} for the RSA identity. The \file{fingerprint-ed25519} file in the node's directory contains its base64-encoded Ed25519 identity.
+
+\begin{storia}[From RSA to Ed25519]
+Until 2015, a relay's only identity was its 1,024-bit RSA key, a size now considered inadequate. \proposta{220} introduced Ed25519 identities and the certificate format described in this chapter; support began with tor 0.2.7.2-alpha. The RSA key was retained for compatibility and bound to the Ed25519 key by a cross-certificate.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{The Handshake at a Glance}\label{sec:canale-handshake}
+
+\Cref{fig:handshake-canale} summarizes how a channel is established~\spec{tor-spec}{Negotiating and initializing channels}.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig07-handshake}
+\caption{The channel handshake. After TLS is established, everything travels encrypted. The responder always sends CERTS, AUTH\_CHALLENGE, and NETINFO, in that order. The dashed box applies only when the initiator is a public relay that must establish its own identity; a client or bridge sends only NETINFO.}
+\label{fig:handshake-canale}
+\end{figure}
+
+\begin{enumerate}
+  \item The initiator opens a TLS connection.
+  \item Both parties send a \cella{VERSIONS} cell and agree on a link-protocol version (\cref{sec:celle-formato}).
+  \item The responder sends \cella{CERTS} (certificates proving its identity), \cella{AUTH\_CHALLENGE} (a challenge the initiator will sign if it wishes to authenticate), and \cella{NETINFO} (time and addresses).
+  \item The initiator verifies the certificates. If it is a public relay, it replies with \cella{CERTS} and \cella{AUTHENTICATE}; in every case, it finishes with \cella{NETINFO}.
+\end{enumerate}
+
+\cella{NETINFO} marks the end of the handshake: once a party has sent it, that party sends no further handshake cells. This is how the responder knows whether the initiator has chosen not to authenticate. Any number of \cella{VPADDING} cells may appear in between, but no other cell type may do so.
+
+% ---------------------------------------------------------------------------
+\section{The TLS Layer}\label{sec:canale-tls}
+
+Tor uses TLS in an unusual way. On a website, the server's certificate is signed by a certificate authority and contains a domain name; the browser checks both. A relay, by contrast, presents a \textbf{self-signed} certificate with no meaningful name, and the client does not verify it according to the usual TLS rules. In the code for Laboratory~1, this becomes two lines that would be a serious security error in almost any other context:
+\begin{lstlisting}[language=Python,numbers=none]
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+\end{lstlisting}
+They are not an error here because authentication takes place \emph{afterward}, inside the channel, using the \cella{CERTS} cell. TLS provides channel encryption and integrity and proves possession of the TLS certificate's key; the cells establish everything else.
+
+The specification adds several rules~\spec{tor-spec}{The TLS handshake}:
+\begin{itemize}
+  \item implementations should support TLS~1.3, and relays should also support TLS~1.2, with modern suites (AES-GCM, ChaCha20-Poly1305, and key exchange using X25519 or P-256);
+  \item \emph{session resumption} should not be permitted: it weakens forward secrecy and has enabled attacks such as the \emph{Triple Handshake} (2013);
+  \item TLS compression should not be used.
+\end{itemize}
+On the laboratory network, a Python client using OpenSSL~3.5 negotiates TLS~1.3 with tor using the \file{TLS\_AES\_256\_GCM\_SHA384} suite.
+
+\begin{storia}[Why Such an Unusual Handshake?]
+The earliest link-protocol versions put Tor certificates directly into the TLS handshake (version~1), then hid them using TLS renegotiation (version~2), signalling the selected variant through the list of offered cipher suites. The reason was censorship: before pluggable transports (\cref{cap:16-censura}), Tor tried to resemble an ordinary HTTPS connection between a browser and a web server. With TLS~1.2, certificates travelled in the clear and were easy to recognize. In version~3 the certificates moved inside the encrypted channel, into \cella{CERTS} cells. Today, resistance to censorship is entrusted to pluggable transports, and the older variants are obsolete; the specification notes that, as of March 2025, tor still accepted some of them, but they were scheduled for removal.
+\end{storia}
+
+% ---------------------------------------------------------------------------
+\section{CERTS: Proving Identity}\label{sec:canale-certs}
+
+\subsection{The Cell}
+
+\cella{CERTS} is a variable-length cell (command 129) whose body contains a list of certificates:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Field & Bytes & Contents \\
+\midrule
+N & 1 & number of certificates \\
+\multicolumn{3}{l}{\emph{repeated N times:}} \\
+\quad CertType & 1 & certificate type \\
+\quad CertLen & 2 & certificate length \\
+\quad Certificate & CertLen & the certificate \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+A \cella{CERTS} cell cannot contain two certificates of the same type. The defined types are listed in \cref{tab:cert-types}~\spec{cert-spec}{Certificate types (CERT\_TYPE field)}.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}cl l>{\raggedright\arraybackslash}X@{}}
+\toprule
+Type & Name & Format & What it certifies \\
+\midrule
+1 & \file{TLS\_LINK\_X509} & X.509 & TLS key, signed by the RSA identity (obsolete) \\
+2 & \file{RSA\_ID\_X509} & X.509 & self-signed RSA identity \\
+3 & \file{LINK\_AUTH\_X509} & X.509 & authentication RSA key (obsolete) \\
+4 & \file{IDENTITY\_V\_SIGNING} & Ed & signing key, signed by the Ed25519 identity \\
+5 & \file{SIGNING\_V\_TLS\_CERT} & Ed & TLS certificate fingerprint, signed by the signing key \\
+6 & \file{SIGNING\_V\_LINK\_AUTH} & Ed & \file{KP\_link\_ed} key, signed by the signing key \\
+7 & \file{RSA\_ID\_V\_IDENTITY} & RSA$\to$Ed & Ed25519 identity, signed by the RSA identity \\
+8--12 & \multicolumn{3}{l}{onion service (8, 9, 11), ntor-key cross-certificate (10), families (12)} \\
+\bottomrule
+\end{tabularx}
+\caption{Certificate types. \enquote{Ed} denotes Tor's Ed25519 certificate format.}
+\label{tab:cert-types}
+\end{table}
+
+\subsection{Tor's Ed25519 Certificate}
+
+Tor does not use X.509 for Ed25519 certificates. Instead it uses its own much simpler format~\spec{cert-spec}{Tor Ed25519 Certificates}, shown in \cref{fig:cert-ed}.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/fig07-ed-certificate}
+\caption{Tor's Ed25519 certificate. Every field preceding the signature is covered by that signature. Expiration is expressed in \emph{hours} since the Unix epoch: with an unsigned four-byte field, it will not overflow for hundreds of thousands of years.}
+\label{fig:cert-ed}
+\end{figure}
+
+\begin{description}
+  \item[VERSION] has the value 1.
+  \item[CERT\_TYPE] has the same value as CertType in \cref{tab:cert-types}.
+  \item[EXPIRATION\_DATE] gives expiration in hours since January 1, 1970.
+  \item[CERT\_KEY\_TYPE] indicates what the next field contains: 1 means an Ed25519 key, and 3 means the SHA-256 fingerprint of an X.509 certificate. tor versions through 0.4.5.1-alpha always wrote 1, and the specification requires implementations to tolerate this.
+  \item[CERTIFIED\_KEY] contains the 32 certified bytes.
+  \item[Extensions] each contain a length, type, flags, and data. The only extension defined today is type 4, \emph{signed-with-ed25519-key}, which includes the key that signed the certificate. Flag 1 (\file{AFFECTS\_VALIDATION}) determines how an unknown extension must be handled: when set, the certificate must be rejected; otherwise the extension is ignored.
+  \item[SIGNATURE] is the Ed25519 signature over all preceding fields.
+\end{description}
+
+\subsection{Verification}\label{sec:canale-verifica}
+
+The responder must send exactly one certificate of type 4 and one of type 5. The initiator verifies them as follows~\spec{tor-spec}{Authenticating the responder from its CERTS}:
+\begin{enumerate}
+  \item The type-4 certificate contains an Ed25519 key in extension 4: the claimed identity \file{KP\_relayid\_ed}. The certificate must be signed by that very key (it is \emph{self-signed}); the certified key is \file{KP\_relaysign\_ed}.
+  \item The type-5 certificate must be signed with \file{KP\_relaysign\_ed}, and its certified key must be the SHA-256 fingerprint of the TLS certificate received during the TLS handshake.
+  \item Neither certificate may have expired.
+  \item Finally, the resulting identity must be compared with the expected identity.
+\end{enumerate}
+
+Why does this chain prove anything? Step 2 binds the signing key to the TLS certificate of \emph{this} connection. The TLS handshake has already proved that the responder holds the private key corresponding to that certificate. Step 1 binds the signing key to the identity. An impostor could copy a genuine relay's \cella{CERTS} cells, since they contain no secrets, but could not use them: the impostor would have to present that genuine relay's TLS certificate during the TLS handshake and therefore possess its private key.
+
+\begin{attenzione}[Check the Expected Identity]
+A perfectly valid chain proves only that the responder possesses \emph{some} identity. If the initiator omits step~4, anyone with any identity could impersonate the intended relay. Laboratory~1 has the \file{expected\_identity} parameter precisely for this reason, and one test verifies that a relay presenting a different identity is rejected.
+\end{attenzione}
+
+\subsection{The Legacy RSA Chain}
+
+The initiator may optionally verify the RSA identity too. The type-2 certificate contains the 1,024-bit RSA key (self-signed, exponent 65537), and the type-7 certificate, in the \enquote{cross-certificate} format, binds that key to the already verified Ed25519 identity. The cross-certificate's RSA signature is calculated over the SHA-256 fingerprint of the string \texttt{"Tor TLS RSA/Ed25519 cross-certificate"} followed by the certificate fields. The prefix prevents the same signature from being reused in a different context.
+
+\subsection{What a Relay Actually Sends}
+
+On the laboratory network, relay \texttt{test003r} sends a \cella{CERTS} cell containing five certificates:
+\begin{lstlisting}[numbers=none]
+ type 1  584 bytes
+ type 2  442 bytes
+ type 4  140 bytes  expires 2026-10-24 16:00  key_type=1  ext=[4]
+ type 5  104 bytes  expires 2026-09-29 11:00  key_type=3  ext=[]
+ type 7  165 bytes
+\end{lstlisting}
+In addition to the Ed25519 chain (types 4 and 5) and the RSA chain (types 2 and 7), the relay still sends the old type-1 certificate for older clients. This certificate does not merely have the same length as the TLS certificate: it has the same fingerprint too. Comparing their bytes shows that they are \emph{exactly} the same certificate. The length is not a number worth memorizing, and it is useful to understand why. The certificate's common name is a fictitious domain built by tor as \texttt{www.}, followed by 4 to 25 random characters, followed by \texttt{.com} (\file{crypto\_random\_hostname} in \file{src/lib/tls/tortls\_openssl.c}). That alone makes the length vary by about twenty bytes between relays. It also changes \emph{over time} for the same relay, because tor renews the TLS context, and with it the certificate, every two hours (\file{MAX\_SSL\_KEY\_LIFETIME\_INTERNAL} in \file{src/core/or/or.h}). Repeating the measurement forty minutes later, we obtained a \cella{CERTS} body of 1,456 bytes rather than 1,451. If your measurements differ, that is expected: what must agree is the \emph{structure}, and the sum of the certificate lengths plus one count byte and three header bytes per certificate must equal the cell-body length. The two expiration dates show the different lifetimes: the signing key is certified for 30 days, while the binding to the TLS certificate lasts only 2 days. These are tor's defaults (options \opt{SigningKeyLifetime} and \opt{TestingLinkCertLifetime}, the latter configurable only in a test network), so they also apply to the public network. The identity key stays constant while the keys representing it online are renewed frequently, limiting the damage if a relay is compromised.
+
+% ---------------------------------------------------------------------------
+\section{AUTH\_CHALLENGE and AUTHENTICATE}\label{sec:canale-authenticate}
+
+\subsection{Who Authenticates?}
+
+Initiator authentication is optional, and the rule governing who should perform it is one of the protocol's most important design decisions~\spec{tor-spec}{Channels}:
+\begin{itemize}
+  \item A \textbf{public relay} opening a channel to another relay \emph{should} authenticate: the responder then knows it is talking to a network relay rather than a client.
+  \item A \textbf{client} or a \textbf{bridge} \emph{should not} authenticate.
+\end{itemize}
+The reason for the second rule is anonymity. A client has no identity, and creating one would be harmful: a guard could recognize the same client when it reconnects from a different address. A bridge, for its part, must not reveal to its users that it is a network relay. The trade-off is that a relay may infer that it is a circuit's first hop if the channel is unauthenticated (\cref{cap:08-celle}, \cref{sec:relay}). This is one reason relays refuse to serve as exits for single-hop circuits.
+
+\subsection{The Challenge}
+
+The responder sends an \cella{AUTH\_CHALLENGE} cell in any case. It contains 32 random bytes and a list of accepted authentication methods:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Field & Bytes & Contents \\
+\midrule
+Challenge & 32 & random value, distinct for each channel \\
+N\_Methods & 2 & number of methods \\
+Methods & $2 \times$ N\_Methods & list of methods \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The defined methods are 1 (\texttt{RSA-SHA256-TLSSecret}, obsolete), 2 (never implemented), and 3 (\texttt{Ed25519-SHA256-RFC5705}). The cell received from laboratory-network relays is 36 bytes long: $32 + 2 + 2$, corresponding to a single method, number 3.
+
+\subsection{The Response}
+
+A relay that wishes to authenticate replies with its own \cella{CERTS} cell (using types 4 and 6 rather than 4 and 5, since an initiator has not necessarily presented a TLS certificate), followed by \cella{AUTHENTICATE}. For method 3, the body of \cella{AUTHENTICATE} is a 352-byte document signed with the \file{KP\_link\_ed} key:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l c >{\raggedright\arraybackslash}X@{}}
+\toprule
+Field & Bytes & Contents \\
+\midrule
+TYPE & 8 & the string \texttt{AUTH0003} \\
+CID, SID & 32 + 32 & SHA-256 fingerprints of the initiator's and responder's RSA identities \\
+CID\_ED, SID\_ED & 32 + 32 & initiator's and responder's Ed25519 identities \\
+SLOG & 32 & SHA-256 of all bytes \emph{received} on the channel through AUTH\_CHALLENGE, inclusive \\
+CLOG & 32 & SHA-256 of all bytes \emph{sent} on the channel before AUTHENTICATE \\
+SCERT & 32 & SHA-256 of the responder's TLS certificate \\
+TLSSECRETS & 32 & value derived from the TLS session secrets (\emph{keying material exporter}) \\
+RAND & 24 & random bytes \\
+SIG & 64 & Ed25519 signature over all preceding fields \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Every field binds the signature to a particular aspect of \emph{this} connection: the identities involved (CID, SID, and so on), the conversation so far (SLOG and CLOG, which include the random challenge), the TLS certificate (SCERT), and the TLS session itself (TLSSECRETS). Such a signature cannot be reused on another connection, nor by an intermediary relaying messages between two different TLS sessions (a \emph{man-in-the-middle} attack), because TLSSECRETS and SCERT would differ on the two sides.
+
+\begin{approfondimento}[An Error Preserved in the Specification]
+TLSSECRETS is calculated with the TLS \emph{exporter} (RFC~5705 and, for TLS~1.3, RFC~8446, §\,7.5), using the label \texttt{"EXPORTER FOR TOR TLS CLIENT BINDING AUTH0003"} and a context value. The intention was to use the initiator's Ed25519 identity as the context, but the implementation mistakenly used CID, the RSA identity fingerprint. Because this does not weaken security, the specification chose to document the actual behavior instead of changing it. This is a useful example of how, for a protocol with thousands of already deployed implementations, actual code behavior can become the standard.
+\end{approfondimento}
+
+% ---------------------------------------------------------------------------
+\section{NETINFO: Time and Addresses}\label{sec:canale-netinfo}
+
+The final handshake cell, sent by both parties, is \cella{NETINFO}. It is a fixed-length cell (command 8), with the following body:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}ll>{\raggedright\arraybackslash}X@{}}
+\toprule
+Field & Bytes & Contents \\
+\midrule
+TIME & 4 & seconds since the Unix epoch, big-endian \\
+OTHERADDR & 2 + ALEN & address of the other party as seen by the sender \\
+NMYADDR & 1 & number of the sender's own addresses \\
+MYADDR & NMYADDR $\times$ (2 + ALEN) & sender's own addresses \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Each address is encoded as a type (one byte: \texttt{0x04} for IPv4, \texttt{0x06} for IPv6), a length (4 or 16), and a value. These fields serve two purposes:
+\begin{itemize}
+  \item \textbf{The time} makes it possible to detect an incorrect clock: tor logs a warning if the time received from a relay differs from its own by more than an hour (the \file{NETINFO\_NOTICE\_SKEW} constant in \file{src/core/or/channeltls.c}).
+  \item \textbf{The addresses} let a relay discover the public address at which it is visible, and let the initiator check whether it reached the relay at one of its \emph{canonical} addresses, meaning an address published in its descriptor.
+\end{itemize}
+
+\begin{attenzione}[A Client Does Not Disclose Its Clock]
+Relays send their own time and addresses. A client, however, should send \texttt{00 00 00 00} as the time and should not send any of its own addresses. The reason is \emph{fingerprinting}: a computer's clock almost always has a small characteristic offset. If a client disclosed its time to every guard, that offset could help recognize the client over time. This illustrates a general rule we will encounter repeatedly: a Tor client must not disclose anything that is not strictly necessary.
+\end{attenzione}
+
+The unsigned four-byte TIME field overflows in 2106; \proposta{338} discusses extending it to eight bytes. A recipient of a \cella{NETINFO} cell should not blindly trust its values: the other party may lie about its time and addresses.
+
+Here is the \cella{NETINFO} cell we receive from relay \texttt{test003r}, decoded by Laboratory~1:
+\begin{lstlisting}[numbers=none]
+Netinfo(timestamp=1790511791, peer_address='127.0.0.1',
+        my_addresses=['127.0.0.1'])
+\end{lstlisting}
+The time corresponds to September 27, 2026, at 12:23:11 UTC. Both addresses are loopback addresses, because the entire network runs on the same computer. Our reply, constructed by \file{client\_netinfo\_cell}, has the body \texttt{00000000 04 04 7f000001 00}: zero time, the relay's address, and no address of its own.
+
+% ---------------------------------------------------------------------------
+\section{After the Handshake}\label{sec:canale-dopo}
+
+At this point, the channel is \emph{open} and can carry circuits. A simple experiment reveals an interesting detail. If we listen after opening the channel without creating any circuits, the relay sends \emph{nothing}: in the laboratory, not one cell arrives over fifteen seconds.
+
+We might expect \cella{PADDING} cells: since link protocol~5, clients and guards exchange padding cells on idle channels at random intervals between 1.5 and 9.5 seconds, so that a network observer (for example, a router recording NetFlow statistics) cannot distinguish periods of activity from periods of silence~\spec{padding-spec}{Connection-level padding}. The tor source code explains why that does not happen here. The function deciding whether to add padding (\file{channelpadding\_decide\_to\_pad\_channel} in \file{src/core/or/channelpadding.c}) activates it only on channels \emph{already used} for complete circuits or user traffic. On the relay side, a channel is considered to have been used this way only when a multi-hop circuit passes through it: the first \cella{RELAY\_EARLY} cell (the extension toward the second hop) or a \cella{RELAY} cell on a circuit that continues beyond the relay (\file{src/core/or/relay.c}). A new channel remains silent, as does a channel carrying only single-hop circuits, as we will discover in \cref{cap:09-circuiti}. Padding will appear in \cref{cap:10-cifratura-relay}, when our client extends a circuit.
+
+This small episode offers a methodological lesson: \emph{the absence of an observation is not proof}. Before concluding that padding does not work, we need to check whether the conditions under which it should appear have actually been met.
+
+% ---------------------------------------------------------------------------
+\section{Laboratory: Opening a Verified Channel}\label{sec:lab-canale}
+
+\begin{laboratorio}[1]{Open a Channel to a Relay and Verify Its Identity}
+\textbf{Objective.} Write \file{labs/en/code/torlab/channel.py}, which opens a channel like a Tor client: TLS, \cella{VERSIONS}, verification of \cella{CERTS}, reading \cella{AUTH\_CHALLENGE} and \cella{NETINFO}, and sending its own \cella{NETINFO}.\\
+\textbf{Prerequisites.} Laboratory~2 (\file{cells.py}, \cref{cap:08-celle}): cell handling is the foundation of a channel, so it makes sense to write it first, even though we present it in the next chapter. The top-down explanation (channel first, then cells) and the bottom-up implementation (cells first, then channel) proceed in opposite orders here, and that is normal. You also need a running laboratory network (\cref{cap:19-rete-privata}) and the \texttt{cryptography} library for Ed25519.\\
+\textbf{Estimated time.} 2--3 hours.
+\end{laboratorio}
+
+\paragraph{Step 1: Decode an Ed25519 Certificate.} Following \cref{fig:cert-ed}, we read the fixed-length header, then the extensions, and retain the bytes covered by the signature:
+
+\begin{lstlisting}[language=Python]
+def decode_ed_certificate(data):
+    if len(data) < 40 + 64 or data[0] != 1:
+        raise ChannelError("malformed certificate")
+    _, kind, expiration, key_type = struct.unpack(">BBIB", data[:7])
+    key = data[7:39]
+    extension_count, pos, extensions = data[39], 40, {}
+    for _ in range(extension_count):
+        length, extension_type, flag = struct.unpack(">HBB", data[pos:pos+4])
+        body = data[pos+4:pos+4+length]
+        if extension_type != 4 and flag & 1:     # AFFECTS_VALIDATION
+            raise ChannelError("unknown extension affecting validation")
+        extensions[extension_type] = (flag, body)
+        pos += 4 + length
+    return EdCertificate(kind, expiration, key_type, key,
+                         extensions, data[:pos], data[pos:])
+\end{lstlisting}
+
+\paragraph{Step 2: Verify the Chain.} This function applies the rules in \cref{sec:canale-verifica} and returns the identity that has been proved:
+
+\begin{lstlisting}[language=Python]
+def verify_responder_identity(certificates, cert_tls_der):
+    id_v_sign = decode_ed_certificate(certificates[4])
+    sign_v_tls = decode_ed_certificate(certificates[5])
+    identity = id_v_sign.signing_key               # extension 4
+    id_v_sign.verify_signature(identity)             # self-signed
+    sign_v_tls.verify_signature(id_v_sign.certified_key)
+    if sign_v_tls.certified_key != sha256(cert_tls_der).digest():
+        raise ChannelError("TLS certificate does not match")
+    for c in (id_v_sign, sign_v_tls):
+        if c.expired():
+            raise ChannelError("expired certificate")
+    return identity
+\end{lstlisting}
+
+We obtain the TLS certificate in DER format from the socket using \file{sock.getpeercert(\allowbreak binary\_form=True)}. Python returns it even though, in this case, we have not verified it.
+
+\paragraph{Step 3: The Handshake.} The \file{open\_channel} function sends \cella{VERSIONS}, offering versions 4 and 5 (like Arti, we omit 3). It then reads cells until \cella{NETINFO} arrives, handling each type: it ignores \cella{VPADDING} and any \cella{VERSIONS} after the first, and rejects any other unexpected cell. Finally, it verifies the certificates, compares the identity with the expected identity, and sends its own \cella{NETINFO}. The complete code is in the repository; its central loop is:
+
+\begin{lstlisting}[language=Python]
+while netinfo is None:
+    cell, buffer = _read(sock, buffer, version)
+    if cell.command == CellCommand.VERSIONS:
+        if version:
+            continue
+        version = negotiate_version(SUPPORTED_VERSIONS, cell.body)
+    elif cell.command == CellCommand.CERTS:
+        certificates = decode_certs(cell.body)
+    elif cell.command == CellCommand.AUTH_CHALLENGE:
+        ...                                    # accepted methods
+    elif cell.command == CellCommand.NETINFO:
+        netinfo = decode_netinfo(cell.body)
+    elif cell.command != CellCommand.VPADDING:
+        raise ChannelError("unexpected cell during the handshake")
+\end{lstlisting}
+
+\paragraph{Step 4: Tests Without a Network.} In \file{labs/en/code/torlab/test/test\_channel.py}, we generate two Ed25519 keys, build a valid certificate chain, and verify that the code accepts it. Then we break it in every way described by the specification (altered signature, uncertified signing key, different TLS certificate, expired certificate, duplicate type) and verify that each defect is detected. A test that checks only the valid case proves nothing: a verifier that accepts everything would pass it.
+
+\paragraph{Step 5: Run Against the Laboratory Network.} With the network running:
+\begin{lstlisting}[language=Python]
+from torlab.channel import open_channel, identity_from_file
+
+expected = identity_from_file("labs/en/lab/net/nodes/003r/fingerprint-ed25519")
+c = open_channel("127.0.0.1", 5103, expected_identity=expected)
+print(c.version, c.ed_identity.hex(), c.netinfo, c.auth_methods)
+print(c.registry)
+\end{lstlisting}
+The abbreviated output is:
+\begin{lstlisting}[numbers=none]
+5 785d3199f21d20ad...  Netinfo(time=1790511793, ...)  [3]
+['TLS TLSv1.3 TLS_AES_256_GCM_SHA384', '<- VERSIONS (6 byte)',
+ '<- CERTS (1451 byte)', '<- AUTH_CHALLENGE (36 byte)',
+ '<- NETINFO (509 byte)', '-> NETINFO: channel open']
+\end{lstlisting}
+Instead, connecting to port 5104 (relay \texttt{test004r}) while expecting another relay's identity produces the correct error, \texttt{the relay has a different identity from the expected one}.
+
+% ---------------------------------------------------------------------------
+\section*{Summary}
+\begin{itemize}
+  \item A channel is a TLS session between two adjacent nodes. Only relays accept channels, and one channel carries many circuits.
+  \item A relay's identity is its Ed25519 key \file{KP\_relayid\_ed}, which certifies a signing key \file{KP\_relaysign\_ed}; the RSA identity remains for compatibility.
+  \item A relay's TLS certificate is self-signed. Authentication takes place inside the channel through the \cella{CERTS} cell, which binds the identity, signing key, and TLS-certificate fingerprint.
+  \item The initiator must verify signatures, expiration dates, the TLS binding, and the \textbf{expected identity}.
+  \item Relays initiating a channel authenticate with \cella{AUTHENTICATE}, a signature bound to the TLS session and the conversation. Clients and bridges do not authenticate, so as not to create recognizable identities.
+  \item \cella{NETINFO} ends the handshake. A client sends a zero timestamp and none of its own addresses.
+  \item Link padding requires the channel to have already carried a \emph{complete} circuit or user traffic. A new channel, or one that carries only single-hop circuits, stays silent. Once that threshold has been crossed, padding also starts before the first application traffic (\texttt{nf\_pad\_before\_usage}, which defaults to 1).
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Exercises}
+
+\begin{esercizio}[1]\label{es:07-ruoli}
+Why does a Tor client not need a network-facing listening port? In which cases does a relay initiate channels?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:07-scadenza}
+An Ed25519 certificate has EXPIRATION\_DATE equal to \texttt{0x000772F7}. When does it expire? Why did the specification choose hours rather than seconds?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:07-authchallenge}
+An \cella{AUTH\_CHALLENGE} cell has a 38-byte body. How many methods does it offer? Is a 36-byte cell with N\_Methods equal to 2 valid?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-impostore}
+An adversary records a genuine relay's \cella{CERTS} cell and replays it unchanged on their own server, presenting their own TLS certificate. Which verification step fails? What if the adversary also presented the genuine relay's TLS certificate?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-netinfo}
+Write in hexadecimal the body of the \cella{NETINFO} cell sent by a relay at \texttt{203.0.113.5}, at 12:00:00 UTC on January 1, 2026, to a client that contacted it from \texttt{198.51.100.7}.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-client-auth}
+Suppose Tor clients authenticated to guards with a key generated once and stored on disk. Describe two concrete ways in which this would harm user anonymity.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:07-rsa}
+Extend \file{labs/en/code/torlab/channel.py} with optional verification of the RSA identity (types 2 and 7), following \cref{sec:canale-certs}. Compare the resulting RSA key's SHA-1 fingerprint with the relay's \file{fingerprint} file. \emph{Hint:} the fingerprint is the SHA-1 of the public key's DER encoding.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:07-padding}
+With the laboratory network running, open a channel with \file{labs/en/code/torlab/channel.py} and keep it open while client \texttt{test008c} downloads a page through the network. Will you receive \cella{PADDING} cells on \emph{your} channel? Form a hypothesis, test it, and explain your result in light of \file{channelpadding\_decide\_to\_pad\_channel}.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:07-mitm}
+Explain why the TLSSECRETS field in \cella{AUTHENTICATE} prevents an intermediary from relaying relay $A$'s authentication to relay $B$ over a different TLS session, even if the intermediary forwards every cell faithfully. What would happen if TLSSECRETS did not exist?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Further Reading}
+\begin{itemize}
+  \item \titolo{Tor Protocol Specification}, the \enquote{Channels}, \enquote{Negotiating and initializing channels}, and \enquote{Relay keys} chapters, and \titolo{Tor certificate formats} (cert-spec)~\cite{torspec}.
+  \item Proposal 220, \titolo{Migrate server identity keys to Ed25519}: the reasons for moving from RSA.
+  \item \titolo{Tor channel padding}, in the padding specification: the NetFlow-based adversary model and the choice of intervals.
+  \item RFC~5705 and RFC~8446 (§\,7.5): TLS \titolo{keying material exporter} functions.
+\end{itemize}

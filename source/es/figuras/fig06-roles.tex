@@ -1,0 +1,26 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Descripción alternativa accesible para EPUB.
+\altfig{Diagrama de roles de Tor. Arriba, el cliente llega a un sitio web pasando por los repetidores de guardia, intermedio y salida. Tres símbolos representan a las nueve autoridades de directorio, que votan y firman el consenso. Ante la censura, un puente puede servir de primer salto. Abajo, el cliente y el servicio onion establecen sendos circuitos hacia el punto de encuentro, sin repetidor de salida; las líneas discontinuas omiten los repetidores intermedios.}
+% Funciones en la red Tor.
+\begin{tikzpicture}[font=\sffamily\small,>=Stealth,
+  aut/.style={relay,fill=torviola!15,draw=torviola,font=\sffamily\scriptsize},
+  ex/.style={relay,fill=torverde!30}]
+  \node[client] (c) at (0,0) {Cliente};
+  \node[relay] (g) at (2.8,0) {Guardia};
+  \node[relay] (m) at (5.3,0) {Intermedio};
+  \node[ex] (e) at (7.8,0) {Salida};
+  \node[server] (s) at (10.6,0) {Sitio web};
+  \draw[cellaf] (c) -- (g); \draw[cellaf] (g) -- (m); \draw[cellaf] (m) -- (e); \draw[->,thick,torgrigio] (e) -- (s);
+  \foreach \x/\n in {3.8/1,5.3/2,6.8/3} \node[aut] (a\n) at (\x,2.4) {aut.};
+  \node[font=\sffamily\scriptsize,above=1pt of a2] {autoridades de directorio (9): consenso firmado};
+  \draw[dotted,thick,torviola] (a2) -- node[font=\sffamily\scriptsize,right]{consenso} (m);
+  \node[relay,fill=torgrigio!10,draw=torgrigio,font=\sffamily\scriptsize] (b) at (1.4,-2.2) {puente};
+  \node[font=\sffamily\scriptsize,align=center] at (1.4,-3.1) {primer salto en vez del\\guardia ante la censura};
+  \draw[dashed,torgrigio,->] (c) -- (b);
+  \node[client,fill=torverde!15,draw=torverde!60!black] (o) at (8.8,-2.3) {Servicio onion};
+  \node[relay,fill=torverde!25,font=\sffamily\scriptsize,align=center] (rp) at (5.3,-2.3) {punto de\\encuentro};
+  \draw[dashed,torverde!60!black,->] (o) -- node[font=\sffamily\scriptsize,below]{circuito} (rp);
+  \draw[dashed,torverde!60!black,->] (c) to[bend right=18] node[font=\sffamily\scriptsize,above,pos=.68]{circuito del cliente} (rp);
+  \node[font=\sffamily\scriptsize,align=center] at (5.3,-3.35) {cliente y servicio se encuentran\\sin utilizar una salida};
+\end{tikzpicture}

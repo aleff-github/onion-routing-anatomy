@@ -1,0 +1,111 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\section*{Chapter \ref{cap:23-browser}: Tor Browser, Tails, and Whonix}
+
+\begin{soluzione}{es:23-identita}
+New Circuit for This Site changes only the active tab's site's circuit, without clearing cookies, browsing history, or other sites' state; the site may still recognize the user through stored state. New Identity closes everything, clears browser state, and obtains new circuits for all activity. Neither changes the guard, because rotating it frequently increases the chance of eventually selecting an adversarial guard (\cref{sec:guard}). The guard cannot, in any event, see which websites the client visits.
+\end{soluzione}
+
+\begin{soluzione}{es:23-estensioni}
+The user may block additional trackers from loading, but Tor Browser already isolates trackers per site and limits persistent identifiers. Installing an extension sacrifices uniformity: websites may detect its presence or filter lists, distinguishing the user from the larger Tor Browser population. The extension also introduces more code with access to visited pages.
+\end{soluzione}
+
+\begin{soluzione}{es:23-isolamento}
+With identical SOCKS credentials for two tabs visiting the same website, tor attaches their streams to the same circuit. A third tab with different credentials receives a different circuit. \texttt{GETINFO stream-status} reveals the circuit identifier associated with each stream.
+\end{soluzione}
+
+\begin{soluzione}{es:23-scelta}
+(a) Tor Browser is sufficient, possibly with a bridge. (b) Tails: it boots from a USB drive, normally leaves no traces on another person's computer, and preserves only data placed in encrypted persistent storage, subject to risks from compromised hardware. (c) Whonix: the Workstation's applications reach the network through tor by architectural design, and the system supports long-running work without requiring amnesia.
+\end{soluzione}
+
+\begin{soluzione}{es:23-impronta}
+This is an open-ended exercise. Possible properties include screen and window dimensions, time zone, language, available fonts, and canvas rendering. In an ordinary browser, these may contribute anywhere from a few bits, such as time zone, to many bits, such as font or canvas characteristics. Tor Browser rounds dimensions through letterboxing, reports UTC and a common language, limits fonts, and standardizes or disables revealing interfaces. Residual differences include the operating system, selected security level, and rounded display dimensions.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:24-metrics}: Measuring the Network}
+
+\begin{soluzione}{es:24-dieci}
+Directory requests would be halved, and with the fixed divisor of ten, the user estimate would also be halved. The charts would display a sudden, broadly simultaneous decline across countries as the new tor version spread. A global, gradual decline correlated with software adoption would suggest a change in client behavior rather than a comparable loss of users. The estimation method would need a revised divisor.
+\end{soluzione}
+
+\begin{soluzione}{es:24-frazione}
+$20\,000\,000 / (0.6 \cdot 10) \approx 3\,333\,333$ estimated users. With an 8\% reporting fraction, the estimate is discarded because the fraction is below the required 10\%.
+\end{soluzione}
+
+\begin{soluzione}{es:24-flag}
+Outline: filter relays carrying both flags and divide their combined bandwidth by the network total. For the exit-selection probability, use Laboratory~7's \texttt{probabilities(consensus, "exit")}, summing the selection probabilities of relays whose /16 networks are among the five most frequently represented.
+\end{soluzione}
+
+\begin{soluzione}{es:24-censura}
+This is an open-ended exercise. A documented blocking event typically produces a sharp drop in direct-user estimates on the day blocking begins. Bridge-user estimates, especially for Snowflake or WebTunnel, may grow in the following days as affected users switch transports. Metrics may flag the date of the initial drop.
+\end{soluzione}
+
+\begin{soluzione}{es:24-privacy}
+Without rounding, an adversary who knows they are the only user from a given country reaching a relay, or knows the exact number of other users, could inspect its extra-info statistics to confirm whether another person from that country connected: a difference of one in the count. Rounding hides small differences. An adversary controlling many relays does not need these published counts, however, because it can directly observe incoming connections to its own relays.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:25-legale}: Legal and Ethical Aspects}
+
+\begin{soluzione}{es:25-condizioni}
+(a) An exit initiating requests to websites on its own, perhaps intending to \enquote{mix} traffic, would initiate transmissions. (b) An exit redirecting connections to a destination different from the one specified in the \texttt{BEGIN} cell would select the recipient. (c) An exit inserting content into HTTP pages or filtering content by meaning would select or modify information. These are also examples of behavior that can result in a \texttt{BadExit} flag.
+\end{soluzione}
+
+\begin{soluzione}{es:25-strumento}
+A kitchen knife is lawful, while assault is not. A person reading a censored newspaper through Tor may be using a lawful tool lawfully; the same person unlawfully accessing a computer commits an offense with or without Tor. A relay operator offers transmission capacity without selecting content, more like a carrier than an author, provided the operator does not participate in unlawful activity. Specific legal conclusions always depend on jurisdiction and facts.
+\end{soluzione}
+
+\begin{soluzione}{es:25-segnalazione}
+Explain that the address belongs to a Tor exit, verifiable through public Tor Project tools; that the operator does not know or log client identities and cannot identify them; and that the complaining website can, if it wishes, handle connections from public exit addresses differently. In practice, the operator may add an exit-policy rejection for that website's address if the operational benefit outweighs the resulting restrictions.
+\end{soluzione}
+
+\begin{soluzione}{es:25-esperimento}
+The proposal observes real users' traffic without consent, collects potentially disclosive data unsuitable for publication, such as visited domains, and offers a limited benefit. It conflicts with several research-safety principles and, in Italy, may raise criminal-law and data-protection issues. Safer alternatives include using already public aggregated Metrics data, measuring news-site reachability using only the researcher's own Tor client, or asking the Research Safety Board to review a privacy-preserving counting design using aggregation and noise, as in relay statistics.
+\end{soluzione}
+
+\begin{soluzione}{es:25-ricerca}
+This is a research exercise. Look for judgments in official legal databases, such as the Italian courts' published decisions or the Court of Justice of the European Union, rather than relying solely on third-party summaries. For each decision, record the court, date, applicable law, and outcome, and distinguish cases concerning relay operators from those concerning Tor users.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:26-attacchi}: Correlation, Fingerprinting, and Sybil Attacks}
+
+\begin{soluzione}{es:26-posizione}
+Traffic correlation requires observing both ends, whether through relays or the underlying networks; guards, path constraints, and measured bandwidth make this harder. Website fingerprinting requires only the client-to-guard link; limited padding defenses exist, and research continues. Discovering a guard involves a middle relay and the ability to induce circuit construction; guards and vanguards help. A Sybil adversary operates numerous relays; defenses include measured bandwidth, families, /16 constraints, and network monitoring. Routing attacks require influence over an autonomous system or Internet exchange point; responses include BGP monitoring outside the Tor protocol.
+\end{soluzione}
+
+\begin{soluzione}{es:26-base}
+Among 100\,000 visits, expected correct alerts number approximately 0.95, while false positives number approximately $0.001 \cdot 99\,999 \approx 100$. The proportion of correct alerts is $0.95/(0.95+100) \approx 0.9\%$. Nearly all alerts are false.
+\end{soluzione}
+
+\begin{soluzione}{es:26-bin}
+Using two-second bins over just five seconds leaves only two or three samples per series, making correlation unstable. Giving all clients the same traffic rhythm, for example the same random seed, makes the series nearly identical and matching impossible. Equalizing traffic rhythms is particularly disruptive: that is the principle behind PipeNet's constant-rate traffic (\cref{sec:radici-bassa}).
+\end{soluzione}
+
+\begin{soluzione}{es:26-difesa}
+At a constant transmission rate, entry traffic series no longer vary. Pearson correlation is then mathematically undefined because variance is zero, or is dominated by network noise; this attack fails. The cost is transmitting at the maximum chosen rate even when no useful data exist. In the laboratory, that can mean tens or hundreds of KB/s per client, several times more than the application data.
+\end{soluzione}
+
+\begin{soluzione}{es:26-probabilita}
+With a fixed guard, the adversary succeeds only if the selected guard is malicious, a probability of approximately 5\%. When that happens, it also serves as the exit on approximately 5\% of circuits. Over six months of intensive use, probability of at least one compromise therefore approaches 5\%, remaining zero for users with honest fixed guards in this simplified model. With a random guard for every circuit, compromise probability per circuit is approximately $0.05 \cdot 0.05 = 0.0025$; after thousands of circuits, compromise is almost certain. This is the rationale for persistent guards, and Laboratory~7's \texttt{Adversary} class can verify the behavior by simulation.
+\end{soluzione}
+
+\section*{Chapter \ref{cap:27-casi-rete}: Real Cases Against the Network}
+
+\begin{soluzione}{es:27-campo}
+On the client-bound path, each relay adds its own encryption layer to a cell's payload (\cref{cap:10-cifratura-relay}). The guard receives a payload encrypted under the intervening hops' keys and cannot read what the HSDir wrote into it. The outer cell command, however, is part of a header that every relay reads and forwards unchanged.
+\end{soluzione}
+
+\begin{soluzione}{es:27-uno}
+With three guards, the probability that at least one is adversarial is roughly three times as high, and each adversarial guard observes part of the client's traffic. With one guard, the selection risk is lower and an honest choice protects the client for a long time. The disadvantages are that an adversarial single guard observes all that client's traffic and that a slow or unreachable guard can degrade connectivity.
+\end{soluzione}
+
+\begin{soluzione}{es:27-verso}
+The laboratory already uses \texttt{DROP} cells rather than extension requests. The counter in \file{command.c} checks the outer cell command before decryption, so it does not depend on the enclosed message. In the opposite direction, the code logs a warning and closes the circuit with reason \texttt{PROTOCOL}, whether the circuit belongs to a client or a relay.
+\end{soluzione}
+
+\begin{soluzione}{es:27-segnali}
+Potential signals include relays entering the consensus at exactly the same minute, an uncommon shared tor version and operating system in descriptors, addresses in the same network or hosting provider, similar ports and nicknames, and missing contact information. False positives include legitimate large operators updating all their relays together, popular providers, and automated deployments using identical configurations. No single signal proves common ownership: combine evidence and contact the operator when possible.
+\end{soluzione}
+
+\begin{soluzione}{es:27-canali}
+An intermediate relay sees plaintext outer metadata: CircID, which changes at every hop and therefore does not pass through unchanged; the cell command, including \cella{RELAY} and \cella{RELAY\_EARLY}, the channel exploited in 2014, now blocked in the direction toward the client and limited to eight cells in the opposite direction; \cella{DESTROY} and its reason; and the timing and number of cells. The last two remain available for passive confirmation without a complete defense. Payloads are layered-encrypted, but under tor1 a malicious relay could mark them for another malicious relay to recognize (\cref{sec:tor1-debolezze}). CGO (\cref{sec:cgo}) instead makes such modifications produce unrecoverable plaintext at later hops.
+\end{soluzione}

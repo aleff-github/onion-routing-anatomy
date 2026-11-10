@@ -1,0 +1,238 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Censura, bridge e pluggable transports}\label{cap:16-censura}
+\aggiornatoal{23 settembre 2026}{tor 0.4.9.13; pt-spec v1; obfs4proxy 0.0.14 (Debian); documentazione del Tor Project}
+
+\begin{obiettivi}
+Al termine di questo capitolo saprai:
+\begin{itemize}[nosep]
+  \item descrivere i modi in cui un censore può bloccare Tor;
+  \item spiegare che cosa sono i bridge e perché la loro distribuzione è un problema difficile;
+  \item descrivere il protocollo con cui tor comunica con un pluggable transport;
+  \item distinguere le strategie di obfs4, meek, Snowflake, WebTunnel e Conjure;
+  \item far funzionare un bridge obfs4 nella rete di laboratorio e osservare che cosa vede un censore (Laboratorio~10).
+\end{itemize}
+\end{obiettivi}
+
+Tutto ciò che abbiamo visto finora presuppone che il client possa raggiungere la rete. In molti paesi non è così: la connessione verso Tor è bloccata, a volte solo nei periodi di tensione politica, a volte in modo permanente. Questo capitolo chiude la Parte~II con il tema dell'\textbf{elusione della censura}, che negli ultimi anni è diventato uno dei fronti più attivi del Tor Project.
+
+% ---------------------------------------------------------------------------
+\section{Come si blocca Tor}\label{sec:cens-blocco}
+
+Un censore, di solito un governo che controlla i fornitori di connettività del paese, ha diversi strumenti:
+\begin{description}
+  \item[Blocco per indirizzo] La lista dei relay è pubblica: è il consenso (\cref{cap:12-directory}). Basta scaricarlo e bloccare gli indirizzi IP di tutti i relay, oppure solo quelli delle directory authority e dei relay da cui i client scaricano il consenso.
+  \item[Blocco dei siti] Bloccare \texttt{torproject.org} impedisce di scaricare Tor Browser, anche se non blocca la rete in sé.
+  \item[Riconoscimento del protocollo] Un'ispezione approfondita dei pacchetti (\emph{deep packet inspection}, DPI) può riconoscere una connessione Tor da caratteristiche del suo handshake TLS, dalle dimensioni dei pacchetti o dai tempi, anche verso indirizzi non ancora noti.
+  \item[Sondaggio attivo] Quando il DPI sospetta che un server sia un relay nascosto, il censore può collegarsi a sua volta e provare a parlargli il protocollo di Tor: se risponde, lo blocca.
+  \item[Liste di permesso] Nei casi estremi il censore consente solo protocolli o destinazioni esplicitamente autorizzati, e tutto il resto viene bloccato.
+\end{description}
+A ciascuna tecnica corrisponde una contromisura, e la corsa tra censori e sviluppatori non si ferma. La misura di dove e come Tor viene bloccato è affidata a progetti come OONI (\cref{cap:24-metrics}).
+
+% ---------------------------------------------------------------------------
+\section{I bridge}\label{sec:cens-bridge}
+
+Contro il blocco per indirizzo la risposta è il \textbf{bridge}: un relay che non compare nel consenso. Un bridge funziona come un guard (\cref{sec:guard}): il client lo usa come primo salto, e da lì il circuito prosegue normalmente nella rete. Poiché il suo indirizzo non è pubblico, il censore non può bloccarlo semplicemente leggendo una lista. I bridge pubblicano il proprio descrittore presso una \textbf{bridge authority}, che ne controlla la raggiungibilità e ne tiene l'elenco, ma non lo pubblica; le statistiche pubbliche sui bridge usano solo un'impronta \emph{di un'impronta} dell'identità, per non rivelarla.
+
+Un client configura un bridge con una \emph{bridge line}. Nella rete di laboratorio il client \texttt{test011bc} ha nel suo \file{torrc}:
+\begin{lstlisting}[language=torrc,numbers=none]
+UseBridges 1
+Bridge obfs4 127.0.0.1:9909 2557828B596B33AB02075FE7EAD86F2DC3CEAFD5 cert=4sKDQih... iat-mode=0
+ClientTransportPlugin obfs4 exec /usr/bin/obfs4proxy
+\end{lstlisting}
+La riga indica il tipo di trasporto, l'indirizzo, l'impronta dell'identità del bridge (per verificare di parlare con lui, \cref{cap:07-canali}) e i parametri del trasporto. Il valore \texttt{cert=4sKDQih...} è \emph{abbreviato} a scopo tipografico e non è una configurazione da copiare: per un bridge avviato dal lettore servono il certificato e l'impronta reali della nuova istanza, reperibili nella sua bridge line.
+
+\subsection{Il problema della distribuzione}
+
+Un bridge è utile finché il censore non ne conosce l'indirizzo. Ma per essere utile deve essere dato agli utenti, e il censore può fingersi utente. È un problema senza soluzione perfetta: bisogna dare a molti utenti legittimi abbastanza bridge, dandone il meno possibile al censore. Il Tor Project distribuisce i bridge attraverso diversi canali, ciascuno con difese proprie contro la raccolta automatica~\cite{torsupport}:
+\begin{itemize}
+  \item il sito \url{https://bridges.torproject.org/};
+  \item la posta elettronica, scrivendo a \texttt{bridges@torproject.org} \textbf{da un account Gmail o Riseup}, come richiede attualmente il servizio automatico~\cite{torsupport};
+  \item un bot di Telegram (\texttt{@GetBridgesBot});
+  \item direttamente da Tor Browser, con la funzione che rileva il blocco e chiede i bridge adatti al paese (\emph{Connection Assist}, basata sul canale chiamato \emph{moat});
+  \item canali privati, gestiti da organizzazioni che conoscono personalmente i propri utenti.
+\end{itemize}
+Il sistema che assegna i bridge ai canali, per anni BridgeDB, è stato sostituito da \textbf{rdsys}; la migrazione si è conclusa nell'ottobre 2024~\cite{torblogrdsys}. L'operatore di un bridge può scegliere il canale con l'opzione \opt{BridgeDistribution}.
+
+\subsection{Lox}
+
+\textbf{Lox}~\cite{tulloch2023lox} affronta la distribuzione con un sistema di \emph{reputazione}: un nuovo utente riceve un bridge e una credenziale anonima; se nel tempo il suo bridge non viene bloccato, la credenziale sale di livello, fino a un massimo di 4, e dal livello 2 permette di invitare altri utenti. Se il bridge viene bloccato, l'utente può ottenerne un altro, ma perde reputazione. L'idea è che il censore, che blocca i bridge che riceve, non riesca mai a salire di livello, mentre gli utenti onesti sì. Le credenziali usano crittografia che impedisce al sistema stesso di sapere chi ha invitato chi, proteggendo il \emph{grafo sociale} degli utenti. Lox è in fase di sperimentazione nelle versioni alfa di Tor Browser.
+
+% ---------------------------------------------------------------------------
+\section{I pluggable transports}\label{sec:cens-pt}
+
+Contro il riconoscimento del protocollo non basta nascondere l'indirizzo: bisogna cambiare l'aspetto del traffico. Invece di modificare tor ogni volta che un censore impara a riconoscere qualcosa, il Tor Project ha definito un'interfaccia per programmi esterni che trasformano il traffico: i \textbf{pluggable transports} (PT)~\spec{pt-spec}{Architecture Overview}.
+
+\subsection{L'architettura}
+
+Il PT è un processo separato, lanciato da tor (per questo si dice \emph{managed}). Dal lato del client offre a tor un proxy SOCKS locale: tor gli affida la connessione verso il bridge, e il PT la trasforma prima di spedirla. Dal lato del bridge il PT ascolta sulla porta pubblica, annulla la trasformazione e passa il traffico all'ORPort locale di tor, eventualmente con un piccolo protocollo, l'\emph{Extended ORPort}, che comunica a tor l'indirizzo reale del client per le statistiche.
+
+\begin{figure}[htbp]
+\centering
+\input{figure/fig16-pt}
+\caption{Architettura schematica dei pluggable transports. Sul client tor comunica con il PT mediante un proxy SOCKS locale; sul bridge il PT inoltra il traffico ricostruito a tor tramite ORPort o, se configurato, Extended ORPort. Snowflake prevede anche proxy volontari intermedi, omessi nello schema. Un censore osserva il traffico trasformato sul collegamento monitorato, ma ciò non esclude che possa riconoscerlo.}
+\label{fig:pt}
+\end{figure}
+
+\subsection{Il protocollo tra tor e il PT}
+
+tor configura il PT con variabili d'ambiente e il PT risponde scrivendo righe sul proprio output standard~\spec{pt-spec}{Specification}. Possiamo provarlo lanciando a mano \cmd{obfs4proxy} nel container del laboratorio, come farebbe tor. Come client:
+\begin{lstlisting}[language=bash,numbers=none]
+$ env TOR_PT_MANAGED_TRANSPORT_VER=1 TOR_PT_STATE_LOCATION=/tmp/pt \
+      TOR_PT_EXIT_ON_STDIN_CLOSE=1 TOR_PT_CLIENT_TRANSPORTS=obfs4 obfs4proxy
+VERSION 1
+CMETHOD obfs4 socks5 127.0.0.1:40057
+CMETHODS DONE
+\end{lstlisting}
+Il PT dichiara la versione del protocollo e annuncia di offrire il trasporto \texttt{obfs4} come proxy SOCKS5 su una porta locale scelta da lui. Come server, con le variabili che indicano l'indirizzo pubblico e l'ORPort da raggiungere:
+\begin{lstlisting}[language=bash,numbers=none]
+$ env ... TOR_PT_SERVER_TRANSPORTS=obfs4 \
+      TOR_PT_SERVER_BINDADDR=obfs4-127.0.0.1:19999 \
+      TOR_PT_ORPORT=127.0.0.1:5104 obfs4proxy
+VERSION 1
+SMETHOD obfs4 127.0.0.1:19999 ARGS:cert=5W6vcbWbFGGZgabwm4C3WipezwnAfadoBhqfNVpY72xnkjB/Szczbxg8fLWJJ1uRlyjPSg,iat-mode=0
+SMETHODS DONE
+\end{lstlisting}
+Gli argomenti dopo \texttt{ARGS:} sono i parametri che il client dovrà conoscere, e che finiscono nella bridge line; il PT li scrive anche nel file \file{obfs4\_bridgeline.txt} della sua cartella di stato. La variabile \file{TOR\_PT\_EXIT\_ON\_STDIN\_CLOSE} chiede al PT di terminare quando tor chiude il suo input: così un PT non sopravvive al processo che lo ha lanciato. (L'esempio della specifica, per una svista, dice che il PT scrive i messaggi su \enquote{stdin}: in realtà, come vediamo, li scrive sull'output.)
+
+La riga \texttt{env ...} del comando server è \emph{schematica}: i puntini sostituiscono variabili d'ambiente obbligatorie e non vanno digitati letteralmente. Anche la porta SOCKS5 nell'output client è un valore osservato in una sessione di riferimento, non una porta fissa.
+
+\subsection{Lyrebird}
+
+Il programma che Tor Browser usa per i trasporti è \textbf{lyrebird}, che deriva dal precedente \cmd{obfs4proxy} e implementa obfs4, meek, Snowflake e WebTunnel~\cite{torsupport}. Nel laboratorio usiamo \cmd{obfs4proxy} 0.0.14, disponibile nei pacchetti di Debian e ancora compatibile per obfs4.
+
+% ---------------------------------------------------------------------------
+\section{Le strategie}\label{sec:cens-strategie}
+
+I trasporti oggi in uso seguono due strategie opposte: \emph{non assomigliare a niente} o \emph{assomigliare a qualcosa di permesso}.
+
+\subsection{obfs4: non assomigliare a niente}
+
+\textbf{obfs4}, progettato da Yawning Angel, trasforma il traffico in una sequenza di byte indistinguibile da dati casuali: nessuna intestazione riconoscibile, nessun handshake TLS, dimensioni dei pacchetti variabili. Tre scelte lo rendono efficace:
+\begin{itemize}
+  \item lo scambio di chiavi è una variante di ntor (\cref{sec:ntor}) in cui le chiavi pubbliche Curve25519 sono codificate con Elligator2, una tecnica che rende un punto della curva indistinguibile da una stringa casuale;
+  \item il client deve conoscere il parametro \texttt{cert} del bridge, che contiene la sua identità e la sua chiave pubblica: senza di esso non sa costruire un handshake valido, e il bridge non risponde. Questo protegge dal \textbf{sondaggio attivo}: un censore che si collega per curiosità non ottiene alcuna risposta riconoscibile;
+  \item il parametro \texttt{iat-mode} (\emph{inter-arrival time}) permette di aggiungere, a costo di prestazioni, ritardi e frammentazioni casuali che nascondono anche i tempi.
+\end{itemize}
+Il limite di obfs4 è il suo stesso punto di forza: un censore che usa una lista di permesso, o che blocca \enquote{tutto ciò che sembra casuale}, lo ferma. È quanto accade in alcuni paesi.
+
+\subsection{meek: dietro un grande servizio}
+
+\textbf{meek}~\cite{fifield2015fronting} usa il \emph{domain fronting}: il client apre una connessione HTTPS verso un grande servizio di distribuzione di contenuti, con un nome di dominio innocuo nella parte visibile della connessione, e indica il vero destinatario (un server che fa da ponte verso Tor) solo nella parte cifrata. Per bloccarlo il censore dovrebbe bloccare l'intero servizio, con danni enormi. La tecnica dipende però dalla disponibilità dei fornitori a tollerarla, e molti di essi l'hanno resa impossibile negli ultimi anni; meek è inoltre lento e costoso, perché tutto il traffico passa dai server del fornitore.
+
+\subsection{Snowflake: tanti proxy effimeri}
+
+\textbf{Snowflake}~\cite{bocovich2024snowflake} usa come ponte migliaia di volontari che eseguono un piccolo proxy, per esempio un'estensione del browser o un programma su un server. Il client contatta un \emph{broker}, attraverso un canale difficile da bloccare come il domain fronting, per farsi assegnare un proxy, e si collega a lui con WebRTC, il protocollo delle videochiamate nei browser. Il proxy inoltra il traffico a un bridge Snowflake gestito dal Tor Project. I proxy sono tanti e cambiano di continuo: bloccarli tutti per indirizzo è impraticabile, e bloccare WebRTC significa bloccare le videochiamate.
+
+\subsection{WebTunnel: sembrare un sito web}
+
+\textbf{WebTunnel}, annunciato dal Tor Project nel marzo 2024, avvolge il traffico in una connessione HTTPS con un comportamento simile a WebSocket~\cite{torblogwebtunnel}. Il bridge può stare dietro un vero sito web, sullo stesso dominio, indirizzo e porta: un reverse proxy inoltra al bridge solo le richieste verso un percorso segreto, e serve il sito normale a tutti gli altri. È pensato per i censori che usano liste di permesso, contro cui obfs4 non funziona: WebTunnel ha la \enquote{forma} di un protocollo permesso.
+
+\subsection{Conjure: nascondersi nello spazio degli indirizzi}
+
+\textbf{Conjure}~\cite{frolov2019conjure} è un sistema di \emph{refraction networking}: invece di un bridge con un indirizzo, usa stazioni installate presso fornitori di connettività collaborativi, che osservano il traffico diretto a intervalli di indirizzi inutilizzati e lo deviano verso Tor. Il client si collega a un indirizzo \enquote{fantasma}, scelto tra milioni: per bloccarlo il censore dovrebbe bloccare intere porzioni di Internet. Secondo la documentazione del Tor Project, Conjure è stato provato con successo ma richiede ancora lavoro di stabilizzazione, ed è disponibile solo nelle versioni alfa di Tor Browser e in alcune applicazioni~\cite{torsupport}.
+
+\begin{attenzione}[Nessun trasporto funziona ovunque]
+Ogni trasporto ha i suoi punti deboli, e l'efficacia cambia da paese a paese e di mese in mese. Nel forum del Tor Project, per esempio, gli utenti hanno segnalato nell'aprile 2025 che in Cina obfs4, meek e Snowflake erano inutilizzabili e WebTunnel si collegava ma veniva bloccato rapidamente~\cite{forumcina2025}. Per questo Tor Browser offre più trasporti e una funzione che suggerisce quello adatto al paese dell'utente.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Laboratorio: un bridge obfs4 e lo sguardo del censore}\label{sec:lab-censura}
+
+\begin{laboratorio}[10]{Un bridge obfs4 nella rete di laboratorio}
+\textbf{Obiettivo.} Avviare una rete con un bridge obfs4 e un client che lo usa; confrontare, catturando il traffico, una connessione Tor normale e una obfs4.\\
+\textbf{Prerequisiti.} La rete di laboratorio (\cref{cap:19-rete-privata}); l'immagine include \cmd{obfs4proxy} e \cmd{snowflake-client} dai pacchetti di Debian.\\
+\textbf{Tempo stimato.} 1--2 ore.
+\end{laboratorio}
+
+\paragraph{Passo 1: la rete con il bridge.} Il file \file{labs/it/laboratorio/chutney/networks/libro-bridge} aggiunge alla rete del libro un'autorità per i bridge (\texttt{test003ba}), un bridge obfs4 (\texttt{test009br}) e un client che lo usa (\texttt{test011bc}):
+\begin{lstlisting}[language=bash,numbers=none]
+$ make -C labs/it/laboratorio pulisci
+$ make -C labs/it/laboratorio avvia RETE=libro-bridge
+\end{lstlisting}
+\begin{attenzione}[La pulizia distrugge lo stato della rete di laboratorio]
+Il target \texttt{pulisci} elimina la cartella \file{labs/it/laboratorio/net/},
+\textbf{incluse le chiavi private e i log dei nodi}. Usalo soltanto con
+una rete sacrificabile e dopo aver salvato altrove i dati che vuoi
+conservare. Se la rete \texttt{libro} è in uso, segui invece la
+procedura di scambio e ripristino documentata in
+\file{docs/it/procedura-laboratori-dal-vivo.md}; non eseguire
+\texttt{pulisci} alla cieca su un laboratorio da preservare.
+\end{attenzione}
+
+Nel log del client di una precedente sessione di riferimento:
+\begin{lstlisting}[numbers=none]
+[notice] new bridge descriptor 'test009br' (fresh): $2557828B...~test009br
+[warn] Only one bridge (transport: 'obfs4') is configured. You should
+       have at least two for conflux, for any transport that is not 'snowflake'.
+[notice] Bootstrapped 100% (done): Done
+\end{lstlisting}
+Il client ha ottenuto un descrittore del bridge configurato e ha completato l'avvio. \textbf{Il solo log non dimostra da quale canale sia stato scaricato il descrittore}: nella configurazione obfs4 il client conosce in anticipo la bridge line, ma quella informazione non equivale a un record nel consenso pubblico. L'avviso ricorda che Conflux (\cref{cap:31-futuro}) usa due circuiti in parallelo, e con un solo bridge non può farlo. Una richiesta web attraverso la porta SOCKS di questo client (9011) funziona come con il client normale.
+
+\paragraph{Passo 2: che cosa vede il censore.} Dall'interno del container catturiamo con \cmd{tcpdump} il traffico sulla porta obfs4 del bridge (9909) e su una normale ORPort (5104), mentre il client usa il bridge e noi apriamo un canale verso \texttt{test004r} con il Laboratorio~1. Poi analizziamo la cattura con \cmd{tshark}; ecco il risultato di una nostra sessione:
+\begin{lstlisting}[numbers=none]
+== ORPort 5104 (TLS), primi byte inviati dal client ==
+1533  16030105f8010005f403033e1234a0401520d1c52b...
+== obfs4 9909, primi byte inviati dal client ==
+1957  b566475349099523c53005e1004a392160f15d473e...
+== pacchetti riconosciuti come TLS ==
+porta 5104: 83
+porta 9909: 0
+== dimensioni dei segmenti obfs4 (client -> bridge) ==
+1957 1677 1888 1891 1716 1716 3436 1395 1716 1748 1500 1194 ...
+\end{lstlisting}
+Verso l'ORPort, i primi byte sono inequivocabili: \texttt{16 03 01} è l'inizio di un record TLS di handshake, e Wireshark riconosce tutta la conversazione come TLS. Un censore vede un TLS da cui partire per cercare le caratteristiche di Tor, e l'indirizzo del relay è comunque nel consenso. Verso il bridge obfs4, \emph{in questa cattura}, i primi byte non hanno una struttura TLS riconoscibile per \cmd{tshark}: nessun frame viene classificato come TLS e le dimensioni dei segmenti non riflettono direttamente le celle da 514 byte. \textbf{Non è una prova che obfs4 sia irriconoscibile}: un censore potrebbe comunque usare statistiche su durata, dimensioni e tempi, conoscere l'indirizzo del bridge da un altro canale oppure bloccare tutto il traffico non classificato. Quello osservato è un flusso dall'aspetto casuale, non una garanzia di invisibilità.
+
+\paragraph{Passo 3: sondare il bridge.} Proviamo a collegarci alla porta 9909 del bridge con il Laboratorio~1, come farebbe un censore che sospetta un relay:
+\begin{lstlisting}[numbers=none]
+TimeoutError: The handshake operation timed out
+\end{lstlisting}
+In questa prova il nostro client \textbf{non riceve una risposta utile prima del timeout} di 15 secondi. Per obfs4 il ClientHello TLS è un handshake non valido: il bridge non deve rivelare il proprio protocollo tramite una risposta riconoscibile, e può chiudere la connessione dopo un ritardo. Il risultato mostra una forma di \emph{resistenza al sondaggio attivo}, non silenzio perpetuo né impossibilità di scoprire il servizio: un censore può inferire informazioni da tempi e chiusure, correlare osservazioni o conoscere l'indirizzo da altre fonti. Senza il parametro \texttt{cert} corretto non è possibile completare un handshake obfs4 valido.
+
+% ---------------------------------------------------------------------------
+\section*{Riepilogo}
+\begin{itemize}
+  \item Un censore può bloccare Tor per indirizzo, riconoscerne il protocollo, sondare i server sospetti o permettere solo il traffico autorizzato.
+  \item I bridge sono relay non pubblicati; la loro distribuzione, oggi affidata a rdsys e sperimentata con la reputazione di Lox, è un compromesso tra utenti e censori.
+  \item I pluggable transports sono processi esterni che trasformano il traffico; tor li configura con variabili d'ambiente e ne legge le risposte (\texttt{CMETHOD}, \texttt{SMETHOD}).
+  \item obfs4 rende il traffico simile a dati casuali e resiste al sondaggio attivo; meek, Snowflake, WebTunnel e Conjure lo nascondono dietro servizi, protocolli o indirizzi che il censore non può bloccare senza danni.
+  \item Nessun trasporto funziona ovunque e per sempre.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Esercizi}
+
+\begin{esercizio}[1]\label{es:16-guard}
+In che cosa un bridge differisce da un guard? Perché un client che usa i bridge non usa anche un guard pubblico?
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:16-strategie}
+Classifica obfs4, meek, Snowflake, WebTunnel e Conjure secondo la strategia (\enquote{non assomigliare a niente} o \enquote{assomigliare a qualcosa di permesso}) e secondo che cosa il censore dovrebbe bloccare per fermarli.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:16-sondaggio}
+Descrivi come un censore potrebbe scoprire un bridge obfs4 osservando solo il traffico, senza sondarlo. Quali caratteristiche statistiche potrebbe usare, e che cosa fa \texttt{iat-mode} per contrastarle?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:16-lox}
+Nel sistema Lox, perché un censore non riesce a salire di livello? Che cosa potrebbe fare per aggirare il meccanismo, e che cosa glielo rende costoso?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:16-entropia}
+Calcola l'entropia di Shannon dei byte (in bit per byte) dei primi 10\,KB di una connessione obfs4 e di una connessione TLS catturate nel laboratorio. Che cosa ti aspetti, e perché la differenza può essere piccola? Che cosa rende allora riconoscibile TLS?
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:16-sondaggio-lab}
+Prova a eseguire il Laboratorio~1 contro la porta obfs4 del bridge. Che errore ottieni? Poi prova a collegarti con \cmd{obfs4proxy} come client ma con un parametro \texttt{cert} sbagliato: che cosa osservi nei log del bridge?
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Per approfondire}
+\begin{itemize}
+  \item \titolo{Pluggable Transport Specification (Version 1)} (pt-spec)~\cite{torspec}.
+  \item L.~Tulloch, I.~Goldberg, \titolo{Lox: Protecting the Social Graph in Bridge Distribution}~\cite{tulloch2023lox}.
+  \item D.~Fifield et al., \titolo{Blocking-resistant communication through domain fronting}~\cite{fifield2015fronting}.
+  \item C.~Bocovich et al., \titolo{Snowflake, a censorship circumvention system using temporary WebRTC proxies}~\cite{bocovich2024snowflake}.
+  \item S.~Frolov et al., \titolo{Conjure: Summoning Proxies from Unused Address Space}~\cite{frolov2019conjure}.
+  \item Il blog del Tor Project sull'introduzione di WebTunnel~\cite{torblogwebtunnel} e le pagine di supporto sui bridge~\cite{torsupport}.
+\end{itemize}

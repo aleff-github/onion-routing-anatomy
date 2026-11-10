@@ -1,0 +1,67 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Guida alle specifiche torspec}\label[appendice]{cap:C-specifiche}
+\aggiornatoal{23 settembre 2026}{torspec commit \texttt{8e1f245}}
+
+Le specifiche del Tor Project sono la fonte primaria di quasi ogni capitolo di questo libro. Sono complete, ma non sono un testo didattico: nate come file di testo separati, scritti e modificati nel corso di vent'anni, sono state riunite in un unico sito solo di recente, e le stesse convenzioni avvertono che la loro uniformità è un lavoro in corso. Questa appendice è una mappa per chi vuole leggerle dopo aver letto il libro.
+
+% ---------------------------------------------------------------------------
+\section{Dove si trovano}\label{sec:C-dove}
+
+Le specifiche sono pubblicate su \url{https://spec.torproject.org/} e mantenute nel repository \texttt{torspec} del GitLab del Tor Project, insieme alle proposte. Nel repository, i testi sono file Markdown nella cartella \file{spec/}, uno per argomento o una cartella per ciascun documento più ampio; la pagina \file{permalinks.md} elenca gli indirizzi stabili di ciascun documento (per esempio \url{https://spec.torproject.org/tor-spec}), che conviene usare nelle citazioni. Nel libro le specifiche sono citate nella forma \spec{documento}{sezione}, con il titolo della sezione così come compare nel sito, e le proposte come \enquote{Proposta~NNN}.
+
+% ---------------------------------------------------------------------------
+\section{Le convenzioni}\label{sec:C-convenzioni}
+
+Il documento introduttivo sulle convenzioni stabilisce alcune regole che valgono, salvo eccezioni, per tutti i testi:
+\begin{itemize}
+  \item le parole \texttt{MUST}, \texttt{SHOULD}, \texttt{MAY} e le loro negazioni hanno il significato della RFC~2119: un requisito, una raccomandazione forte, una possibilità;
+  \item le lunghezze sono in byte di 8 bit, e i prefissi binari (\enquote{kibibyte}) indicano multipli di 1024;
+  \item gli interi di più byte sono codificati in ordine big-endian, \enquote{di rete}: 4660 su due byte è \texttt{12 34}.
+\end{itemize}
+Due eccezioni importanti all'ultima regola le abbiamo incontrate nel libro: le chiavi e i punti di curve25519 ed Ed25519 sono little-endian (\cref{cap:B-crittografia}), e alcuni formati di directory sono testuali, con i dati binari in base64.
+
+% ---------------------------------------------------------------------------
+\section{Mappa dei documenti}\label{sec:C-mappa}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}Xl@{}}
+\toprule
+Documento & Contenuto & Capitoli \\
+\midrule
+\texttt{tor-spec} & il protocollo principale: canali, celle, circuiti, handshake, cifratura dei relay, stream, controllo di flusso e della congestione & \ref{cap:07-canali}--\ref{cap:11-stream} \\
+\texttt{cert-spec} & i certificati Ed25519 di Tor & \ref{cap:07-canali} \\
+\texttt{dir-spec} & autorità, voti, consenso, descrittori, microdescrittori, extra-info & \ref{cap:12-directory}, \ref{cap:24-metrics} \\
+\texttt{path-spec} & selezione dei percorsi e vincoli & \ref{cap:13-percorso} \\
+\texttt{guard-spec} & algoritmo dei guard & \ref{cap:13-percorso} \\
+\texttt{vanguards-spec} & vanguard e vanguard leggeri & \ref{cap:13-percorso} \\
+\texttt{rend-spec} & onion service v3: chiavi, descrittori, introduzione, rendezvous & \ref{cap:14-onion-services}, \ref{cap:21-onion-pratica} \\
+\texttt{hspow-spec} & prova di lavoro per gli onion service & \ref{cap:15-dos} \\
+\texttt{dos-spec} & difese contro la negazione del servizio & \ref{cap:15-dos} \\
+\texttt{pt-spec} & interfaccia tra tor e i pluggable transports & \ref{cap:16-censura} \\
+\texttt{padding-spec} & padding di canale e di circuito & \ref{cap:07-canali}, \ref{cap:26-attacchi} \\
+\texttt{control-spec} & protocollo della ControlPort & \ref{cap:18-stem} \\
+\texttt{socks-extensions} & estensioni di Tor al protocollo SOCKS & \ref{cap:11-stream}, \ref{cap:28-opsec} \\
+\texttt{param-spec} & parametri di rete del consenso e loro valori predefiniti & \ref{cap:11-stream}, \ref{cap:15-dos} \\
+\texttt{address-spec} & nomi speciali, come gli indirizzi \texttt{.onion} & \ref{cap:14-onion-services} \\
+\texttt{srv-spec} & valore casuale condiviso delle autorità & \ref{cap:14-onion-services} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ---------------------------------------------------------------------------
+\section{Come leggere una sezione}\label{sec:C-lettura}
+
+Qualche consiglio, maturato scrivendo il libro:
+\begin{enumerate}
+  \item \textbf{Partire dal formato.} Le sezioni sui messaggi binari descrivono i campi in tabelle con nome e lunghezza: conviene ricostruirle prima su carta, come nelle figure dei formati del libro, e poi leggere le regole.
+  \item \textbf{Distinguere attuale e obsoleto.} Molti documenti conservano parti storiche (TAP, link protocol 1--3, onion service v2). Le parti obsolete sono spesso raccolte in sezioni o file dedicati, come \file{obsolete-channels.md} o la cartella \file{historical/}, ma non sempre: nel dubbio, controllare nel codice se il ramo esiste ancora.
+  \item \textbf{Confrontare con il codice.} Le specifiche descrivono l'intento; il codice di tor e di Arti mostra il comportamento. Più volte, nel libro, la differenza è stata istruttiva: il padding di canale che non compare sui circuiti di un solo salto (\cref{cap:07-canali}), il motivo di chiusura osservato sull'exit (\cref{sec:lab-relay}).
+  \item \textbf{Controllare lo stato delle proposte.} Una proposta può essere già implementata ma non ancora riportata nella specifica, o viceversa discussa ma non implementata (\cref{sec:fut-processo}).
+  \item \textbf{Verificare sul vivo.} Una rete privata come quella del libro permette di controllare in pochi minuti se un campo si comporta come descritto: è il metodo che ha guidato tutti i laboratori.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section{Arti e le specifiche}\label{sec:C-arti}
+
+Il codice di Arti cita spesso la specifica in commenti e documentazione, e segnala i punti in cui la specifica è ambigua o in cui il comportamento di tor differisce. La tabella dei sottoprotocolli supportati (\cref{sec:arti-supporto}) è un buon indice di quali parti della specifica sono implementate da entrambe le implementazioni, e quindi di quali parti descrivono il protocollo \enquote{vivo}.

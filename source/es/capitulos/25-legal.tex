@@ -1,0 +1,123 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+\chapter{Aspectos legales y éticos en Italia y la UE}\label{cap:25-legale}
+\aggiornatoal{23 de septiembre de 2026}{Reglamento (UE) 2022/2065; Decreto Legislativo 196/2003 (texto consolidado publicado por la Autoridad Italiana de Protección de Datos); directrices del Tor Research Safety Board}
+
+\begin{obiettivi}
+Al finalizar este capítulo, el lector podrá:
+\begin{itemize}[nosep]
+  \item distinguir entre la legalidad de una herramienta y la legalidad de sus usos;
+  \item interpretar la regla europea de \enquote{mera transmisión} (\emph{mere conduit}) a la luz del funcionamiento de una salida Tor;
+  \item identificar las cuestiones no resueltas que afrontan los operadores de repetidores en Italia, entre ellas responsabilidad, conservación de datos e incautaciones;
+  \item aplicar los principios de seguridad del Tor Research Safety Board a investigaciones sobre Tor.
+\end{itemize}
+\end{obiettivi}
+
+\begin{attenzione}[Este capítulo no constituye asesoramiento jurídico]
+La legislación cambia, depende de las circunstancias de cada caso y ha dado lugar a relativamente pocas resoluciones específicamente relacionadas con Tor. Este capítulo presenta las cuestiones pertinentes e identifica las normas examinadas en su texto oficial, señalando expresamente las incertidumbres. Cualquiera que deba adoptar una decisión operativa, como administrar una salida, debería consultar a un abogado especializado en derecho tecnológico.
+\end{attenzione}
+
+% ---------------------------------------------------------------------------
+\section{Una herramienta y sus usos}\label{sec:legale-strumento}
+
+En Italia, como en el resto de la Unión Europea, ninguna ley prohíbe de forma general utilizar Tor u otras herramientas que protejan la confidencialidad de las comunicaciones. Por el contrario, la confidencialidad de la correspondencia y otras comunicaciones (artículo~15 de la Constitución italiana) y la libertad de expresión (artículo~21) son derechos fundamentales, al igual que el respeto de la vida privada y la protección de datos personales reconocidos en los artículos~7 y~8 de la Carta de los Derechos Fundamentales de la Unión Europea.
+
+Lo que las personas hacen mediante Tor sigue sometido a las mismas leyes que rigen fuera de Tor. El acceso no autorizado a un sistema informático (artículo~615-\emph{ter} del Código Penal italiano) no se vuelve lícito por atravesar tres repetidores. Distinguir entre una herramienta y su utilización es esencial en este capítulo y también para quienes proporcionan la infraestructura: los operadores de repetidores aportan capacidad de transmisión, como los proveedores de conectividad, en lugar de seleccionar el contenido transmitido.
+
+% ---------------------------------------------------------------------------
+\section{Operadores de repetidores}\label{sec:legale-relay}
+
+\subsection{Mera transmisión}
+
+El \emph{Reglamento de Servicios Digitales} (\emph{Digital Services Act}, DSA) europeo, aplicable desde el 17 de febrero de 2024, sustituyó las reglas de responsabilidad de intermediarios establecidas originalmente por la Directiva sobre comercio electrónico de 2000, incorporada al ordenamiento italiano mediante el Decreto Legislativo 70/2003~\cite{dsa2022}. Su artículo~4 trata la \textbf{mera transmisión} (\emph{mere conduit}): un servicio que transmite información proporcionada por otras personas queda exento de responsabilidad por esa información si no inicia la transmisión, no selecciona a su destinatario y no selecciona ni modifica la información transmitida. La \cref{fig:conduit} compara esas condiciones con el comportamiento de una salida Tor al nivel del protocolo de celdas.
+
+\begin{figure}[htbp]
+\centering
+\input{figuras/fig25-mera-transmision}
+\caption{Comparación técnica, no conclusión jurídica automática, de los criterios de \emph{mera transmisión} del art.~4 del Reglamento (UE) 2022/2065 y la salida Tor. El cliente indica el destino mediante \texttt{RELAY\_BEGIN}; la salida abre una conexión TCP y puede rechazarla según su política. Los bytes de aplicación de \texttt{RELAY\_DATA} pasan al flujo TCP, sin reenviar intactas las celdas Tor. La exención exige valorar el servicio concreto y todos los requisitos legales.}
+\label{fig:conduit}
+\end{figure}
+
+También importan otras dos disposiciones. El artículo~8 excluye una obligación \emph{general} de supervisar la información transmitida o buscar activamente indicios de actividades ilícitas: por regla general, un operador no está obligado a inspeccionar indiscriminadamente el tráfico; un repetidor intermedio no puede leer en claro el contenido de aplicación cifrado. No obstante, el artículo~4(3) conserva la facultad de las autoridades judiciales o administrativas de ordenar a los prestadores de servicios que impidan o pongan fin a infracciones.
+
+\paragraph{La cuestión abierta.} El Reglamento se aplica a los \enquote{servicios de la sociedad de la información}, definidos por el Derecho de la UE como servicios prestados \emph{normalmente a cambio de una remuneración}. ¿Encaja en esa definición un repetidor gestionado gratuitamente por una persona voluntaria? Existen argumentos a favor de una interpretación amplia, y la exención refleja un principio que un tribunal podría considerar: quien se limita a transportar información no debería responder por su contenido. Sin embargo, aquí no se ha establecido la situación jurídica italiana de los repetidores voluntarios de Tor mediante una resolución judicial directamente aplicable. Esta incertidumbre ayuda a explicar por qué algunas salidas las gestionan asociaciones u organizaciones que ya prestan servicios de red.
+
+\subsection{Responsabilidad civil e investigaciones penales}
+
+La exención afecta a la responsabilidad por la información transmitida. No impide que una investigación penal comience a partir de la dirección IP de una salida. Desde la perspectiva de la víctima, un delito cometido mediante Tor parece proceder de la salida. Inicialmente, los investigadores podrían registrar o incautar los equipos del operador. Las preguntas frecuentes legales de la Electronic Frontier Foundation para operadores de repetidores, redactadas según el Derecho estadounidense pero útiles como testimonio de experiencias, indican que no conocen ninguna condena impuesta exclusivamente por administrar un repetidor, aunque describen investigaciones e incautaciones provocadas por malentendidos sobre Tor~\cite{efflegalfaq}. Algunas precauciones pueden reducir los riesgos prácticos:
+\begin{itemize}
+  \item Ejecutar la salida en un servidor dedicado de un centro de datos, y no en casa ni en un ordenador personal de trabajo.
+  \item Indicar claramente que la dirección IP pertenece a una salida, por ejemplo mediante un DNS inverso descriptivo y una página informativa que tor pueda servir desde su DirPort mediante \opt{DirPortFrontPage}.
+  \item Informar previamente al proveedor de conectividad y acordar cómo tramitar las notificaciones de abuso.
+  \item Explicar qué es Tor al responder a dichas notificaciones y conservar la correspondencia.
+\end{itemize}
+
+\subsection{Conservación de datos}
+
+El artículo~132 del Código italiano de Protección de Datos Personales exige a los \emph{proveedores} comprendidos en su ámbito conservar durante doce meses los datos de tráfico telemático con fines de investigación y persecución de delitos~\cite{codiceprivacy}, frente a los veinticuatro meses del tráfico telefónico. El apartado~5-\emph{bis} mantiene una regla especial: el artículo~24 de la Ley n.º~167, de 20 de noviembre de 2017, amplía el plazo a \textbf{setenta y dos meses} para investigaciones relativas a delitos contemplados en los artículos~51(3-\emph{quater}) y 407(2)(a) del Código de Procedimiento Penal, incluidos el terrorismo y otros delitos graves~\cite{legge167}. La parte pertinente del Código de Protección de Datos se aplica a servicios de comunicaciones electrónicas \emph{accesibles al público a través de redes públicas de comunicaciones} (artículo~121).
+
+Si un operador voluntario de repetidores puede considerarse uno de esos proveedores es otra cuestión abierta, que depende también de cómo se ofrece el servicio. Los operadores, especialmente las organizaciones que ya prestan servicios de comunicaciones, deberían solicitar un análisis jurídico antes de administrar una salida. Desde el punto de vista técnico, con la configuración de registros recomendada, tor normalmente no conserva un historial de los destinos de los usuarios. Una salida puede ver los destinos de las conexiones que reenvía, pero desconoce la dirección IP de origen del cliente. Los datos realmente disponibles dependen de la función y configuración del repetidor: no debe suponerse que una salida pueda identificar a los usuarios individuales de Tor.
+
+\subsection{Los registros son datos personales}
+
+Las direcciones IP son datos personales. El Reglamento General de Protección de Datos (RGPD) exige tratar únicamente los datos necesarios y conservarlos solo durante el tiempo indispensable (artículo~5, principio de minimización de datos). Para un repetidor, la opción compatible con la seguridad consiste en registrar únicamente eventos de nivel \texttt{notice}, mantener \opt{SafeLogging} activado y evitar capturas de paquetes (\cref{sec:traffico-log}).
+
+% ---------------------------------------------------------------------------
+\section{Investigadores}\label{sec:legale-ricerca}
+
+La investigación sobre Tor tiene antecedentes de experimentos éticamente cuestionables, algunos tratados en \cref{cap:27-casi-rete}. Se han administrado repetidores que vigilaban o manipulaban el tráfico de usuarios reales para demostrar ataques. Además de los problemas éticos, esos experimentos podrían estar sujetos al Derecho penal italiano, incluidas las disposiciones sobre interceptación ilícita de comunicaciones informáticas (artículo~617-\emph{quater} del Código Penal), y a las normas de protección de datos.
+
+El \textbf{Tor Research Safety Board} es un grupo de investigadores que asesora sobre la seguridad de los experimentos y ha desarrollado directrices~\cite{trsb}:
+\begin{itemize}
+  \item Utilizar siempre que sea posible una red de prueba y atacar únicamente el tráfico propio.
+  \item Recopilar solo los datos necesarios y únicamente aquellos cuya publicación sería segura.
+  \item Proteger los datos recopilados y las herramientas experimentales.
+  \item Reducir la precisión de los datos mediante redondeo o ruido.
+  \item Considerar conjuntos de datos de terceros que podrían revelar información al combinarse con los propios.
+  \item Preguntarse si los usuarios esperaban que los datos correspondientes permanecieran privados.
+  \item Comprobar que los beneficios previstos justifican los riesgos.
+\end{itemize}
+
+El Board solicita a los investigadores que expliquen qué desean aprender, cómo pretenden hacerlo, qué riesgos introduce el experimento y por qué sus beneficios justifican esos riesgos. Este libro sigue la misma disciplina: los laboratorios que generan tráfico Tor activo utilizan una red privada (\cref{sec:rp-perche}), mientras que los análisis de documentos públicos, como los de \cref{cap:24-metrics}, se realizan sin conexión sobre datos agregados y públicos.
+
+% ---------------------------------------------------------------------------
+\section*{Resumen}
+\begin{itemize}
+  \item Utilizar Tor es lícito por sí mismo; las actividades realizadas mediante Tor siguen regidas por el Derecho ordinario.
+  \item El artículo~4 del DSA exime, bajo ciertas condiciones, a los servicios comprendidos en su ámbito que se limitan a transmitir información ajena. El funcionamiento de una salida es relevante para evaluar esas condiciones, pero sigue abierta la cuestión de si el Reglamento cubre a un repetidor voluntario.
+  \item La exención no impide investigaciones ni incautaciones. Los servidores dedicados, la identificación clara de las salidas y los acuerdos con proveedores de conectividad pueden reducir problemas prácticos.
+  \item Las obligaciones de conservación de datos afectan a proveedores de comunicaciones accesibles al público comprendidos en la norma; su aplicación a repetidores voluntarios requiere una valoración jurídica caso por caso.
+  \item La investigación sobre Tor debe evitar siempre que sea posible experimentos con usuarios reales: utilizar redes de prueba, minimizar los datos, publicar únicamente agregados seguros y valorar los beneficios frente a los riesgos.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Ejercicios}
+
+\begin{esercizio}[1]\label{es:25-condizioni}
+Para cada una de las tres condiciones del artículo~4 del DSA, describe un cambio de comportamiento de una salida que la vulneraría.
+\end{esercizio}
+
+\begin{esercizio}[1]\label{es:25-strumento}
+Utiliza un ejemplo para explicar la diferencia entre la legalidad de una herramienta y la de sus usos, tanto para un usuario Tor como para un operador de repetidores.
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:25-segnalazione}
+Redacta una respuesta a una notificación de abuso recibida del proveedor de conectividad de una salida después de que un sitio web denuncie intentos repetidos de acceso desde tu dirección IP. ¿Qué puedes explicar y qué medidas prácticas puedes adoptar?
+\end{esercizio}
+
+\begin{esercizio}[2]\label{es:25-esperimento}
+Una investigadora propone contar los nombres de dominio observados en una salida para estimar cuántos usuarios Tor visitan sitios de noticias italianos. Evalúa la propuesta mediante las directrices del Tor Research Safety Board y sugiere una alternativa más segura.
+\end{esercizio}
+
+\begin{esercizio}[3]\label{es:25-ricerca}
+Investiga resoluciones judiciales relacionadas con operadores de repetidores Tor dictadas por tribunales italianos y de otros países europeos. Resume la cuestión jurídica y el resultado de cada caso, citando fuentes primarias.
+\end{esercizio}
+
+% ---------------------------------------------------------------------------
+\section*{Lecturas complementarias}
+\begin{itemize}
+  \item Reglamento (UE) 2022/2065, especialmente los artículos~4, 8 y~9~\cite{dsa2022}.
+  \item Decreto Legislativo 196/2003, artículos~121 y~132, en el texto consolidado publicado por la Autoridad Italiana de Protección de Datos~\cite{codiceprivacy}.
+  \item Electronic Frontier Foundation, \titolo{Legal FAQ for Tor Relay Operators}~\cite{efflegalfaq}.
+  \item Sitio web del Tor Research Safety Board~\cite{trsb}.
+\end{itemize}

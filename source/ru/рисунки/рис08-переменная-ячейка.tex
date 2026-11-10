@@ -1,0 +1,15 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+%% Русское альтернативное описание EPUB.
+\altfig{Ячейка Tor переменной длины после согласования версии протокола канала v4 или выше: CircID занимает 4 байта со смещения 0, Command — 1 байт со смещения 4, Length — 2 байта беззнакового целого в порядке big-endian со смещения 5, Body содержит ровно Length байт со смещения 7. Общий размер — 7 + Length байт, где Length от 0 до 65535; дополнительного заполнения тела нет. Исключение: до согласования VERSIONS всегда использует заголовок v0 с 2-байтовым CircID. Ширины на схеме условны.}
+% Ячейка переменной длины после согласования протокола канала v4+ (ширины не в масштабе).
+\begin{tikzpicture}[campo/.style={draw,minimum height=1cm,font=\sffamily\small,inner sep=2pt}]
+  \node[campo,fill=torviola!15,minimum width=2.6cm] (c) {CircID (4)};
+  \node[campo,fill=torviola!35,minimum width=1.6cm,right=0pt of c] (k) {Cmd (1)};
+  \node[campo,fill=torviola!55,text=white,minimum width=2cm,right=0pt of k] (l) {Length (2)};
+  \node[campo,fill=torverde!15,minimum width=5cm,right=0pt of l] (b) {Тело};
+  \foreach \n/\o in {c/0,k/4,l/5,b/7} \node[font=\scriptsize,above] at (\n.north west) {\o};
+  \node[font=\scriptsize,above] at (b.north east) {$7+\mathit{Length}$};
+  \draw[decorate,decoration={brace,mirror,amplitude=5pt}] ([yshift=-2pt]b.south west) -- ([yshift=-2pt]b.south east)
+    node[midway,below=6pt,font=\sffamily\small] {\textit{Length} байт};
+\end{tikzpicture}
