@@ -59,6 +59,10 @@ technical corrections or translations. → [Help improve this book](#help-improv
 
 The Italian edition is free to read, download and share under the conditions of the [GPL-3.0-or-later](LICENSE).
 
+
+
+Official release: [v1.0.0-it](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it) (seven files, SHA-256 checksums).
+
 ### What the book contains
 
 - **Part I — History and foundations:** anonymity and metadata, mix networks and remailers,
@@ -231,6 +235,10 @@ chiare e correzioni tecniche o linguistiche. →
 | Copertina | [Visualizza la copertina](book/it/anatomia-di-tor_it_copertina.png) |
 
 L'edizione italiana è gratuita: puoi leggerla, scaricarla e condividerla secondo i termini della [GPL-3.0-or-later](LICENSE).
+
+
+
+Release ufficiale: [v1.0.0-it](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it) (sette file, impronte SHA-256).
 
 ### Che cosa contiene
 

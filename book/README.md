@@ -36,3 +36,5 @@ not belong to that release. For their status and outstanding reviews, see
 The Italian edition is distributed free of charge under
 [GPL-3.0-or-later](../LICENSE). Release file descriptions and checksum
 information are in the [Italian release notes](../docs/releases/v1.0.0-it.md).
+
+Official Italian release: [v1.0.0-it](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it), published 2026-11-10.

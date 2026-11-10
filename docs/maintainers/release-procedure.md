@@ -2,7 +2,7 @@
 
 | Release | Notes | State |
 |---|---|---|
-| `v1.0.0-it` | [v1.0.0-it.md](../releases/v1.0.0-it.md) | **In preparation** — files built and packaged, tag and GitHub release not yet created |
+| `v1.0.0-it` | [v1.0.0-it.md](../releases/v1.0.0-it.md) | **Published on 2026-11-10** — tag and Italian release created |
 
 ## Automated pre-release QA (no publication)
 

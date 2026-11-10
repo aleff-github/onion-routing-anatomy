@@ -55,6 +55,10 @@ chiare e correzioni tecniche o linguistiche. →
 
 L'edizione italiana è gratuita: puoi leggerla, scaricarla e condividerla secondo i termini della [GPL-3.0-or-later](LICENSE).
 
+
+
+Release ufficiale: [v1.0.0-it](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it) (sette file, impronte SHA-256).
+
 ## Che cosa contiene
 
 - **Parte I — Storia e fondamenti:** anonimato e metadati, mix network e remailer, dall'onion

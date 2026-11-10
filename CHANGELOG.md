@@ -7,7 +7,7 @@ as **Editorial corrections**, **Technical corrections**, **Laboratories**, **Tra
 and **Website and documentation**; entries link the issue or pull request and credit its
 author ([CONTRIBUTORS.md](CONTRIBUTORS.md)).
 
-## 1.0.0 — First edition
+## 1.0.0 — First edition (published 2026-11-10)
 
 First edition of *Anatomia di Tor — Il protocollo dell'anonimato, byte per byte*.
 
@@ -24,7 +24,7 @@ First edition of *Anatomia di Tor — Il protocollo dell'anonimato, byte per byt
   1.0.0, translated with artificial-intelligence tools from the Italian original. The
   repository contains their sources, laboratories and PDF/EPUB/cover **review copies** in
   `book/<language>/`. They have not been independently reviewed by native speakers.
-  **Only the Italian edition is included in the planned official release**
+  **Only the Italian edition is included in the official release**
   `v1.0.0-it` ([translation details](docs/translations/en.md)).
 - **Documentation:** README, AI disclosure ([AI_DISCLOSURE.md](AI_DISCLOSURE.md)),
   contribution guide, code of conduct, security policy, editorial process, translation review

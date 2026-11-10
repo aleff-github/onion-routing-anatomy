@@ -30,7 +30,7 @@ tag = "v1.0.0-it"
 # false: collegamenti diretti ai file della repository, senza dichiarazioni pubbliche
 # sullo stato della release. true: collegamenti a una release GitHub esistente.
 # Il cambio di questo flag non pubblica ne' il repository ne' il sito.
-published = false
+published = true
 pdf  = "anatomia-di-tor_it_A4.pdf"
 epub = "anatomia-di-tor_it.epub"
 print = "anatomia-di-tor_it_7x10.pdf"
