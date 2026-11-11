@@ -16,7 +16,7 @@ The Italian original also offers a [7×10-inch print PDF](it/anatomia-di-tor_it_
 
 **Avvertenza sulle traduzioni.** Le quattro traduzioni sono pubblicate gratuitamente ma **non sono state sottoposte a revisione linguistica indipendente da parte di madrelingua**. In caso di divergenze fa fede il testo originale italiano.
 
-These files are distributed directly from the public repository. The existing `v1.0.0-it` GitHub release contains **only the Italian original**; the translations are downloadable above, not attached to that historical release.
+All five editions have dedicated GitHub releases: [Italian](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it) · [English](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-en) · [Spanish](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-es) · [Russian](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-ru) · [Simplified Chinese](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-zh-Hans). The Italian release contains only the original, and the four translated releases contain their own PDF, EPUB, cover and checksums.
 
 All editions and their corresponding sources in [`source/`](../source/) are distributed under [GPL-3.0-or-later](../LICENSE). Translation status: [language notes](../docs/translations/) · [participate in review](../docs/translation-review.md).
 

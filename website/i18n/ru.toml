@@ -208,10 +208,10 @@ body = """
 <thead><tr><th scope="col">Язык</th><th scope="col">Файлы</th><th scope="col">Статус</th></tr></thead>
 <tbody>
 <tr><td lang="it">Italiano</td><td><a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a></td><td>Итальянский оригинал · версия {{version}}</td></tr>
-<tr><td lang="en">English</td><td><a href="{{blob}}/book/en/anatomy-of-tor_en_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/en/anatomy-of-tor_en.epub">EPUB</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
-<tr><td lang="es">Español</td><td><a href="{{blob}}/book/es/anatomía-de-tor_es_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/es/anatomía-de-tor_es.epub">EPUB</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
-<tr><td lang="ru">Русский</td><td><a href="{{blob}}/book/ru/анатомия-tor_ru_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/ru/анатомия-tor_ru.epub">EPUB</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
-<tr><td lang="zh-Hans">简体中文</td><td><a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans.epub">EPUB</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
+<tr><td lang="en">English</td><td><a href="{{blob}}/book/en/anatomy-of-tor_en_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/en/anatomy-of-tor_en.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-en">Релиз GitHub</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
+<tr><td lang="es">Español</td><td><a href="{{blob}}/book/es/anatomía-de-tor_es_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/es/anatomía-de-tor_es.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-es">Релиз GitHub</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
+<tr><td lang="ru">Русский</td><td><a href="{{blob}}/book/ru/анатомия-tor_ru_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/ru/анатомия-tor_ru.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-ru">Релиз GitHub</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
+<tr><td lang="zh-Hans">简体中文</td><td><a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-zh-Hans">Релиз GitHub</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
 </tbody>
 </table>
 <h2 id="translations">О качестве переводов</h2>
