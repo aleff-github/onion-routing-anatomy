@@ -36,6 +36,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/publish_translated_releases.py --publish
+          python3 scripts/repair_release_assets.py --apply
 
       - name: Confirm all four published release tags
         env:

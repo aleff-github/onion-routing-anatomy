@@ -36,6 +36,32 @@ EDITIONS = (
 )
 
 
+# GitHub Releases sanitizes non-ASCII asset names; use portable ASCII on release
+# assets while preserving language-specific Unicode names in book/<language>/.
+RELEASE_ASSET_NAMES = {
+    "en": [
+        "anatomy-of-tor_en_A4.pdf",
+        "anatomy-of-tor_en.epub",
+        "anatomy-of-tor_en_cover.png"
+    ],
+    "es": [
+        "anatomia-de-tor_es_A4.pdf",
+        "anatomia-de-tor_es.epub",
+        "anatomia-de-tor_es_portada.png"
+    ],
+    "ru": [
+        "anatomiya-tor_ru_A4.pdf",
+        "anatomiya-tor_ru.epub",
+        "anatomiya-tor_ru_oblozhka.png"
+    ],
+    "zh-Hans": [
+        "tor-jiepou_zh-Hans_A4.pdf",
+        "tor-jiepou_zh-Hans.epub",
+        "tor-jiepou_zh-Hans_fengmian.png"
+    ]
+}
+
+
 def command(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         args, cwd=ROOT, text=True, encoding="utf-8",
@@ -110,11 +136,11 @@ def stage_files(folder: Path, edition: tuple[str, ...]) -> list[Path]:
         ROOT / "book" / lang / pdf,
         ROOT / "book" / lang / epub,
         ROOT / "book" / lang / cover,
-        ROOT / "LICENSE",
-        ROOT / "NOTICE.md",
     )
-    for source in sources:
-        shutil.copy2(source, folder / source.name)
+    for source, basename in zip(sources, RELEASE_ASSET_NAMES[lang], strict=True):
+        shutil.copy2(source, folder / basename)
+    for path in (ROOT / "LICENSE", ROOT / "NOTICE.md"):
+        shutil.copy2(path, folder / path.name)
     shutil.copy2(
         ROOT / "docs" / "releases" / f"{tag}.md", folder / "RELEASE-NOTES.md"
     )
