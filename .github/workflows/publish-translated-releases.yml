@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Pubblicazione una tantum delle traduzioni dal contenuto gia' versionato.
+# Nessun build, cache, upload-artifact o retention di GitHub Actions.
+name: Publish translated editions 1.0.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-translated-releases.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: translated-editions-v1.0.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'aleff-github/onion-routing-anatomy' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact release source commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+
+      - name: Check release files and publish the four translations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_translated_releases.py --publish
+
+      - name: Confirm all four published release tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for lang in en es ru zh-Hans; do
+            tag="v1.0.0-$lang"
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,assets \
+              --jq 'select(.isDraft == false and (.assets | length) == 7) | .tagName' \
+              | grep -Fx "$tag"
+          done
+          echo "Verified four published translation releases."
