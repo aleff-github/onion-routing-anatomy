@@ -1,7 +1,13 @@
-# Anatomy of Tor — English review copy
+# Anatomy of Tor — English edition
 
-**Status: AI-generated translation, not independently reviewed.** The Italian original in `../it/` is the reference. Any PDF, EPUB or cover here is a review copy only, not an official translated edition and not part of the Italian release `v1.0.0-it`.
+**Edition 1.0.0 · Free PDF and EPUB.**
 
-From the repository root, generate the review files with `make book-traduzione LINGUA=en`. The resulting filenames are `anatomy-of-tor_en_A4.pdf`, `anatomy-of-tor_en.epub` and `anatomy-of-tor_en_cover.png`. Missing files have not yet been generated or committed.
+| Format | Download |
+|---|---|
+| A4 PDF | [Read or download](anatomy-of-tor_en_A4.pdf) |
+| EPUB 3 | [Download EPUB](anatomy-of-tor_en.epub) |
+| Cover | [View cover](anatomy-of-tor_en_cover.png) |
 
-See [translation status](../../docs/translations/en.md) and [review guidance](../../docs/translation-review.md).
+**Translation notice.** This edition was generated with AI tools and has not undergone an independent linguistic review by native speakers. Translation or terminology errors may remain. The [Italian original](../it/) is the authoritative reference. Technical and layout checks do not constitute independent linguistic or scientific validation.
+
+Free distribution under [GPL-3.0-or-later](../../LICENSE). [Translation status](../../docs/translations/en.md) · [Report a correction](../../docs/translation-review.md).

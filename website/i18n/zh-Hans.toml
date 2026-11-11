@@ -34,7 +34,7 @@ pending = """意大利语原版免费提供 A4 PDF（{{pages_a4}} 页）、EPUB 
 pdf = "A4 PDF（意大利语）"
 epub = "EPUB（意大利语）"
 published = """意大利语第一版，版本 {{version}}，共 {{pages_a4}} 页。<a href="{{releases}}/tag/{{tag}}">全部\
-文件及 SHA-256 校验和</a>，包括用于打印个人副本的 7×10 英寸 PDF。"""
+文件及 SHA-256 校验和</a>，包括用于打印个人副本的 7×10 英寸 PDF。 五种版本均已提供：<a href="{{p:languages}}">下载译本</a>（尚未经过独立语言审校）。"""
 
 [footer]
 edition = """第一版，版本 {{version}}（意大利语）· tor {{tor}}、Arti {{arti}} · <a href="{{gh}}">项目源文件</a> · <a href="{{p:license}}">GPL-3.0-or-later</a>"""
@@ -182,35 +182,29 @@ make verifica-lab          # 重新运行所有实验并检查结果</code></pre
 
 [pages.languages]
 title = "语言与译本 — Onion Routing Anatomy"
-description = "意大利语 PDF 和 EPUB 原版，以及通过 AI 生成、以源文件形式提供的四种语言译本。"
+description = "免费下载意大利语原版及英语、西班牙语、俄语和简体中文译本的 PDF 与 EPUB。"
 body = """
 <h1>语言</h1>
-<p class="lead">意大利语原版提供 PDF 和 EPUB。英语、西班牙语、俄语和简体中文译本可通过项目源文件查阅。</p>
-
+<p class="lead">五种语言版本均可免费下载 PDF 和 EPUB。译本尚未经过独立语言审校。</p>
 <table>
-<caption>各版本状态</caption>
-<thead><tr><th scope="col">语言</th><th scope="col">状态</th></tr></thead>
+<caption>下载各语言版本</caption>
+<thead><tr><th scope="col">语言</th><th scope="col">文件</th><th scope="col">状态</th></tr></thead>
 <tbody>
-<tr><td lang="it">Italiano</td><td>意大利语原版，第一版，版本 {{version}}；提供 PDF 和 EPUB。</td></tr>
-<tr><td lang="en">English</td><td>第一版，版本 {{version}}。译本由人工智能生成，提供源文件，尚无独立审校。</td></tr>
-<tr><td lang="es">Español</td><td>第一版，版本 {{version}}。译本由人工智能生成，提供源文件，尚无独立审校。</td></tr>
-<tr><td lang="ru">Русский</td><td>第一版，版本 {{version}}。译本由人工智能生成，提供源文件，尚无独立审校。</td></tr>
-<tr><td>简体中文</td><td>第一版，版本 {{version}}。译本由人工智能生成，提供源文件，尚无独立审校。</td></tr>
+<tr><td lang="it">Italiano</td><td><a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a></td><td>意大利语原版 · {{version}} 版</td></tr>
+<tr><td lang="en">English</td><td><a href="{{blob}}/book/en/anatomy-of-tor_en_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/en/anatomy-of-tor_en.epub">EPUB</a></td><td>AI 生成译本 · 尚未经过母语人士独立审校</td></tr>
+<tr><td lang="es">Español</td><td><a href="{{blob}}/book/es/anatomía-de-tor_es_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/es/anatomía-de-tor_es.epub">EPUB</a></td><td>AI 生成译本 · 尚未经过母语人士独立审校</td></tr>
+<tr><td lang="ru">Русский</td><td><a href="{{blob}}/book/ru/анатомия-tor_ru_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/ru/анатомия-tor_ru.epub">EPUB</a></td><td>AI 生成译本 · 尚未经过母语人士独立审校</td></tr>
+<tr><td lang="zh-Hans">简体中文</td><td><a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans.epub">EPUB</a></td><td>AI 生成译本 · 尚未经过母语人士独立审校</td></tr>
 </tbody>
 </table>
-
-<h2 id="yiben">关于译本</h2>
-<p>英语、西班牙语、俄语和简体中文译本使用 AI 工具根据意大利语原版生成。源文件可在代码仓库中查看；译本 PDF 和 EPUB 尚未经过独立审校。</p>
-<p>自动检查不能替代母语人士审校或对译本实验的实际验证。意大利语原版仍是参考依据。</p>
-<p>详细信息见 <code>docs/translations/</code>。本网站提供五种语言。</p>
-
-<h2 id="shenjiao">帮助审校译本</h2>
-<p>如果中文是你的母语或你能熟练使用中文，哪怕只审校一章也很有帮助。不需要懂 LaTeX 或
-Git。</p>
+<h2 id="translations">关于翻译质量</h2>
+<p>各译本由人工智能工具生成，在未经母语人士独立语言审校的情况下公开发布，可能存在翻译、术语或排版错误。请以意大利语原版为准。</p>
+<p>自动技术检查不能替代独立语言或科学评审。并非所有译本实验都已进行实际运行验证。</p>
+<p><a href="{{blob}}/docs/translation-review.md">译本状态与已知限制</a>.</p>
+<h2 id="review">帮助改进译本</h2>
+<p>你可以审校一章或报告具体错误，无需掌握 LaTeX 或 Git。</p>
 <p><a class="button" href="{{blob}}/docs/translation-review.md">参与译本审校</a>
 <a class="button secondary" href="{{new}}02-translation.yml">报告翻译问题</a></p>
-<p>意大利语文本是基准：修改译本绝不会悄悄改动意大利语原文。如果问题源自原文，会先在原文中
-报告并修正。</p>
 """
 
 [pages.contribute]

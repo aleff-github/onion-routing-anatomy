@@ -1,40 +1,33 @@
-# Book editions and review copies
+# Book editions · Edizioni del libro
 
-| Language | Folder | Status |
-|---|---|---|
-| Italiano | [`it/`](it/) — PDF A4, EPUB 3, PDF 7×10 and cover | **Official Italian original, version 1.0.0** |
-| English | [`en/`](en/) | AI-generated translation; PDF/EPUB review copies can be built, not independently validated |
-| Español | [`es/`](es/) | Traducción generada con IA; archivos de revisión, sin validación lingüística independiente |
-| Русский | [`ru/`](ru/) | Черновой перевод, независимая языковая проверка не выполнена |
-| 简体中文 | [`zh-Hans/`](zh-Hans/) | AI 生成的译稿，尚未经过独立语言审校 |
+All five language editions of *Anatomia di Tor* (version 1.0.0) are available to read and download free of charge.
 
-The source for each edition is in [`source/<language>/`](../source/). The four translated folders contain localized status READMEs and generated
-PDF/EPUB/cover **review copies**. Their presence does not imply an independent
-linguistic or scientific review, or an official translated release.
+| Language | PDF A4 | EPUB 3 | Cover |
+|---|---|---|---|
+| Italiano (original) | [PDF](it/anatomia-di-tor_it_A4.pdf) | [EPUB](it/anatomia-di-tor_it.epub) | [Cover](it/anatomia-di-tor_it_copertina.png) |
+| English | [PDF](./en/anatomy-of-tor_en_A4.pdf) | [EPUB](./en/anatomy-of-tor_en.epub) | [Cover](./en/anatomy-of-tor_en_cover.png) |
+| Español | [PDF](./es/anatomía-de-tor_es_A4.pdf) | [EPUB](./es/anatomía-de-tor_es.epub) | [Cover](./es/anatomía-de-tor_es_portada.png) |
+| Русский | [PDF](./ru/анатомия-tor_ru_A4.pdf) | [EPUB](./ru/анатомия-tor_ru.epub) | [Cover](./ru/анатомия-tor_ru_обложка.png) |
+| 简体中文 | [PDF](./zh-Hans/tor-解剖_zh-Hans_A4.pdf) | [EPUB](./zh-Hans/tor-解剖_zh-Hans.epub) | [Cover](./zh-Hans/tor-解剖_zh-Hans_封面.png) |
 
-From the repository root:
+The Italian original also offers a [7×10-inch print PDF](it/anatomia-di-tor_it_7x10.pdf) and its [GitHub release `v1.0.0-it`](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it).
+
+**Important: translation status.** The English, Spanish, Russian and Simplified Chinese editions were generated with AI tools. While structural, PDF-layout and EPUB checks were documented, they **have not undergone an independent linguistic review by native speakers** or an independent scientific review. Errors of translation, meaning and terminology may remain. The Italian original is the authoritative reference. Publication here does not imply such independent validation.
+
+**Avvertenza sulle traduzioni.** Le quattro traduzioni sono pubblicate gratuitamente ma **non sono state sottoposte a revisione linguistica indipendente da parte di madrelingua**. In caso di divergenze fa fede il testo originale italiano.
+
+These files are distributed directly from the public repository. The existing `v1.0.0-it` GitHub release contains **only the Italian original**; the translations are downloadable above, not attached to that historical release.
+
+All editions and their corresponding sources in [`source/`](../source/) are distributed under [GPL-3.0-or-later](../LICENSE). Translation status: [language notes](../docs/translations/) · [participate in review](../docs/translation-review.md).
+
+## Rebuild
 
 ```sh
-make book                             # only the official Italian edition
-make book-traduzione LINGUA=en         # one translated PDF A4, EPUB and cover
-make book-traduzioni                  # all four translated review copies
+make book                       # Italian PDF, EPUB and cover
+make book-traduzione LINGUA=en   # One translated edition (en, es, ru, zh-Hans)
+make book-traduzioni            # All four translated editions
 make composizione LINGUE="en es ru zh-Hans"
 make epub-check LINGUE="en es ru zh-Hans"
 ```
 
-The translation build targets use the existing per-language Makefiles (locally if
-LuaLaTeX is installed, otherwise via the root Docker-based TeX Live setup).
-The output is copied to `book/<language>/` with language-specific filenames. Existing
-review copies can be examined and corrected independently; generating or storing them
-does **not** add them to an official release.
-
-**Release boundary:** `make release-package` and `make release-check` still operate
-only on `book/it/` for `v1.0.0-it`. English, Spanish, Russian and Simplified Chinese do
-not belong to that release. For their status and outstanding reviews, see
-[translation review](../docs/translation-review.md) and [language notes](../docs/translations/).
-
-The Italian edition is distributed free of charge under
-[GPL-3.0-or-later](../LICENSE). Release file descriptions and checksum
-information are in the [Italian release notes](../docs/releases/v1.0.0-it.md).
-
-Official Italian release: [v1.0.0-it](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it), published 2026-11-10.
+The build targets generate the same formats from localized LaTeX sources. A successful build is a technical check, not independent linguistic validation.

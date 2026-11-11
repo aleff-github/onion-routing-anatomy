@@ -34,7 +34,7 @@ pending = """The Italian edition is free to read as an A4 PDF ({{pages_a4}} page
 pdf = "PDF A4 (Italian)"
 epub = "EPUB (Italian)"
 published = """First edition in Italian, version {{version}}, {{pages_a4}} pages. <a href="{{releases}}/tag/{{tag}}">All \
-files and SHA-256 checksums</a>, including the 7×10 in PDF for printing a personal copy."""
+files and SHA-256 checksums</a>, including the 7×10 in PDF for printing a personal copy. All five editions are available; <a href="{{p:languages}}">download translations</a> (not independently language-reviewed)."""
 
 [footer]
 edition = """First edition, version {{version}} (Italian) · tor {{tor}}, Arti {{arti}} · <a href="{{gh}}">project sources</a> · <a href="{{p:license}}">GPL-3.0-or-later</a>"""
@@ -198,36 +198,29 @@ laboratory problem</a>.</p>
 
 [pages.languages]
 title = "Languages and translations — Onion Routing Anatomy"
-description = "Italian original in PDF and EPUB, with AI-generated English, Spanish, Russian and Simplified Chinese source translations."
+description = "Download the Italian original and English, Spanish, Russian and Simplified Chinese translations as PDF and EPUB."
 body = """
 <h1>Languages</h1>
-<p class="lead">The original book is available in Italian as PDF and EPUB. English, Spanish, Russian and Simplified Chinese translations are available as project source files.</p>
-
+<p class="lead">All five language editions are available as free PDF and EPUB downloads. The translations have not undergone independent linguistic review.</p>
 <table>
-<caption>Status of each edition</caption>
-<thead><tr><th scope="col">Language</th><th scope="col">Status</th></tr></thead>
+<caption>Download an edition</caption>
+<thead><tr><th scope="col">Language</th><th scope="col">Files</th><th scope="col">Status</th></tr></thead>
 <tbody>
-<tr><td lang="it">Italiano</td><td>Original. First edition, version {{version}}; available as PDF and EPUB.</td></tr>
-<tr><td>English</td><td>First edition, version {{version}}. Translation generated with AI, available as source files, without independent review.</td></tr>
-<tr><td lang="es">Español</td><td>First edition, version {{version}}. Translation generated with AI, available as source files, without independent review.</td></tr>
-<tr><td lang="ru">Русский</td><td>First edition, version {{version}}. Translation generated with AI, available as source files, without independent review.</td></tr>
-<tr><td lang="zh-Hans">简体中文</td><td>First edition, version {{version}}. Translation generated with AI, available as source files, without independent review.</td></tr>
+<tr><td lang="it">Italiano</td><td><a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a></td><td>Italian original · version {{version}}</td></tr>
+<tr><td lang="en">English</td><td><a href="{{blob}}/book/en/anatomy-of-tor_en_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/en/anatomy-of-tor_en.epub">EPUB</a></td><td>AI-generated translation · no independent native-speaker review</td></tr>
+<tr><td lang="es">Español</td><td><a href="{{blob}}/book/es/anatomía-de-tor_es_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/es/anatomía-de-tor_es.epub">EPUB</a></td><td>AI-generated translation · no independent native-speaker review</td></tr>
+<tr><td lang="ru">Русский</td><td><a href="{{blob}}/book/ru/анатомия-tor_ru_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/ru/анатомия-tor_ru.epub">EPUB</a></td><td>AI-generated translation · no independent native-speaker review</td></tr>
+<tr><td lang="zh-Hans">简体中文</td><td><a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans.epub">EPUB</a></td><td>AI-generated translation · no independent native-speaker review</td></tr>
 </tbody>
 </table>
-
-<h2 id="translations">About the translations</h2>
-<p>English, Spanish, Russian and Simplified Chinese translations were generated with AI tools from the Italian original. The source files are available in the repository; no translated PDF or EPUB edition has undergone independent review.</p>
-<p>Automated checks do not replace native-speaker review or live testing of the translated laboratories. The Italian original remains the reference.</p>
-<p>For more information, see <code>docs/translations/</code>. This website is available in five languages.</p>
-
-<h2 id="review">Help review a translation</h2>
-<p>If you are a native or fluent speaker, a review of even one chapter makes a difference.
-You do not need to know LaTeX or Git.</p>
+<h2 id="translations">About translation quality</h2>
+<p>The translations were generated with AI tools and are published without independent native-speaker linguistic review. Translation, terminology and formatting errors may remain. The Italian original remains the authoritative reference.</p>
+<p>Automated technical checks do not establish independent linguistic or scientific validation. The translated laboratories have not all been tested live.</p>
+<p><a href="{{blob}}/docs/translation-review.md">Translation status and known limits</a>.</p>
+<h2 id="review">Help improve a translation</h2>
+<p>You can review a chapter or report a specific error. No LaTeX or Git experience is required.</p>
 <p><a class="button" href="{{blob}}/docs/translation-review.md">Join the translation review</a>
 <a class="button secondary" href="{{new}}02-translation.yml">Report a translation problem</a></p>
-<p>The Italian text is the reference: a correction to a translation never changes the
-Italian original silently. If a problem comes from the original, it is reported and fixed
-there first.</p>
 """
 
 [pages.contribute]

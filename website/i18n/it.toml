@@ -34,7 +34,7 @@ pending = """L'edizione italiana è gratuita e disponibile in PDF A4 ({{pages_a4
 pdf = "Scarica il PDF (A4)"
 epub = "Scarica l'EPUB"
 published = """Prima edizione in italiano, versione {{version}}, {{pages_a4}} pagine. <a href="{{releases}}/tag/{{tag}}">Tutti \
-i file e le impronte SHA-256</a>, compreso il PDF 7×10 per stampare una copia personale."""
+i file e le impronte SHA-256</a>, compreso il PDF 7×10 per stampare una copia personale. Sono disponibili tutte e cinque le edizioni: <a href="{{p:languages}}">scarica le traduzioni</a> (non revisionate linguisticamente da esperti indipendenti)."""
 
 [footer]
 edition = """Prima edizione, versione {{version}} (italiano) · tor {{tor}}, Arti {{arti}} · <a href="{{gh}}">sorgenti del progetto</a> · <a href="{{p:license}}">GPL-3.0-or-later</a>"""
@@ -199,35 +199,29 @@ problema in un laboratorio</a>.</p>
 
 [pages.languages]
 title = "Lingue e traduzioni — Anatomia di Tor"
-description = "Edizione italiana in PDF ed EPUB, con traduzioni AI disponibili nei sorgenti inglesi, spagnoli, russi e cinesi semplificati."
+description = "Scarica l'originale italiano e le traduzioni inglese, spagnola, russa e cinese semplificata in PDF ed EPUB."
 body = """
 <h1>Lingue</h1>
-<p class="lead">Il libro è disponibile in italiano, in PDF ed EPUB. Le traduzioni in inglese, spagnolo, russo e cinese semplificato sono consultabili nei sorgenti del progetto.</p>
-
+<p class="lead">Tutte e cinque le edizioni sono disponibili gratuitamente in PDF ed EPUB. Le traduzioni non hanno ricevuto una revisione linguistica indipendente.</p>
 <table>
-<caption>Stato di ogni edizione</caption>
-<thead><tr><th scope="col">Lingua</th><th scope="col">Stato</th></tr></thead>
+<caption>Scarica un'edizione</caption>
+<thead><tr><th scope="col">Lingua</th><th scope="col">File</th><th scope="col">Stato</th></tr></thead>
 <tbody>
-<tr><td>Originale. Prima edizione, versione {{version}}; disponibile in PDF ed EPUB.</td></tr>
-<tr><td lang="en">English</td><td>Prima edizione, versione {{version}}. Traduzione generata con l'AI, nei sorgenti, senza revisione indipendente.</td></tr>
-<tr><td lang="es">Español</td><td>Prima edizione, versione {{version}}. Traduzione generata con l'AI, nei sorgenti, senza revisione indipendente.</td></tr>
-<tr><td lang="ru">Русский</td><td>Prima edizione, versione {{version}}. Traduzione generata con l'AI, nei sorgenti, senza revisione indipendente.</td></tr>
-<tr><td lang="zh-Hans">简体中文</td><td>Prima edizione, versione {{version}}. Traduzione generata con l'AI, nei sorgenti, senza revisione indipendente.</td></tr>
+<tr><td lang="it">Italiano</td><td><a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a></td><td>Originale italiano · versione {{version}}</td></tr>
+<tr><td lang="en">English</td><td><a href="{{blob}}/book/en/anatomy-of-tor_en_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/en/anatomy-of-tor_en.epub">EPUB</a></td><td>Traduzione AI · nessuna revisione indipendente da madrelingua</td></tr>
+<tr><td lang="es">Español</td><td><a href="{{blob}}/book/es/anatomía-de-tor_es_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/es/anatomía-de-tor_es.epub">EPUB</a></td><td>Traduzione AI · nessuna revisione indipendente da madrelingua</td></tr>
+<tr><td lang="ru">Русский</td><td><a href="{{blob}}/book/ru/анатомия-tor_ru_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/ru/анатомия-tor_ru.epub">EPUB</a></td><td>Traduzione AI · nessuna revisione indipendente da madrelingua</td></tr>
+<tr><td lang="zh-Hans">简体中文</td><td><a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans.epub">EPUB</a></td><td>Traduzione AI · nessuna revisione indipendente da madrelingua</td></tr>
 </tbody>
 </table>
-
-<h2 id="traduzioni">Le traduzioni</h2>
-<p>Le traduzioni in inglese, spagnolo, russo e cinese semplificato sono state generate con strumenti di AI a partire dall'originale italiano. I loro sorgenti sono disponibili nella repository; non esistono edizioni tradotte in PDF o EPUB sottoposte a revisione indipendente.</p>
-<p>I controlli automatici non sostituiscono una revisione da parte di madrelingua o le prove pratiche dei laboratori tradotti. L'edizione italiana resta il riferimento.</p>
-<p>Per ulteriori informazioni: <code>docs/translations/</code>. Il sito è consultabile in cinque lingue.</p>
-
-<h2 id="revisione">Aiuta a rivedere una traduzione</h2>
-<p>Se conosci bene una di queste lingue, anche la revisione di un solo capitolo fa la
-differenza. Non serve conoscere LaTeX o Git.</p>
+<h2 id="translations">Qualità delle traduzioni</h2>
+<p>Le traduzioni sono state generate con strumenti di intelligenza artificiale e sono pubblicate senza revisione linguistica indipendente da parte di madrelingua. Potrebbero contenere errori di traduzione, terminologia o impaginazione. L'originale italiano resta il riferimento.</p>
+<p>I controlli tecnici automatici non costituiscono una validazione linguistica o scientifica indipendente. Non tutti i laboratori tradotti sono stati provati dal vivo.</p>
+<p><a href="{{blob}}/docs/translation-review.md">Stato e limiti delle traduzioni</a>.</p>
+<h2 id="review">Aiuta a migliorare una traduzione</h2>
+<p>Puoi rivedere un capitolo o segnalare un errore specifico, anche senza conoscere LaTeX o Git.</p>
 <p><a class="button" href="{{blob}}/docs/translation-review.md">Partecipa alla revisione delle traduzioni</a>
 <a class="button secondary" href="{{new}}02-translation.yml">Segnala un errore di traduzione</a></p>
-<p>Il testo italiano è il riferimento: correggere una traduzione non modifica mai in silenzio
-l'originale. Se il problema nasce dall'originale, va segnalato e corretto prima lì.</p>
 """
 
 [pages.contribute]

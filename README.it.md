@@ -59,6 +59,17 @@ L'edizione italiana è gratuita: puoi leggerla, scaricarla e condividerla second
 
 Release ufficiale: [v1.0.0-it](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it) (sette file, impronte SHA-256).
 
+**Scarica le edizioni tradotte (versione 1.0.0)**
+
+| Lingua | PDF A4 | EPUB 3 | Copertina |
+|---|---|---|---|
+| English | [PDF A4](book/en/anatomy-of-tor_en_A4.pdf) | [EPUB](book/en/anatomy-of-tor_en.epub) | [Copertina](book/en/anatomy-of-tor_en_cover.png) |
+| Español | [PDF A4](book/es/anatomía-de-tor_es_A4.pdf) | [EPUB](book/es/anatomía-de-tor_es.epub) | [Copertina](book/es/anatomía-de-tor_es_portada.png) |
+| Русский | [PDF A4](book/ru/анатомия-tor_ru_A4.pdf) | [EPUB](book/ru/анатомия-tor_ru.epub) | [Copertina](book/ru/анатомия-tor_ru_обложка.png) |
+| 简体中文 | [PDF A4](book/zh-Hans/tor-解剖_zh-Hans_A4.pdf) | [EPUB](book/zh-Hans/tor-解剖_zh-Hans.epub) | [Copertina](book/zh-Hans/tor-解剖_zh-Hans_封面.png) |
+
+Le traduzioni, generate con strumenti di intelligenza artificiale, sono pubblicate gratuitamente, ma **non sono state sottoposte a revisione linguistica indipendente da parte di madrelingua**. Possono contenere errori di significato, terminologia o impaginazione. L'edizione originale italiana resta il riferimento. [Segnala un problema di traduzione](https://github.com/aleff-github/onion-routing-anatomy/issues/new?template=02-translation.yml). I file sono scaricabili direttamente dalla repository pubblica; la release `v1.0.0-it` contiene soltanto l'italiano.
+
 ## Che cosa contiene
 
 - **Parte I — Storia e fondamenti:** anonimato e metadati, mix network e remailer, dall'onion
@@ -143,10 +154,15 @@ successiva, che permette a chiunque di ridistribuirlo, modificato o no, alle sue
 
 ## Lingue
 
-| Lingua | Edizione | Stato |
+| Lingua | Edizione | Disponibilità |
 |---|---|---|
-| Italiano (originale) | Prima edizione, versione 1.0.0 | File in `book/it/` |
-| English, Español, Русский, 简体中文 | Bozze di traduzione | Sorgenti generati con AI in `source/<lingua>/` e copie PDF, EPUB e copertine per revisione in `book/<lingua>/`. Nessuna revisione indipendente da madrelingua; escluse da `v1.0.0-it` ([dettagli](docs/translations/)) |
+| Italiano | Originale, versione 1.0.0 | [PDF, EPUB e PDF per la stampa](book/it/) · [release GitHub](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it) |
+| English | Traduzione AI, versione 1.0.0 | [PDF ed EPUB](book/en/) · revisione linguistica indipendente non completata |
+| Español | Traduzione AI, versione 1.0.0 | [PDF ed EPUB](book/es/) · revisione linguistica indipendente non completata |
+| Русский | Traduzione AI, versione 1.0.0 | [PDF ed EPUB](book/ru/) · revisione linguistica indipendente non completata |
+| 简体中文 | Traduzione AI, versione 1.0.0 | [PDF ed EPUB](book/zh-Hans/) · revisione linguistica indipendente non completata |
+
+Tutte e cinque le edizioni sono liberamente accessibili. In caso di divergenze fa fede l'originale italiano; [partecipa alla revisione linguistica](docs/translation-review.md).
 
 ## Uso dell'intelligenza artificiale
 

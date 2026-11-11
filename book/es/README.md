@@ -1,7 +1,13 @@
-# Anatomía de Tor — ejemplares para revisión en español
+# Anatomía de Tor — edición en español
 
-**Estado: traducción generada con IA, sin revisión lingüística independiente.** El original italiano en `../it/` es la referencia. Los PDF, EPUB y la portada de esta carpeta son borradores para revisión; no forman parte de la publicación oficial `v1.0.0-it`.
+**Edición 1.0.0 · PDF y EPUB gratuitos.**
 
-Desde la raíz del repositorio: `make book-traduzione LINGUA=es`. Se generan `anatomía-de-tor_es_A4.pdf`, `anatomía-de-tor_es.epub` y `anatomía-de-tor_es_portada.png`. Si faltan archivos, todavía no se han generado o añadido al repositorio.
+| Formato | Descarga |
+|---|---|
+| PDF A4 | [Leer o descargar](anatomía-de-tor_es_A4.pdf) |
+| EPUB 3 | [Descargar EPUB](anatomía-de-tor_es.epub) |
+| Portada | [Ver portada](anatomía-de-tor_es_portada.png) |
 
-Consulta el [estado de la traducción](../../docs/translations/es.md) y la [guía de revisión](../../docs/translation-review.md).
+**Aviso sobre la traducción.** Esta edición se generó con herramientas de inteligencia artificial y no ha pasado una revisión lingüística independiente por hablantes nativos. Puede contener errores de traducción o de terminología. El [original italiano](../it/) es la referencia autorizada. Los controles técnicos y de maquetación no equivalen a una revisión lingüística o científica independiente.
+
+Distribución gratuita bajo [GPL-3.0-or-later](../../LICENSE). [Estado de la traducción](../../docs/translations/es.md) · [Cómo comunicar correcciones](../../docs/translation-review.md).
