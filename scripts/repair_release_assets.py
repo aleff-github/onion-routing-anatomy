@@ -56,8 +56,8 @@ def main() -> int:
             # Remove only names absent from the corrected release package.
             for old in sorted(obsolete):
                 command(
-                    "gh", "release", "delete-asset", tag, old,
-                    "--yes", "--repo", REPOSITORY,
+                    "gh", "release", "delete-asset", "--yes", "--repo", REPOSITORY,
+                    "--", tag, old,
                 )
                 print(f"{tag}: removed sanitized asset {old!r}")
 

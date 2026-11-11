@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Pubblicazione una tantum delle traduzioni dal contenuto gia' versionato.
 # Nessun build, cache, upload-artifact o retention di GitHub Actions.
+# Repair Unicode-sanitized asset names; -- terminates CLI flag parsing.
 name: Publish translated editions 1.0.0
 
 on:
