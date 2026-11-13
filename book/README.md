@@ -2,13 +2,13 @@
 
 All five language editions of *Anatomia di Tor* (version 1.0.0) are available to read and download free of charge.
 
-| Language | PDF A4 | EPUB 3 | Cover |
+| Language | PDF A4 | EPUB 3 | Cover | Zenodo |
 |---|---|---|---|
-| Italiano (original) | [PDF](it/anatomia-di-tor_it_A4.pdf) | [EPUB](it/anatomia-di-tor_it.epub) | [Cover](it/anatomia-di-tor_it_copertina.png) |
-| English | [PDF](./en/anatomy-of-tor_en_A4.pdf) | [EPUB](./en/anatomy-of-tor_en.epub) | [Cover](./en/anatomy-of-tor_en_cover.png) |
-| Español | [PDF](./es/anatomía-de-tor_es_A4.pdf) | [EPUB](./es/anatomía-de-tor_es.epub) | [Cover](./es/anatomía-de-tor_es_portada.png) |
-| Русский | [PDF](./ru/анатомия-tor_ru_A4.pdf) | [EPUB](./ru/анатомия-tor_ru.epub) | [Cover](./ru/анатомия-tor_ru_обложка.png) |
-| 简体中文 | [PDF](./zh-Hans/tor-解剖_zh-Hans_A4.pdf) | [EPUB](./zh-Hans/tor-解剖_zh-Hans.epub) | [Cover](./zh-Hans/tor-解剖_zh-Hans_封面.png) |
+| Italiano (original) | [PDF](it/anatomia-di-tor_it_A4.pdf) | [EPUB](it/anatomia-di-tor_it.epub) | [Cover](it/anatomia-di-tor_it_copertina.png) | [DOI](https://doi.org/10.5281/zenodo.24207180) |
+| English | [PDF](./en/anatomy-of-tor_en_A4.pdf) | [EPUB](./en/anatomy-of-tor_en.epub) | [Cover](./en/anatomy-of-tor_en_cover.png) | [DOI](https://doi.org/10.5281/zenodo.24207675) |
+| Español | [PDF](./es/anatomía-de-tor_es_A4.pdf) | [EPUB](./es/anatomía-de-tor_es.epub) | [Cover](./es/anatomía-de-tor_es_portada.png) | [DOI](https://doi.org/10.5281/zenodo.24207811) |
+| Русский | [PDF](./ru/анатомия-tor_ru_A4.pdf) | [EPUB](./ru/анатомия-tor_ru.epub) | [Cover](./ru/анатомия-tor_ru_обложка.png) | [DOI](https://doi.org/10.5281/zenodo.24207874) |
+| 简体中文 | [PDF](./zh-Hans/tor-解剖_zh-Hans_A4.pdf) | [EPUB](./zh-Hans/tor-解剖_zh-Hans.epub) | [Cover](./zh-Hans/tor-解剖_zh-Hans_封面.png) | [DOI](https://doi.org/10.5281/zenodo.24207976) |
 
 The Italian original also offers a [7×10-inch print PDF](it/anatomia-di-tor_it_7x10.pdf) and its [GitHub release `v1.0.0-it`](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it).
 

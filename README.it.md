@@ -59,14 +59,16 @@ L'edizione italiana è gratuita: puoi leggerla, scaricarla e condividerla second
 
 Release ufficiale: [v1.0.0-it](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it) (sette file, impronte SHA-256).
 
+Zenodo (edizione italiana): [DOI 10.5281/zenodo.24207180](https://doi.org/10.5281/zenodo.24207180).
+
 **Scarica le edizioni tradotte (versione 1.0.0)**
 
-| Lingua | PDF A4 | EPUB 3 | Copertina |
+| Lingua | PDF A4 | EPUB 3 | Copertina  Zenodo |
 |---|---|---|---|
-| English | [PDF A4](book/en/anatomy-of-tor_en_A4.pdf) | [EPUB](book/en/anatomy-of-tor_en.epub) | [Copertina](book/en/anatomy-of-tor_en_cover.png) |
-| Español | [PDF A4](book/es/anatomía-de-tor_es_A4.pdf) | [EPUB](book/es/anatomía-de-tor_es.epub) | [Copertina](book/es/anatomía-de-tor_es_portada.png) |
-| Русский | [PDF A4](book/ru/анатомия-tor_ru_A4.pdf) | [EPUB](book/ru/анатомия-tor_ru.epub) | [Copertina](book/ru/анатомия-tor_ru_обложка.png) |
-| 简体中文 | [PDF A4](book/zh-Hans/tor-解剖_zh-Hans_A4.pdf) | [EPUB](book/zh-Hans/tor-解剖_zh-Hans.epub) | [Copertina](book/zh-Hans/tor-解剖_zh-Hans_封面.png) |
+| English | [PDF A4](book/en/anatomy-of-tor_en_A4.pdf) | [EPUB](book/en/anatomy-of-tor_en.epub) | [Copertina](book/en/anatomy-of-tor_en_cover.png) | [DOI](https://doi.org/10.5281/zenodo.24207675) |
+| Español | [PDF A4](book/es/anatomía-de-tor_es_A4.pdf) | [EPUB](book/es/anatomía-de-tor_es.epub) | [Copertina](book/es/anatomía-de-tor_es_portada.png) | [DOI](https://doi.org/10.5281/zenodo.24207811) |
+| Русский | [PDF A4](book/ru/анатомия-tor_ru_A4.pdf) | [EPUB](book/ru/анатомия-tor_ru.epub) | [Copertina](book/ru/анатомия-tor_ru_обложка.png) | [DOI](https://doi.org/10.5281/zenodo.24207874) |
+| 简体中文 | [PDF A4](book/zh-Hans/tor-解剖_zh-Hans_A4.pdf) | [EPUB](book/zh-Hans/tor-解剖_zh-Hans.epub) | [Copertina](book/zh-Hans/tor-解剖_zh-Hans_封面.png) | [DOI](https://doi.org/10.5281/zenodo.24207976) |
 
 Le traduzioni, generate con strumenti di intelligenza artificiale, sono pubblicate gratuitamente, ma **non sono state sottoposte a revisione linguistica indipendente da parte di madrelingua**. Possono contenere errori di significato, terminologia o impaginazione. L'edizione originale italiana resta il riferimento. [Segnala un problema di traduzione](https://github.com/aleff-github/onion-routing-anatomy/issues/new?template=02-translation.yml). **Release GitHub delle traduzioni:** [English](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-en) · [Español](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-es) · [Русский](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-ru) · [简体中文](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-zh-Hans). La release `v1.0.0-it` contiene soltanto l'originale italiano.
 

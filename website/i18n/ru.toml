@@ -34,7 +34,7 @@ pending = """Итальянское издание доступно беспла
 pdf = "PDF A4 (на итальянском)"
 epub = "EPUB (на итальянском)"
 published = """Первое издание на итальянском языке, версия {{version}}, {{pages_a4}} страниц. <a href="{{releases}}/tag/{{tag}}">Все \
-файлы и контрольные суммы SHA-256</a>, включая PDF 7×10 дюймов для печати личного экземпляра. Доступны все пять изданий: <a href="{{p:languages}}">скачать переводы</a> (без независимой языковой проверки)."""
+файлы и контрольные суммы SHA-256</a>, включая PDF 7×10 дюймов для печати личного экземпляра. Доступны все пять изданий: <a href="{{p:languages}}">скачать переводы</a> (без независимой языковой проверки). · <a href="https://doi.org/10.5281/zenodo.24207180">DOI</a>"""
 
 [footer]
 edition = """Первое издание, версия {{version}} (итальянский) · tor {{tor}}, Arti {{arti}} · <a href="{{gh}}">исходные файлы проекта</a> · <a href="{{p:license}}">GPL-3.0-or-later</a>"""
@@ -158,6 +158,7 @@ Whonix; Tor Metrics и OONI; правовые и этические вопрос
 <p>PDF A4 ({{pages_a4}} страниц), EPUB 3 и PDF формата 7×10 дюймов ({{pages_7x10}} страниц)
 для печати личного экземпляра. PDF и EPUB собираются из одних и тех же исходников LaTeX
 командой <code>make book</code>.</p>
+<p><a href="https://doi.org/10.5281/zenodo.24207180">DOI: 10.5281/zenodo.24207180</a></p>
 """
 
 [pages.labs]
@@ -207,11 +208,11 @@ body = """
 <caption>Скачать издание</caption>
 <thead><tr><th scope="col">Язык</th><th scope="col">Файлы</th><th scope="col">Статус</th></tr></thead>
 <tbody>
-<tr><td lang="it">Italiano</td><td><a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a></td><td>Итальянский оригинал · версия {{version}}</td></tr>
-<tr><td lang="en">English</td><td><a href="{{blob}}/book/en/anatomy-of-tor_en_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/en/anatomy-of-tor_en.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-en">Релиз GitHub</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
-<tr><td lang="es">Español</td><td><a href="{{blob}}/book/es/anatomía-de-tor_es_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/es/anatomía-de-tor_es.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-es">Релиз GitHub</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
-<tr><td lang="ru">Русский</td><td><a href="{{blob}}/book/ru/анатомия-tor_ru_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/ru/анатомия-tor_ru.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-ru">Релиз GitHub</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
-<tr><td lang="zh-Hans">简体中文</td><td><a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-zh-Hans">Релиз GitHub</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
+<tr><td lang="it">Italiano</td><td><a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a> · <a href="https://doi.org/10.5281/zenodo.24207180">DOI</a></td><td>Итальянский оригинал · версия {{version}}</td></tr>
+<tr><td lang="en">English</td><td><a href="{{blob}}/book/en/anatomy-of-tor_en_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/en/anatomy-of-tor_en.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-en">Релиз GitHub</a> · <a href="https://doi.org/10.5281/zenodo.24207675">DOI</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
+<tr><td lang="es">Español</td><td><a href="{{blob}}/book/es/anatomía-de-tor_es_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/es/anatomía-de-tor_es.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-es">Релиз GitHub</a> · <a href="https://doi.org/10.5281/zenodo.24207811">DOI</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
+<tr><td lang="ru">Русский</td><td><a href="{{blob}}/book/ru/анатомия-tor_ru_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/ru/анатомия-tor_ru.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-ru">Релиз GitHub</a> · <a href="https://doi.org/10.5281/zenodo.24207874">DOI</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
+<tr><td lang="zh-Hans">简体中文</td><td><a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans.epub">EPUB</a> · <a href="{{releases}}/tag/v1.0.0-zh-Hans">Релиз GitHub</a> · <a href="https://doi.org/10.5281/zenodo.24207976">DOI</a></td><td>Перевод создан с помощью ИИ · без независимой проверки носителями языка</td></tr>
 </tbody>
 </table>
 <h2 id="translations">О качестве переводов</h2>
