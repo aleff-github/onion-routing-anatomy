@@ -38,3 +38,10 @@ check:
 
 clean:
 	latexmk -C main.tex 封面.tex
+
+# Isolated 7x10 build, reusing the A4 content without shared auxiliaries.
+.PHONY: print print-clean
+print:
+	$(MAKE) -C ../.. book-print LINGUA=zh-Hans
+print-clean:
+	python3 ../../scripts/build_print.py zh-Hans --clean
