@@ -1,0 +1,70 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Print-only entry point. Scientific content and rights come from the A4 edition.
+\documentclass[11pt,openright,twoside]{book}
+% Paper edition: no electronic navigation or dangling bookmark destinations.
+\PassOptionsToPackage{bookmarks=false}{hyperref}
+\input{导言}
+\input{宏}
+\input{版权}
+\usepackage{hyperxmp}
+\hypersetup{pdftitle={Tor 解剖}, pdfsubject={逐字节解析匿名协议},
+  pdfauthor={Alessandro Greco}, pdflang={zh-Hans},
+  pdfcopyright={Copyright (C) 2026 Alessandro Greco. GPL-3.0-or-later.},
+  pdflicenseurl={https://www.gnu.org/licenses/gpl-3.0.html}}
+% Explicit print faces: real Song/Hei bold, Kai for Chinese emphasis.
+% Fang has no bold/italic files: declare synthetic variants, never silent fallbacks.
+\setCJKmainfont{FandolSong-Regular}[BoldFont=FandolSong-Bold,
+  ItalicFont=FandolKai-Regular,BoldItalicFont=FandolKai-Regular,
+  BoldItalicFeatures={FakeBold=1.5}]
+\setCJKsansfont{FandolHei-Regular}[BoldFont=FandolHei-Bold,
+  ItalicFont=FandolHei-Regular,ItalicFeatures={FakeSlant=0.15},
+  BoldItalicFont=FandolHei-Bold,BoldItalicFeatures={FakeSlant=0.15}]
+\setCJKmonofont{FandolFang-Regular}[BoldFont=FandolFang-Regular,
+  BoldFeatures={FakeBold=1.5},ItalicFont=FandolFang-Regular,
+  ItalicFeatures={FakeSlant=0.15},BoldItalicFont=FandolFang-Regular,
+  BoldItalicFeatures={FakeBold=1.5,FakeSlant=0.15}]
+\input{../shared/print/layout}
+% Restore ctex chapter marks after fancyhdr; no fake italic CJK face.
+\makeatletter
+\renewcommand{\chaptermark}[1]{\markboth{\ifnum\c@secnumdepth>\m@ne
+  \if@mainmatter\CTEXthechapter\quad\fi\fi #1}{}}
+\makeatother
+\fancyhead[RE]{\adjustbox{max width=0.88\textwidth}{\footnotesize\nouppercase{\leftmark}}}
+\fancyhead[LO]{\adjustbox{max width=0.88\textwidth}{\footnotesize\nouppercase{\rightmark}}}
+% Print-only correction: the four-character middle-relay label enlarged its
+% circle into the Kf2 annotation. Keep all labels, reduce only relay padding/type
+% in this one figure; grouping restores the original style immediately afterwards.
+\AddToHook{file/图10-洋葱.tex/before}{\typeout{PRINT: localized onion diagram spacing}\begingroup
+  \tikzset{relay/.append style={font=\sffamily\scriptsize,inner sep=0pt}}}
+\AddToHook{file/图10-洋葱.tex/after}{\endgroup}
+\begin{document}
+\frontmatter
+\thispagestyle{empty}
+\null\vfill
+\begin{center}{\LARGE\bfseries Tor 解剖\par}\end{center}
+\vfill\vfill
+\cleardoublepage
+\thispagestyle{empty}
+\begin{center}
+\vspace*{2.5cm}
+{\Huge\bfseries Tor 解剖\par}
+\vspace{0.9cm}
+{\Large 逐字节解析匿名协议\par}
+\vspace{3.5cm}
+{\Large Alessandro Greco\par}
+\vfill
+\end{center}
+\clearpage
+\thispagestyle{empty}
+\null\vfill
+\Colophon
+\cleardoublepage
+\tableofcontents
+\include{章节/00-前言}
+\mainmatter
+\input{结构}
+\backmatter
+\printbibliography[heading=bibintoc,title={参考文献}]
+\printindex
+\end{document}
