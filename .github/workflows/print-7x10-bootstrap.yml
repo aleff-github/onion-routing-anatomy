@@ -48,12 +48,14 @@ jobs:
       - name: Compile all five print variants in isolated staging areas
         run: python scripts/build_print.py all --image texlive/texlive@sha256:07e8062637249c4f780ca59f42cc2ed592bc2dc1db4320769406aee3f98aa70e
 
-      - name: Check all pages, source fidelity and normal repository checks
+      - name: Check all 7x10 pages, A4 equivalence and download links
         run: |
           set -euo pipefail
           python scripts/check_print.py it en es ru zh-Hans
           python scripts/compare_print_content.py it en es ru zh-Hans
-          make check
+          python scripts/check_sources.py
+          python scripts/generate_readme_it.py --check
+          python scripts/check_markdown_links.py
 
       - name: Generate public PDF checksums
         shell: bash
