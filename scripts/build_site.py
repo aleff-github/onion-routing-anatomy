@@ -79,6 +79,7 @@ class Segnaposto:
         self.conf, self.testi, self.lingua = conf, testi, lingua
         self.qui = pagina_corrente
         repo = conf["repo"]
+        release = conf.get("translated_releases", {}).get(lingua, conf["release"])
         self.valori = {
             "gh": repo,
             "blob": f"{repo}/blob/{conf['branch']}",
@@ -87,7 +88,8 @@ class Segnaposto:
             "choose": f"{repo}/issues/new/choose",
             "issues": f"{repo}/issues",
             "releases": f"{repo}/releases",
-            "tag": conf["release"]["tag"],
+            "tag": release["tag"],
+            "doi": f'https://doi.org/{release["doi"]}',
             **{k: str(v) for k, v in conf["edition"].items()},
             **extra,
         }
@@ -111,7 +113,7 @@ class Segnaposto:
 
 def blocco_download(conf, t, sost):
     d = t["download"]
-    rel = conf["release"]
+    rel = conf.get("translated_releases", {}).get(sost.lingua, conf["release"])
     if not rel["published"]:
         corpo = f'<p>{d["pending"]}</p>'
     else:
@@ -481,11 +483,18 @@ def controlla_link_repository(conf, url):
         modello = RADICE / ".github" / "ISSUE_TEMPLATE" / m.group(1)
         return None if modello.exists() else f"modello di issue assente: {m.group(1)}"
     if resto.startswith("/releases/download/"):
-        if not conf["release"]["published"]:
-            return "link di download a una release non ancora pubblicata"
-        nome = resto.rsplit("/", 1)[-1]
-        locale = RADICE / "book" / conf["edition"]["language"] / nome
-        return None if locale.exists() else f"file della release assente in book/: {nome}"
+        parts = resto[len("/releases/download/"):].split("/", 1)
+        if len(parts) != 2:
+            return f"URL di download non valido: {url}"
+        tag, nome = parts
+        releases = [conf["release"], *conf.get("translated_releases", {}).values()]
+        rel = next((r for r in releases if r["tag"] == tag), None)
+        if rel is None:
+            return f"release non configurata: {tag}"
+        if not rel["published"]:
+            return f"release non ancora pubblicata: {tag}"
+        asset = {rel.get("pdf"), rel.get("epub"), rel.get("print")}
+        return None if nome in asset else f"asset non dichiarato per {tag}: {nome}"
     if resto in ("", "/", "/issues", "/issues/new/choose", "/releases", "/security/advisories/new") \
             or resto.startswith(("/commit/", "/releases/tag/")):
         return None

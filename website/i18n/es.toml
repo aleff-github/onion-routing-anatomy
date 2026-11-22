@@ -30,14 +30,13 @@ independence = "Independencia"
 
 [download]
 title = "Descargar"
-pending = """La edición italiana es gratuita y está disponible en PDF A4 ({{pages_a4}} páginas), EPUB 3 y PDF de 7×10 pulgadas para imprimir. <a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">PDF A4</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it_7x10.pdf">PDF para imprimir</a>."""
-pdf = "PDF A4 (en italiano)"
-epub = "EPUB (en italiano)"
-published = """Primera edición en italiano, versión {{version}}, {{pages_a4}} páginas. <a href="{{releases}}/tag/{{tag}}">Todos \
-los archivos y sumas SHA-256</a>, incluido el PDF de 7×10 pulgadas para imprimir una copia personal. Las cinco ediciones están disponibles: <a href="{{p:languages}}">descargar traducciones</a> (sin revisión lingüística independiente). · <a href="https://doi.org/10.5281/zenodo.24207180">DOI</a>"""
+pending = """La traducción al español está disponible en <a href="{{blob}}/book/es/anatomía-de-tor_es_A4.pdf">PDF A4</a> y <a href="{{blob}}/book/es/anatomía-de-tor_es.epub">EPUB</a>."""
+pdf = "PDF A4 (español)"
+epub = "EPUB (español)"
+published = """Traducción al español, versión {{version}}. <a href="{{releases}}/tag/{{tag}}">Todos los archivos y sumas SHA-256</a>. <a href="{{p:languages}}">Ver las cinco ediciones</a>. Esta traducción no cuenta con revisión lingüística independiente. · <a href="{{doi}}">DOI</a>"""
 
 [footer]
-edition = """Primera edición, versión {{version}} (italiano) · tor {{tor}}, Arti {{arti}} · <a href="{{gh}}">fuentes del proyecto</a> · <a href="{{p:license}}">GPL-3.0-or-later</a>"""
+edition = """Primera edición, versión {{version}} (traducción al español) · tor {{tor}}, Arti {{arti}} · <a href="{{gh}}">fuentes del proyecto</a> · <a href="{{p:license}}">GPL-3.0-or-later</a>"""
 independent = """Obra independiente, no respaldada ni patrocinada por el Tor Project ni afiliada a \
 él. <a href="{{p:independence}}">Más información</a>."""
 privacy = "Este sitio no usa cookies, scripts, fuentes web ni rastreadores."
@@ -57,7 +56,7 @@ body = """
 repetidores y llega hasta las decisiones de diseño, los ataques reales y los problemas
 abiertos. Cada mecanismo se reconstruye y se prueba en un laboratorio, sobre una red Tor
 privada que funciona en un ordenador corriente.</p>
-<p>El libro está escrito en italiano. Es <strong>gratuito</strong>, y sus fuentes — texto,
+<p>El original está escrito en italiano; aquí también está disponible la traducción al español. Es <strong>gratuito</strong>, y sus fuentes — texto,
 figuras, código y laboratorios — están abiertas a todos bajo la GNU GPL.</p>
 </div>
 </div>
@@ -156,10 +155,8 @@ y cómo los contrarresta Tor, sin dar instrucciones contra terceros.</p>
 abiertos y las propuestas en curso del Tor Project.</p>
 
 <h2 id="formatos">Formatos</h2>
-<p>PDF A4 ({{pages_a4}} páginas), EPUB 3 y un PDF de 7×10 pulgadas ({{pages_7x10}} páginas)
-para imprimir una copia personal. El PDF y el EPUB se generan a partir de las mismas fuentes
-LaTeX con <code>make book</code>.</p>
-<p><a href="https://doi.org/10.5281/zenodo.24207180">DOI: 10.5281/zenodo.24207180</a></p>
+<p>La traducción al español está disponible en PDF A4 y EPUB 3. El idioma original es el italiano; esta traducción no cuenta con revisión lingüística independiente.</p>
+<p><a href="{{doi}}">DOI: 10.5281/zenodo.24207811</a></p>
 """
 
 [pages.labs]

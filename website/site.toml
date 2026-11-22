@@ -3,7 +3,7 @@
 #
 # Configurazione del sito (scripts/build_site.py). Le pagine si generano in build/site/.
 
-# Indirizzo previsto del sito su GitHub Pages (sito di progetto). NON e' ancora attivo:
+# Indirizzo pubblico del sito su GitHub Pages:
 # canonical, hreflang, Open Graph e sitemap lo usano, quindi va verificato con
 # `make site-check-online` subito dopo l'attivazione. Con un dominio personalizzato,
 # cambiare base_url (e base_path = "/") e rigenerare il sito.
@@ -31,6 +31,37 @@ tag = "v1.0.0-it"
 # sullo stato della release. true: collegamenti a una release GitHub esistente.
 # Il cambio di questo flag non pubblica ne' il repository ne' il sito.
 published = true
+doi = "10.5281/zenodo.24207180"
 pdf  = "anatomia-di-tor_it_A4.pdf"
 epub = "anatomia-di-tor_it.epub"
 print = "anatomia-di-tor_it_7x10.pdf"
+
+# Le edizioni tradotte sono gia' pubblicate come release indipendenti.
+# I nomi degli asset nelle release possono differire da quelli in book/<lingua>/.
+[translated_releases.en]
+tag = "v1.0.0-en"
+published = true
+pdf = "anatomy-of-tor_en_A4.pdf"
+epub = "anatomy-of-tor_en.epub"
+doi = "10.5281/zenodo.24207675"
+
+[translated_releases.es]
+tag = "v1.0.0-es"
+published = true
+pdf = "anatomia-de-tor_es_A4.pdf"
+epub = "anatomia-de-tor_es.epub"
+doi = "10.5281/zenodo.24207811"
+
+[translated_releases.ru]
+tag = "v1.0.0-ru"
+published = true
+pdf = "anatomiya-tor_ru_A4.pdf"
+epub = "anatomiya-tor_ru.epub"
+doi = "10.5281/zenodo.24207874"
+
+[translated_releases.zh-Hans]
+tag = "v1.0.0-zh-Hans"
+published = true
+pdf = "tor-jiepou_zh-Hans_A4.pdf"
+epub = "tor-jiepou_zh-Hans.epub"
+doi = "10.5281/zenodo.24207976"

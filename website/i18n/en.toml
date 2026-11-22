@@ -30,14 +30,13 @@ independence = "Independence"
 
 [download]
 title = "Download"
-pending = """The Italian edition is free to read as an A4 PDF ({{pages_a4}} pages), EPUB 3 or 7×10 in print PDF. <a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">A4 PDF</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a> · <a href="{{blob}}/book/it/anatomia-di-tor_it_7x10.pdf">Print PDF</a>."""
-pdf = "PDF A4 (Italian)"
-epub = "EPUB (Italian)"
-published = """First edition in Italian, version {{version}}, {{pages_a4}} pages. <a href="{{releases}}/tag/{{tag}}">All \
-files and SHA-256 checksums</a>, including the 7×10 in PDF for printing a personal copy. All five editions are available; <a href="{{p:languages}}">download translations</a> (not independently language-reviewed). · <a href="https://doi.org/10.5281/zenodo.24207180">DOI</a>"""
+pending = """The English translation is available as <a href="{{blob}}/book/en/anatomy-of-tor_en_A4.pdf">A4 PDF</a> and <a href="{{blob}}/book/en/anatomy-of-tor_en.epub">EPUB</a>."""
+pdf = "PDF A4 (English)"
+epub = "EPUB (English)"
+published = """English translation, version {{version}}. <a href="{{releases}}/tag/{{tag}}">All release files and SHA-256 checksums</a>. <a href="{{p:languages}}">See all five editions</a>. This translation has not undergone independent linguistic review. · <a href="{{doi}}">DOI</a>"""
 
 [footer]
-edition = """First edition, version {{version}} (Italian) · tor {{tor}}, Arti {{arti}} · <a href="{{gh}}">project sources</a> · <a href="{{p:license}}">GPL-3.0-or-later</a>"""
+edition = """First edition, version {{version}} (English translation) · tor {{tor}}, Arti {{arti}} · <a href="{{gh}}">project sources</a> · <a href="{{p:license}}">GPL-3.0-or-later</a>"""
 independent = """An independent work, not endorsed or sponsored by, or affiliated with, the Tor \
 Project. <a href="{{p:independence}}">More</a>."""
 privacy = "This site uses no cookies, scripts, web fonts or trackers."
@@ -56,7 +55,7 @@ body = """
 <p>A technical book on how Tor works, from the bytes two relays exchange up to design
 choices, real attacks and open problems. Every mechanism is rebuilt and tested in a
 laboratory, on a private Tor network that runs on an ordinary computer.</p>
-<p>The book is written in Italian. It is <strong>free</strong>, and its sources — text,
+<p>The original was written in Italian; an English translation is also available here. It is <strong>free</strong>, and its sources — text,
 figures, code and laboratories — are open to everyone under the GNU GPL.</p>
 </div>
 </div>
@@ -154,10 +153,8 @@ how Tor counters them; it gives no instructions against third parties.</p>
 current proposals of the Tor Project.</p>
 
 <h2 id="formats">Formats</h2>
-<p>PDF A4 ({{pages_a4}} pages), EPUB 3, and a 7×10 in PDF ({{pages_7x10}} pages) for printing a
-personal copy. The PDF and EPUB are generated from the same LaTeX sources with
-<code>make book</code>.</p>
-<p><a href="https://doi.org/10.5281/zenodo.24207180">DOI: 10.5281/zenodo.24207180</a></p>
+<p>The English translation is available in A4 PDF and EPUB 3 formats. Its original language is Italian; the translation has not undergone independent linguistic review.</p>
+<p><a href="{{doi}}">DOI: 10.5281/zenodo.24207675</a></p>
 """
 
 [pages.labs]
