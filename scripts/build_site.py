@@ -122,6 +122,7 @@ def blocco_download(conf, t, sost):
             '<ul class="downloads">'
             f'<li><a class="button" href="{base}{rel["pdf"]}">{d["pdf"]}</a></li>'
             f'<li><a class="button" href="{base}{rel["epub"]}">{d["epub"]}</a></li>'
+            f'<li><a class="button secondary" href="{base}{rel["print"]}">{d["print"]}</a></li>'
             '</ul>'
             f'<p>{d["published"]}</p>')
     return sost.sostituisci(

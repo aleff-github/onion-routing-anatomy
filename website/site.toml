@@ -43,6 +43,7 @@ tag = "v1.0.0-en"
 published = true
 pdf = "anatomy-of-tor_en_A4.pdf"
 epub = "anatomy-of-tor_en.epub"
+print = "anatomy-of-tor_en_7x10.pdf"
 doi = "10.5281/zenodo.24207675"
 
 [translated_releases.es]
@@ -50,6 +51,7 @@ tag = "v1.0.0-es"
 published = true
 pdf = "anatomia-de-tor_es_A4.pdf"
 epub = "anatomia-de-tor_es.epub"
+print = "anatomia-de-tor_es_7x10.pdf"
 doi = "10.5281/zenodo.24207811"
 
 [translated_releases.ru]
@@ -57,6 +59,7 @@ tag = "v1.0.0-ru"
 published = true
 pdf = "anatomiya-tor_ru_A4.pdf"
 epub = "anatomiya-tor_ru.epub"
+print = "anatomiya-tor_ru_7x10.pdf"
 doi = "10.5281/zenodo.24207874"
 
 [translated_releases.zh-Hans]
@@ -64,4 +67,5 @@ tag = "v1.0.0-zh-Hans"
 published = true
 pdf = "tor-jiepou_zh-Hans_A4.pdf"
 epub = "tor-jiepou_zh-Hans.epub"
+print = "tor-jiepou_zh-Hans_7x10.pdf"
 doi = "10.5281/zenodo.24207976"
