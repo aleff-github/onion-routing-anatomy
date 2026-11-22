@@ -8,6 +8,13 @@
   s2/.style={draw=torviola!70,fill=torviola!18,rounded corners=3pt},
   s3/.style={draw=torverde!60!black,fill=torverde!28,rounded corners=3pt},
   msg/.style={font=\ttfamily\tiny,fill=white,draw,inner sep=2pt}]
+  % Print-only smaller relay circles and a legible, separated legend.
+  \ifdefined\PrintEdition
+    \tikzset{relay/.append style={font=\sffamily\tiny,inner sep=0pt}}
+    \def\OnionLegendFont{\tiny}
+  \else
+    \def\OnionLegendFont{\scriptsize}
+  \fi
   % Celda con n capas centrada en x
   \newcommand{\pacchetto}[2]{%
     \ifnum#2>2 \draw[s1] (#1-1.05,-0.5) rectangle (#1+1.05,0.5);\fi
@@ -31,7 +38,7 @@
   \node[font=\scriptsize] at (6.2,-0.85) {retira Kf$_2$};
   \node[font=\scriptsize,align=right,anchor=east] at (8.8,-1.6) {retira Kf$_3$: Recognized = 0\\y el resumen coincide};
   % Leyenda
-  \draw[s1] (1.2,1.0) rectangle ++(0.3,0.2); \node[font=\scriptsize,anchor=west] at (1.55,1.1) {capa del guardia};
-  \draw[s2] (3.9,1.0) rectangle ++(0.3,0.2); \node[font=\scriptsize,anchor=west] at (4.25,1.1) {capa intermedia};
-  \draw[s3] (6.0,1.0) rectangle ++(0.3,0.2); \node[font=\scriptsize,anchor=west] at (6.35,1.1) {capa de salida};
+  \draw[s1] (1.2,1.0) rectangle ++(0.3,0.2); \node[font=\OnionLegendFont,anchor=west] at (1.55,1.1) {capa del guardia};
+  \draw[s2] (3.9,1.0) rectangle ++(0.3,0.2); \node[font=\OnionLegendFont,anchor=west] at (4.25,1.1) {capa intermedia};
+  \draw[s3] (6.0,1.0) rectangle ++(0.3,0.2); \node[font=\OnionLegendFont,anchor=west] at (6.35,1.1) {capa de salida};
 \end{tikzpicture}
