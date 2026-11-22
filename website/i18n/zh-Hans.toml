@@ -30,7 +30,8 @@ independence = "独立性"
 
 [download]
 title = "下载"
-pending = """简体中文译本提供 <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans_A4.pdf">A4 PDF</a> 和 <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans.epub">EPUB</a>。"""
+pending = """简体中文译本提供 <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans_A4.pdf">A4 PDF</a> 和 <a href="{{blob}}/book/zh-Hans/tor-解剖_zh-Hans.epub">EPUB</a>。
+意大利语原版另提供 <a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">A4 PDF</a>、<a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a> 和 <a href="{{blob}}/book/it/anatomia-di-tor_it_7x10.pdf">7×10 英寸打印版 PDF</a>。"""
 pdf = "A4 PDF（简体中文）"
 epub = "EPUB（简体中文）"
 published = """简体中文译本，版本 {{version}}。<a href="{{releases}}/tag/{{tag}}">全部发布文件及 SHA-256 校验和</a>。<a href="{{p:languages}}">查看全部五种语言版本</a>。本译本尚未经过独立语言审校。 · <a href="{{doi}}">DOI</a>"""

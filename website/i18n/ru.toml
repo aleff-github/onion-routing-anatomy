@@ -30,7 +30,8 @@ independence = "Независимость"
 
 [download]
 title = "Скачать"
-pending = """Русский перевод доступен в форматах <a href="{{blob}}/book/ru/анатомия-tor_ru_A4.pdf">PDF A4</a> и <a href="{{blob}}/book/ru/анатомия-tor_ru.epub">EPUB</a>."""
+pending = """Русский перевод доступен в форматах <a href="{{blob}}/book/ru/анатомия-tor_ru_A4.pdf">PDF A4</a> и <a href="{{blob}}/book/ru/анатомия-tor_ru.epub">EPUB</a>.
+Итальянский оригинал также доступен в форматах <a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">PDF A4</a>, <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a> и <a href="{{blob}}/book/it/anatomia-di-tor_it_7x10.pdf">PDF 7×10 для печати</a>."""
 pdf = "PDF A4 (на русском)"
 epub = "EPUB (на русском)"
 published = """Русский перевод, версия {{version}}. <a href="{{releases}}/tag/{{tag}}">Все файлы релиза и контрольные суммы SHA-256</a>. <a href="{{p:languages}}">Все пять языковых изданий</a>. Перевод не проходил независимую лингвистическую проверку. · <a href="{{doi}}">DOI</a>"""

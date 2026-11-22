@@ -318,6 +318,6 @@ chi si aspetta 1000: è la finestra di *stream* a fermare il flusso, non quella 
 |---|---|
 | `BEGIN`, `CONNECTED`, formato di ADDRPORT | tor-spec, *Opening streams and transmitting data* |
 | motivi di `END` | tor-spec, *Closing streams* |
-| finestre e `SENDME` | tor-spec, *Flow control* |
+| finestre e `SENDME` | tor-spec, *Legacy Flow control* |
 | `SENDME` autenticati | proposta 289 |
 | controllo della congestione, `sendme_inc` | proposta 324 |

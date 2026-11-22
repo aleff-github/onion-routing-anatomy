@@ -30,7 +30,8 @@ independence = "Independence"
 
 [download]
 title = "Download"
-pending = """The English translation is available as <a href="{{blob}}/book/en/anatomy-of-tor_en_A4.pdf">A4 PDF</a> and <a href="{{blob}}/book/en/anatomy-of-tor_en.epub">EPUB</a>."""
+pending = """The English translation is available as <a href="{{blob}}/book/en/anatomy-of-tor_en_A4.pdf">A4 PDF</a> and <a href="{{blob}}/book/en/anatomy-of-tor_en.epub">EPUB</a>.
+The Italian original is also available as <a href="{{blob}}/book/it/anatomia-di-tor_it_A4.pdf">A4 PDF</a>, <a href="{{blob}}/book/it/anatomia-di-tor_it.epub">EPUB</a> and <a href="{{blob}}/book/it/anatomia-di-tor_it_7x10.pdf">7×10 print PDF</a>."""
 pdf = "PDF A4 (English)"
 epub = "EPUB (English)"
 published = """English translation, version {{version}}. <a href="{{releases}}/tag/{{tag}}">All release files and SHA-256 checksums</a>. <a href="{{p:languages}}">See all five editions</a>. This translation has not undergone independent linguistic review. · <a href="{{doi}}">DOI</a>"""

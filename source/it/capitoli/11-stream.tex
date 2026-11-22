@@ -79,7 +79,7 @@ Immaginiamo un exit con un collegamento veloce verso Internet e un client lento.
 
 \subsection{Finestre e SENDME}
 
-Il meccanismo originale di Tor usa delle \textbf{finestre}, contate in celle \texttt{DATA}~\spec{tor-spec}{Flow control}:
+Il meccanismo originale di Tor usa delle \textbf{finestre}, contate in celle \texttt{DATA}~\spec{tor-spec}{Legacy Flow control}:
 \begin{itemize}
   \item a livello di \textbf{circuito}, chi invia ha una \emph{package window} che parte da 1000 celle (o dal parametro di consenso \texttt{circwindow}); ogni cella \texttt{DATA} inviata la decrementa, e a zero smette di inviare. Chi riceve tiene una \emph{deliver window} simmetrica e, ogni 100 celle ricevute, invia un messaggio \texttt{SENDME} (comando relay 5) con StreamID zero, che restituisce 100 celle alla finestra del mittente;
   \item a livello di \textbf{stream}, le finestre partono da 500 celle e crescono di 50 per ogni \texttt{SENDME} con lo StreamID dello stream.
@@ -92,10 +92,10 @@ Il risultato è che in ogni momento non possono esserci in viaggio più di 1000 
 
 Un client malintenzionato potrebbe inviare \texttt{SENDME} senza aver ricevuto nulla: l'exit continuerebbe a inviare dati, che si accumulerebbero nella rete, e il client potrebbe così esaurire la memoria dei relay, o amplificare il traffico, con uno sforzo minimo. Dalla versione 0.4.1.1-alpha i \texttt{SENDME} di circuito sono \textbf{autenticati} (\proposta{289}): nello schema tradizionale tor1, il corpo contiene una versione (1), una lunghezza (20) e il \textbf{digest progressivo} della cella \texttt{DATA} che ha fatto scattare il \texttt{SENDME}. Chi riceve il \texttt{SENDME} conosce quel digest, perché lo ha calcolato inviando la cella, e lo confronta: se non coincide, il circuito viene chiuso.
 
-Il digest dipende dal contenuto di tutte le celle ricevute, ma un client potrebbe provare a prevederlo se conoscesse in anticipo il contenuto delle celle, per esempio scaricando un file noto. La specifica \spec{tor-spec}{Flow control} raccomanda quindi di introdurre byte casuali in almeno una cella \texttt{DATA} per incremento della finestra di ricezione (100 celle nello schema classico). È una delle motivazioni del padding casuale dei messaggi relay (\cref{sec:relay}); se una cella occupa tutti i 498 byte utili, però, non c'è spazio per il padding, e la casualità non può essere data per scontata.
+Il digest dipende dal contenuto di tutte le celle ricevute, ma un client potrebbe provare a prevederlo se conoscesse in anticipo il contenuto delle celle, per esempio scaricando un file noto. La specifica \spec{tor-spec}{Legacy Flow control} raccomanda quindi di introdurre byte casuali in almeno una cella \texttt{DATA} per incremento della finestra di ricezione (100 celle nello schema classico). È una delle motivazioni del padding casuale dei messaggi relay (\cref{sec:relay}); se una cella occupa tutti i 498 byte utili, però, non c'è spazio per il padding, e la casualità non può essere data per scontata.
 
 \begin{approfondimento}[Quale digest, esattamente?]
-La specifica parla del \enquote{digest della cella che precede il \texttt{SENDME}}. Nei circuiti ordinari con tor1 è il digest SHA-1 completo, di 20 byte, del flusso all'indietro dopo l'ultima cella riconosciuta, salvato nel campo \file{sendme\_digest} dalla funzione \file{tor1\_relay\_digest\_matches\_v0} (\file{src/core/crypto/relay\_crypto\_tor1.c}). Se il digest progressivo è più lungo, come lo SHA3-256 dei circuiti rendezvous con onion service, per un \texttt{SENDME} di versione 1 si trasmettono soltanto i \textbf{primi 20 byte}~\spec{tor-spec}{Flow control}. Con CGO il digest viene invece sostituito dal tag $T$ della cella confermata (\cref{sec:cgo}).
+La specifica parla del \enquote{digest della cella che precede il \texttt{SENDME}}. Nei circuiti ordinari con tor1 è il digest SHA-1 completo, di 20 byte, del flusso all'indietro dopo l'ultima cella riconosciuta, salvato nel campo \file{sendme\_digest} dalla funzione \file{tor1\_relay\_digest\_matches\_v0} (\file{src/core/crypto/relay\_crypto\_tor1.c}). Se il digest progressivo è più lungo, come lo SHA3-256 dei circuiti rendezvous con onion service, per un \texttt{SENDME} di versione 1 si trasmettono soltanto i \textbf{primi 20 byte}~\spec{tor-spec}{Legacy Flow control}. Con CGO il digest viene invece sostituito dal tag $T$ della cella confermata (\cref{sec:cgo}).
 \end{approfondimento}
 
 % ---------------------------------------------------------------------------
@@ -259,7 +259,7 @@ Modifica il laboratorio per misurare, lato client, il tempo tra l'invio di ogni 
 % ---------------------------------------------------------------------------
 \section*{Per approfondire}
 \begin{itemize}
-  \item \titolo{Tor Protocol Specification}, capitoli \enquote{Opening streams and transmitting data}, \enquote{Closing streams}, \enquote{Remote hostname lookup} e \enquote{Flow control}~\cite{torspec}.
+  \item \titolo{Tor Protocol Specification}, capitoli \enquote{Opening streams and transmitting data}, \enquote{Closing streams}, \enquote{Remote hostname lookup} e \enquote{Legacy Flow control}~\cite{torspec}.
   \item Proposta 289, \titolo{Authenticating sendme cells to mitigate bandwidth attacks}.
   \item Proposta 324, \titolo{RTT-based Congestion Control for Tor}: motivazioni, algoritmi, parametri e analisi di sicurezza.
 \end{itemize}
