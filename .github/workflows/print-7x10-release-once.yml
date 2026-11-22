@@ -34,7 +34,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import subprocess
-          base='0f1361a87e7dfc7db1e52331024cbde3547b1420'
+          base='39754f13c95a3c350ab5096f085b286cd6ff3c2b'
           original=subprocess.check_output(['git','ls-tree','-r','--name-only',base],text=True).splitlines()
           previous=[p for p in original if p.startswith('book/') and (p.endswith('_A4.pdf') or p.endswith('.epub') or p.endswith('_7x10.pdf') or p.endswith('_cover.png') or p.endswith('_copertina.png') or p.endswith('_portada.png') or p.endswith('_обложка.png') or p.endswith('_封面.png'))]
           assert len(previous)>=11, ('unexpected original digital count',len(previous))
