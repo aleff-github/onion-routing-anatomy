@@ -1,0 +1,46 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Print-only entry point. Scientific content and rights come from the A4 edition.
+\documentclass[11pt,openright,twoside]{book}
+% Paper edition: no electronic navigation or dangling bookmark destinations.
+\PassOptionsToPackage{bookmarks=false}{hyperref}
+\input{preamble}
+\input{macros}
+\input{rights}
+\usepackage{hyperxmp}
+\hypersetup{pdftitle={Anatomy of Tor}, pdfsubject={The Anonymity Protocol, Byte by Byte},
+  pdfauthor={Alessandro Greco}, pdflang={en-GB},
+  pdfcopyright={Copyright (C) 2026 Alessandro Greco. GPL-3.0-or-later.},
+  pdflicenseurl={https://www.gnu.org/licenses/gpl-3.0.html}}
+\input{../shared/print/layout}
+
+\begin{document}
+\frontmatter
+\thispagestyle{empty}
+\null\vfill
+\begin{center}{\LARGE\bfseries Anatomy of Tor\par}\end{center}
+\vfill\vfill
+\cleardoublepage
+\thispagestyle{empty}
+\begin{center}
+\vspace*{2.5cm}
+{\Huge\bfseries Anatomy of Tor\par}
+\vspace{0.9cm}
+{\Large The Anonymity Protocol, Byte by Byte\par}
+\vspace{3.5cm}
+{\Large Alessandro Greco\par}
+\vfill
+\end{center}
+\clearpage
+\thispagestyle{empty}
+\null\vfill
+\Colophon
+\cleardoublepage
+\tableofcontents
+\include{chapters/00-preface}
+\mainmatter
+\input{structure}
+\backmatter
+\printbibliography[heading=bibintoc,title={Bibliography}]
+\printindex
+\end{document}

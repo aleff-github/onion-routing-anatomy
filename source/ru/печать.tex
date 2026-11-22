@@ -1,0 +1,58 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% Print-only entry point. Scientific content and rights come from the A4 edition.
+\documentclass[11pt,openright,twoside]{book}
+% Paper edition: no electronic navigation or dangling bookmark destinations.
+\PassOptionsToPackage{bookmarks=false}{hyperref}
+\input{преамбула}
+\input{макросы}
+\input{права}
+\usepackage{hyperxmp}
+\hypersetup{pdftitle={Анатомия Tor}, pdfsubject={Протокол анонимности побайтно},
+  pdfauthor={Alessandro Greco}, pdflang={ru-RU},
+  pdfcopyright={Copyright (C) 2026 Alessandro Greco. GPL-3.0-or-later.},
+  pdflicenseurl={https://www.gnu.org/licenses/gpl-3.0.html}}
+% Libertinus Sans has no bold italic face; explicitly slant its real bold.
+\setsansfont{Libertinus Sans}[Scale=MatchLowercase,
+  BoldItalicFont={Libertinus Sans Bold},BoldItalicFeatures={FakeSlant=0.15}]
+\renewfontfamily\cyrillicfontsf{Libertinus Sans}[Scale=MatchLowercase,
+  BoldItalicFont={Libertinus Sans Bold},BoldItalicFeatures={FakeSlant=0.15}]
+\input{../shared/print/layout}
+
+% One long option in a description item needs CamelCase break opportunities.
+% The printed identifier is unchanged; no discretionary hyphens are inserted.
+\let\PrintRussianTexttt\texttt
+\RenewDocumentCommand\texttt{m}{\PrintRussianTexttt{%
+  \ifstrequal{#1}{DoSRefuseSingleHopClientRendezvous}%
+    {DoSRefuse\allowbreak SingleHop\allowbreak Client\allowbreak Rendezvous}{#1}}}
+
+\begin{document}
+\frontmatter
+\thispagestyle{empty}
+\null\vfill
+\begin{center}{\LARGE\bfseries Анатомия Tor\par}\end{center}
+\vfill\vfill
+\cleardoublepage
+\thispagestyle{empty}
+\begin{center}
+\vspace*{2.5cm}
+{\Huge\bfseries Анатомия Tor\par}
+\vspace{0.9cm}
+{\Large Протокол анонимности побайтно\par}
+\vspace{3.5cm}
+{\Large Alessandro Greco\par}
+\vfill
+\end{center}
+\clearpage
+\thispagestyle{empty}
+\null\vfill
+\Colophon
+\cleardoublepage
+\tableofcontents
+\include{главы/00-предисловие}
+\mainmatter
+\input{структура}
+\backmatter
+\printbibliography[heading=bibintoc,title={Литература}]
+\printindex
+\end{document}

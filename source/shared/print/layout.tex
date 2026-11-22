@@ -1,0 +1,123 @@
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2026 Alessandro Greco
+% --- Adattamento delle figure alla colonna piu' stretta del 7x10 ------------
+% Le figure TikZ sono tarate per il testo A4 (piu' largo); nel 7x10 alcune
+% sforano il margine. Le riduciamo automaticamente a \linewidth (max width:
+% rimpicciolisce solo quelle troppo larghe, lascia intatte le altre). Vale solo
+% per questa edizione: i file dei capitoli e l'edizione A4 non cambiano.
+\usepackage{etoolbox}
+\usepackage{adjustbox}
+% Only print builds set this switch; A4 and EPUB retain their original diagrams.
+\def\PrintEdition{1}
+\BeforeBeginEnvironment{tikzpicture}{\begin{adjustbox}{max width=0.96\linewidth}}
+\AfterEndEnvironment{tikzpicture}{\end{adjustbox}}
+\lstset{numbersep=6pt,xleftmargin=15pt,xrightmargin=16pt,breakatwhitespace=false,frame=none,framerule=0pt}  % niente bordo (sfondo rientrato): evita il filetto che sporgeva
+
+% --- Testatina adatta alla colonna stretta ---------------------------------
+% I titoli di capitolo lunghi, in maiuscolo, sforavano la testatina nel 7x10.
+% Qui la rendiamo piu' piccola e senza maiuscolo (solo questa edizione).
+\usepackage{fancyhdr}
+\microtypesetup{protrusion=false}
+\hypersetup{hidelinks}  % annotations are disabled by NoHyper below
+\pagestyle{fancy}
+\AtBeginDocument{\setlength{\headwidth}{\textwidth}}  % dopo geometry: testatina = larghezza del testo
+\fancyhf{}
+\fancyhead[LE,RO]{\footnotesize\thepage}
+\fancyhead[RE]{\adjustbox{max width=0.88\textwidth}{\footnotesize\nouppercase{\itshape\leftmark}}}
+\fancyhead[LO]{\adjustbox{max width=0.88\textwidth}{\footnotesize\nouppercase{\itshape\rightmark}}}
+\renewcommand{\headrulewidth}{0pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\footnotesize\thepage}\renewcommand{\headrulewidth}{0pt}}
+% \pagestyle{fancy} ridefinisce \chaptermark senza distinguere \frontmatter: la seconda
+% pagina della Prefazione portava "Capitolo 0. Prefazione". Qui si ripristina il test
+% \if@mainmatter della classe book: numero solo nel corpo del libro, \@chapapp
+% (Capitolo/Appendice) come prima.
+\makeatletter
+\renewcommand{\chaptermark}[1]{\markboth{\MakeUppercase{\ifnum\c@secnumdepth>\m@ne\if@mainmatter\@chapapp\ \thechapter. \ \fi\fi #1}}{}}
+\makeatother
+
+% --- Formato pagina 7 x 10 in ----------------------------------------------
+% 7x10 no-bleed, 151--400 pages: 1in inside, 0.53in outside (0.03in reserve for italic ink overhang).
+\geometry{
+  paperwidth=7in, paperheight=10in,
+  inner=1in, outer=0.53in,
+  top=0.75in, bottom=0.75in,
+  headheight=14pt, headsep=6pt, footskip=16pt,
+  marginparwidth=0pt, marginparsep=0pt,
+}
+% Un filo di elasticita' in piu' per la giustificazione sulla colonna stretta,
+% cosi' l'algoritmo preferisce allargare gli spazi anziche' sforare il margine.
+\setlength{\emergencystretch}{4em}
+% Spaziatura fra colonne leggermente ridotta (default 6pt): sulla colonna piu'
+% stretta del 7x10 evita che le tabelle a larghezza fissa (tarate per l'A4)
+% sforino il margine esterno. Vale solo per questa edizione.
+\setlength{\tabcolsep}{4pt}
+
+% Per la stampa i collegamenti restano neri e senza bordo: hidelinks e' gia'
+% impostato in preambolo.tex, quindi non serve altro.
+
+% Le pagine bianche inserite da \cleardoublepage (verso del frontespizio, verso
+% prima di un capitolo con openright) devono essere del tutto vuote, senza numero
+% ne' testatina: piu' pulito per un libro stampato.
+\makeatletter
+\def\cleardoublepage{\clearpage\if@twoside\ifodd\c@page\else
+  \hbox{}\thispagestyle{empty}\newpage\if@twocolumn\hbox{}\newpage\fi\fi\fi}
+\makeatother
+
+
+% Keep hyperref metadata but omit clickable annotations on paper.
+\AtBeginDocument{\begin{NoHyper}}
+\AtEndDocument{\end{NoHyper}}
+% Missing characters are errors, not silently accepted omissions.
+\tracinglostchars=3
+% Run-in headings must finish before a listing, even without its frame.
+\makeatletter
+\AddToHook{env/lstlisting/before}{\if@noskipsec\leavevmode\par\fi}
+\makeatother
+% Fixed-width tables can only shrink; multipage tables remain breakable.
+\BeforeBeginEnvironment{tabular}{\begin{adjustbox}{max width=\linewidth}}
+\AfterEndEnvironment{tabular}{\end{adjustbox}}
+% The glossary is the only longtable in each edition. Adapt column widths,
+% preserving every cell and repeating header; never box a multipage table.
+\let\PrintLongtable\longtable
+\providecommand{\PrintGlossaryColumns}{@{}>{\raggedright\arraybackslash}p{0.29\linewidth}>{\raggedright\arraybackslash}p{0.57\linewidth}r@{}}
+\RenewDocumentCommand\longtable{m}{%
+  \expandafter\PrintLongtable\expandafter{\PrintGlossaryColumns}}
+
+
+% hyperxmp keeps the author in XMP; retain the standard PDF Info entry too.
+\AtBeginDocument{\pdfextension info{/Author (Alessandro Greco)}}
+
+% Break long inline concatenations at their existing mathematical separator.
+% No \left\| or \right\| delimiters occur in the unchanged book sources.
+\let\PrintConcat\|
+\renewcommand{\|}{\allowbreak\PrintConcat}
+\usepackage{xurl}
+% Single-line unnumbered displays in these sources can exceed the print measure.
+% Preserve every symbol; shrink only the displays that are actually too wide.
+\let\PrintDisplayBegin\[
+\let\PrintDisplayEnd\]
+\long\def\[#1\]{\PrintDisplayBegin
+  \adjustbox{max width=\linewidth}{$\displaystyle #1$}%
+  \PrintDisplayEnd}
+
+% Additional break opportunities in file names/API calls, without printed hyphens.
+% The A4 \file definition remains untouched.
+\ExplSyntaxOn
+\RenewDocumentCommand{\file}{m}
+  {
+    \group_begin:
+    \tl_set:Nn \l__libro_file_tl {#1}
+    \tl_replace_all:Nnn \l__libro_file_tl { / } { / \allowbreak }
+    \tl_replace_all:Nnn \l__libro_file_tl { . } { . \allowbreak }
+    \tl_replace_all:Nnn \l__libro_file_tl { :: } { :: \allowbreak }
+    \tl_replace_all:Nnn \l__libro_file_tl { ( } { ( \allowbreak }
+    \cs_set_eq:NN \__libro_trattino_basso: \_
+    \cs_set:Npn \_ { \__libro_trattino_basso: \allowbreak }
+    \texttt { \tl_use:N \l__libro_file_tl }
+    \group_end:
+  }
+\ExplSyntaxOff
+
+% More line-breaking flexibility for the narrower measure.
+\tolerance=2000
+\indexsetup{othercode=\small}
