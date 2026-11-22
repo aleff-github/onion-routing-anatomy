@@ -1,5 +1,5 @@
 # One-time build for the multilingual 7x10 feature branch.
-# The job deletes this workflow from its own output commit; main is never updated.
+# PDF commit is created by CI; this workflow is removed separately after QA. Main is never updated.
 name: Bootstrap multilingual 7x10 PDFs
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: bootstrap-print-7x10
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   compile-and-save:
@@ -86,7 +86,7 @@ jobs:
           print(json.dumps(result,ensure_ascii=False,indent=2))
           PY
 
-      - name: Commit verified PDFs and remove temporary workflow
+      - name: Commit verified PDFs without changing workflow permissions
         shell: bash
         run: |
           set -euo pipefail
@@ -96,7 +96,6 @@ jobs:
           git add -f -- "book/ru/анатомия-tor_ru_7x10.pdf"
           git add -f -- "book/zh-Hans/tor-解剖_zh-Hans_7x10.pdf"
           git add -- book/print-7x10-manifest.json
-          git rm -- .github/workflows/print-7x10-bootstrap.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m "build: add validated 7x10 PDFs for EN ES RU and ZH [skip ci]"
