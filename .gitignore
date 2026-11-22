@@ -99,3 +99,6 @@ venv/
 .env
 # Sorgenti esterni facoltativi per make fonti / make originalita (torspec, tor, Arti)
 fonti/
+
+# Formati 7x10 generati: usare git add -f solo dopo QA.
+book/*/*_7x10.pdf

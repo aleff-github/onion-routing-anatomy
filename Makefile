@@ -72,9 +72,23 @@ book-pdf:
 
 # Formato 7x10 in per chi vuole stampare una copia personale (stessi capitoli).
 book-print:
-	$(call TEX,$(SRC)) $(LATEXMK) stampa.tex
-	mkdir -p $(OUT) && cp $(SRC)/stampa.pdf $(OUT)/$(NOME)_7x10.pdf
-	@echo "PDF 7x10: $(OUT)/$(NOME)_7x10.pdf"
+	python3 scripts/build_print.py $(LINGUA) --image '$(IMMAGINE)'
+
+.PHONY: book-print-all print-check print-render print-clean
+book-print-all:
+	python3 scripts/build_print.py all --image '$(IMMAGINE)'
+
+PRINT_PYTHON ?= python3
+print-check:
+	$(PRINT_PYTHON) scripts/check_print.py $(PRINT_LANGUAGES)
+	$(PRINT_PYTHON) scripts/compare_print_content.py $(PRINT_LANGUAGES)
+	python3 scripts/check_print_regression.py
+
+print-render:
+	$(PRINT_PYTHON) scripts/check_print.py --render $(PRINT_LANGUAGES)
+
+print-clean:
+	python3 scripts/build_print.py all --clean
 
 # Copertina digitale dell'edizione italiana (solo fronte, 1600x2560, sorgente
 # source/it/copertina.tex) e immagini di presentazione del progetto (GitHub 1280x640,

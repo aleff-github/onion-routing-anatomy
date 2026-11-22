@@ -1,0 +1,3 @@
+# Free local PDF auditing/rendering dependencies, isolated from book builds.
+PyMuPDF==2.1
+Pillow==13.0.0
