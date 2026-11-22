@@ -1,0 +1,170 @@
+# One-time publication from the verified main commit; never changes any tags or main.
+name: Publish multilingual print PDFs and GitHub Pages (one-time)
+on:
+  push:
+    branches: [release/publish-print-7x10]
+permissions:
+  contents: write
+concurrency:
+  group: publish-print-7x10-one-time
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'aleff-github/onion-routing-anatomy' && github.ref == 'refs/heads/release/publish-print-7x10'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout the exact approved main snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: 0cdd5618fa1f074800cc862177f937826c04345b
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PDF inspection library
+        run: python -m pip install --disable-pip-version-check -r scripts/requirements-print.txt
+      - name: Preflight print hashes, pages and site validation
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "0cdd5618fa1f074800cc862177f937826c04345b"
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$(git rev-parse HEAD)"
+          python scripts/check_print_regression.py
+          python3 scripts/build_site.py build
+          python3 scripts/build_site.py check
+          python3 scripts/check_public_copy.py
+          python3 - <<'PY'
+          from pathlib import Path
+          from hashlib import sha256
+          import json
+          import tomllib
+          import pymupdf
+          
+          config = tomllib.loads(Path("website/site.toml").read_text(encoding="utf-8"))
+          manifest = json.loads(Path("book/print-7x10-manifest.json").read_text(encoding="utf-8"))
+          for lang, metadata in manifest["editions"].items():
+              rel = config["translated_releases"][lang]
+              assert rel["published"] and rel["print"].endswith("_7x10.pdf")
+              filename = Path(metadata["file"])
+              assert filename.is_file() and sha256(filename.read_bytes()).hexdigest() == metadata["sha256"]
+              with pymupdf.open(filename) as pdf:
+                  assert len(pdf) == metadata["pages"]
+                  assert all(abs(p.rect.width-504)<.1 and abs(p.rect.height-720)<.1 for p in pdf)
+          print("Four source print PDFs, release mappings and all page dimensions: PASS")
+          
+          PY
+      - name: Add 7x10 assets to the four existing Releases and update checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import json
+          import re
+          import shutil
+          import subprocess
+          import tempfile
+          
+          REPO = "aleff-github/onion-routing-anatomy"
+          EXISTING_EXPECTED = {
+              "en": ("anatomy-of-tor_en_A4.pdf", "anatomy-of-tor_en.epub"),
+              "es": ("anatomia-de-tor_es_A4.pdf", "anatomia-de-tor_es.epub"),
+              "ru": ("anatomiya-tor_ru_A4.pdf", "anatomiya-tor_ru.epub"),
+              "zh-Hans": ("tor-jiepou_zh-Hans_A4.pdf", "tor-jiepou_zh-Hans.epub")
+          }
+          PRINT_ASSETS = {
+              "en": "anatomy-of-tor_en_7x10.pdf",
+              "es": "anatomia-de-tor_es_7x10.pdf",
+              "ru": "anatomiya-tor_ru_7x10.pdf",
+              "zh-Hans": "tor-jiepou_zh-Hans_7x10.pdf"
+          }
+          def sha(path):
+              return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+          
+          def gh(*args):
+              result = subprocess.run(["gh", *args], check=True, text=True,
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+              return result.stdout.strip()
+          
+          manifest = json.loads(Path("book/print-7x10-manifest.json").read_text(encoding="utf-8"))
+          assert manifest["format"] == "7x10 in"
+          assert manifest["page_dimensions_pt"] == [504, 720]
+          staging = Path(tempfile.mkdtemp(prefix="publish-print-7x10-"))
+          jobs = []
+          try:
+              # Full preflight for all four releases BEFORE making any changes.
+              for lang, portable in PRINT_ASSETS.items():
+                  tag = f"v1.0.0-{lang}"
+                  info = json.loads(gh("release", "view", tag, "--repo", REPO,
+                                       "--json", "tagName,isDraft,assets"))
+                  assert info["tagName"] == tag and not info["isDraft"], tag
+                  names = {a["name"] for a in info["assets"]}
+                  assert {"SHA256SUMS", *EXISTING_EXPECTED[lang]}.issubset(names), tag
+                  source = Path(manifest["editions"][lang]["file"])
+                  digest = manifest["editions"][lang]["sha256"]
+                  assert source.is_file() and sha(source) == digest, lang
+                  assert manifest["editions"][lang]["pdf_audit"] == "AUTOMATED_PASS"
+                  assert manifest["editions"][lang]["a4_content_comparison"] == "PASS"
+                  folder = staging / lang
+                  folder.mkdir()
+                  gh("release", "download", tag, "--repo", REPO, "--dir", str(folder))
+                  checksum_path = folder / "SHA256SUMS"
+                  assert checksum_path.is_file(), tag
+                  rows = checksum_path.read_text(encoding="utf-8").splitlines()
+                  listed = {}
+                  for row in rows:
+                      match = re.fullmatch(r"([0-9a-f]{64})  (.+)", row)
+                      assert match, (tag, "unexpected checksum row")
+                      digest_old, filename = match.groups()
+                      assert filename not in listed, (tag, "duplicate checksum name", filename)
+                      listed[filename] = digest_old
+                      assert (folder / filename).is_file()
+                      assert sha(folder / filename) == digest_old, (tag, "old asset checksum mismatch", filename)
+                  assert set(EXISTING_EXPECTED[lang]).issubset(listed), (tag, "missing A4/EPUB checksum")
+                  if portable in names:
+                      assert sha(folder / portable) == digest, (tag, "existing print PDF differs")
+                  if portable in listed:
+                      assert listed[portable] == digest, (tag, "checksum for print differs")
+                  jobs.append((lang, tag, portable, source, digest, folder, checksum_path, rows, listed, names))
+                  print("Preflight", lang, "PASS; original assets and checksums preserved", flush=True)
+          
+              # Idempotent additive update: old A4/EPUB/cover/legal files are never replaced.
+              for lang, tag, portable, source, digest, folder, checksum_path, rows, listed, names in jobs:
+                  if portable not in names:
+                      output = folder / portable
+                      shutil.copyfile(source, output)
+                      gh("release", "upload", tag, str(output), "--repo", REPO)
+                      print("Uploaded", tag, portable, flush=True)
+                  if portable not in listed:
+                      checksum_path.write_text("\n".join([*rows, f"{digest}  {portable}"]) + "\n",
+                                               encoding="utf-8")
+                      gh("release", "upload", tag, str(checksum_path), "--repo", REPO, "--clobber")
+                      print("Updated SHA256SUMS", tag, flush=True)
+                  # Download both new assets from release again; verify bytes, not just metadata.
+                  verified = staging / (lang + "-verify")
+                  verified.mkdir()
+                  gh("release", "download", tag, "--repo", REPO, "--dir", str(verified),
+                     "--pattern", portable)
+                  gh("release", "download", tag, "--repo", REPO, "--dir", str(verified),
+                     "--pattern", "SHA256SUMS")
+                  assert sha(verified / portable) == digest, (tag, "remote PDF checksum mismatch")
+                  record = f"{digest}  {portable}"
+                  assert record in (verified / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+                  print("RELEASE VERIFIED", tag, portable, digest, flush=True)
+          finally:
+              shutil.rmtree(staging, ignore_errors=True)
+          
+          PY
+      - name: Rebuild and push the static website from verified main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          scripts/publish_site.sh --push
+          git ls-remote origin refs/heads/gh-pages
