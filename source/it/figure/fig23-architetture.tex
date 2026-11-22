@@ -9,9 +9,17 @@
   % Tor Browser
   \node[box] (tb) at (0,1.6) {Tor Browser};
   \node[box,fill=torviola!15] (t1) at (0,0.4) {tor};
-  \node[box,fill=torgrigio!15] (a1) at (0,-0.8) {altre applicazioni};
+  \ifdefined\PrintEdition
+    \node[box,fill=torgrigio!15,font=\sffamily\tiny,text width=1.7cm] (a1) at (2.05,-0.8) {altre applicazioni};
+  \else
+    \node[box,fill=torgrigio!15] (a1) at (0,-0.8) {altre applicazioni};
+  \fi
   \draw[->] (tb) -- node[right] {SOCKS} (t1);
-  \draw[->,avviso] (a1.east) -- ++(0.7,0) node[right,align=left] {rete\\diretta possibile};
+  \ifdefined\PrintEdition
+    \draw[->,avviso] (a1.south) -- ++(0,-0.45) node[below,align=center,font=\sffamily\tiny,text width=2.05cm] {rete\\diretta possibile};
+  \else
+    \draw[->,avviso] (a1.east) -- ++(0.7,0) node[right,align=left] {rete\\diretta possibile};
+  \fi
   \node[conf,fit=(tb)(t1)] (s1) {};
   \node[above=2pt of s1] {\small (a) solo traffico del browser};
   % Tails

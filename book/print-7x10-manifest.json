@@ -1,0 +1,38 @@
+{
+  "format": "7x10 in",
+  "version": "1.0.0",
+  "page_dimensions_pt": [
+    504,
+    720
+  ],
+  "editions": {
+    "en": {
+      "file": "book/en/anatomy-of-tor_en_7x10.pdf",
+      "pages": 342,
+      "sha256": "371c319e5f789ef2038a87c4b017678fdf47e9191d6b450bec799672474e4d39",
+      "pdf_audit": "AUTOMATED_PASS",
+      "a4_content_comparison": "PASS"
+    },
+    "es": {
+      "file": "book/es/anatomía-de-tor_es_7x10.pdf",
+      "pages": 350,
+      "sha256": "20e0a5f0d9f0bf4b6346e74c3a41381c46ff82fbb2a9fe74dde9d6f1732d58d6",
+      "pdf_audit": "AUTOMATED_PASS",
+      "a4_content_comparison": "PASS"
+    },
+    "ru": {
+      "file": "book/ru/анатомия-tor_ru_7x10.pdf",
+      "pages": 354,
+      "sha256": "bf534a24e0968bc8c0d2a69bd7de8d3dbd611d933702da24d974fc24bb5e49f2",
+      "pdf_audit": "AUTOMATED_PASS",
+      "a4_content_comparison": "PASS"
+    },
+    "zh-Hans": {
+      "file": "book/zh-Hans/tor-解剖_zh-Hans_7x10.pdf",
+      "pages": 306,
+      "sha256": "a462bb911f6c45e256cf2fcaf10d14cda692d80810c460fb88910c4ea2e0bd43",
+      "pdf_audit": "AUTOMATED_PASS",
+      "a4_content_comparison": "PASS"
+    }
+  }
+}

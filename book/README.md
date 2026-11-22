@@ -2,15 +2,15 @@
 
 All five language editions of *Anatomia di Tor* (version 1.0.0) are available to read and download free of charge.
 
-| Language | PDF A4 | EPUB 3 | Cover | Zenodo |
-|---|---|---|---|
-| Italiano (original) | [PDF](it/anatomia-di-tor_it_A4.pdf) | [EPUB](it/anatomia-di-tor_it.epub) | [Cover](it/anatomia-di-tor_it_copertina.png) | [DOI](https://doi.org/10.5281/zenodo.24207180) |
-| English | [PDF](./en/anatomy-of-tor_en_A4.pdf) | [EPUB](./en/anatomy-of-tor_en.epub) | [Cover](./en/anatomy-of-tor_en_cover.png) | [DOI](https://doi.org/10.5281/zenodo.24207675) |
-| Español | [PDF](./es/anatomía-de-tor_es_A4.pdf) | [EPUB](./es/anatomía-de-tor_es.epub) | [Cover](./es/anatomía-de-tor_es_portada.png) | [DOI](https://doi.org/10.5281/zenodo.24207811) |
-| Русский | [PDF](./ru/анатомия-tor_ru_A4.pdf) | [EPUB](./ru/анатомия-tor_ru.epub) | [Cover](./ru/анатомия-tor_ru_обложка.png) | [DOI](https://doi.org/10.5281/zenodo.24207874) |
-| 简体中文 | [PDF](./zh-Hans/tor-解剖_zh-Hans_A4.pdf) | [EPUB](./zh-Hans/tor-解剖_zh-Hans.epub) | [Cover](./zh-Hans/tor-解剖_zh-Hans_封面.png) | [DOI](https://doi.org/10.5281/zenodo.24207976) |
+| Language | PDF A4 | PDF 7×10 | EPUB 3 | Cover | Zenodo |
+|---|---|---|---|---|---|
+| Italiano (original) | [PDF](it/anatomia-di-tor_it_A4.pdf) | [PDF 7×10](it/anatomia-di-tor_it_7x10.pdf) | [EPUB](it/anatomia-di-tor_it.epub) | [Cover](it/anatomia-di-tor_it_copertina.png) | [DOI](https://doi.org/10.5281/zenodo.24207180) |
+| English | [PDF](./en/anatomy-of-tor_en_A4.pdf) | [PDF 7×10](en/anatomy-of-tor_en_7x10.pdf) | [EPUB](./en/anatomy-of-tor_en.epub) | [Cover](./en/anatomy-of-tor_en_cover.png) | [DOI](https://doi.org/10.5281/zenodo.24207675) |
+| Español | [PDF](./es/anatomía-de-tor_es_A4.pdf) | [PDF 7×10](es/anatomía-de-tor_es_7x10.pdf) | [EPUB](./es/anatomía-de-tor_es.epub) | [Cover](./es/anatomía-de-tor_es_portada.png) | [DOI](https://doi.org/10.5281/zenodo.24207811) |
+| Русский | [PDF](./ru/анатомия-tor_ru_A4.pdf) | [PDF 7×10](ru/анатомия-tor_ru_7x10.pdf) | [EPUB](./ru/анатомия-tor_ru.epub) | [Cover](./ru/анатомия-tor_ru_обложка.png) | [DOI](https://doi.org/10.5281/zenodo.24207874) |
+| 简体中文 | [PDF](./zh-Hans/tor-解剖_zh-Hans_A4.pdf) | [PDF 7×10](zh-Hans/tor-解剖_zh-Hans_7x10.pdf) | [EPUB](./zh-Hans/tor-解剖_zh-Hans.epub) | [Cover](./zh-Hans/tor-解剖_zh-Hans_封面.png) | [DOI](https://doi.org/10.5281/zenodo.24207976) |
 
-The Italian original also offers a [7×10-inch print PDF](it/anatomia-di-tor_it_7x10.pdf) and its [GitHub release `v1.0.0-it`](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it).
+All five language editions now offer a 7×10-inch PDF for personal printing. The existing [Italian GitHub release `v1.0.0-it`](https://github.com/aleff-github/onion-routing-anatomy/releases/tag/v1.0.0-it) and translated releases are unchanged.
 
 **Important: translation status.** The English, Spanish, Russian and Simplified Chinese editions were generated with AI tools. While structural, PDF-layout and EPUB checks were documented, they **have not undergone an independent linguistic review by native speakers** or an independent scientific review. Errors of translation, meaning and terminology may remain. The Italian original is the authoritative reference. Publication here does not imply such independent validation.
 
