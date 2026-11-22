@@ -31,7 +31,18 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "0cdd5618fa1f074800cc862177f937826c04345b"
           test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$(git rev-parse HEAD)"
-          python scripts/check_print_regression.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base='0f1361a87e7dfc7db1e52331024cbde3547b1420'
+          original=subprocess.check_output(['git','ls-tree','-r','--name-only',base],text=True).splitlines()
+          previous=[p for p in original if p.startswith('book/') and (p.endswith('_A4.pdf') or p.endswith('.epub') or p.endswith('_7x10.pdf') or p.endswith('_cover.png') or p.endswith('_copertina.png') or p.endswith('_portada.png') or p.endswith('_обложка.png') or p.endswith('_封面.png'))]
+          assert len(previous)>=11, ('unexpected original digital count',len(previous))
+          for name in previous:
+              before=subprocess.check_output(['git','show',f'{base}:{name}'])
+              assert Path(name).read_bytes()==before, ('pre-existing digital artifact changed',name)
+          print('Existing A4/EPUB/print/cover digital assets unchanged:',len(previous),'PASS')
+          PY
           python3 scripts/build_site.py build
           python3 scripts/build_site.py check
           python3 scripts/check_public_copy.py
