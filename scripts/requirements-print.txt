@@ -1,3 +1,4 @@
-# Free local PDF auditing/rendering dependencies, isolated from book builds.
-PyMuPDF==2.1
-Pillow==13.0.0
+# PDF audit dependencies; versions match the validated print QA environment.
+PyMuPDF>=1.24,<2
+Pillow>=11,<14
+cryptography>=43,<49
